@@ -1,2 +1,1 @@
-
-export const DBG = "initial"
+export const DBG = "initial";
