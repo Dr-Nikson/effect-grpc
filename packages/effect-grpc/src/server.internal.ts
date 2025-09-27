@@ -181,7 +181,6 @@ class EffectGrpcServerLive<Services, Ctx> implements T.GrpcServer<Services> {
   }
 }
 
-
 export class ConnectEsGprcServerBuilder<Ctx, Services>
   implements T.GrpcServerBuilder<Ctx, Services>
 {
@@ -213,9 +212,7 @@ export class ConnectEsGprcServerBuilder<Ctx, Services>
     });
   }
 
-  build<This extends T.GrpcServerBuilder<Ctx, Services>>(
-    this: This,
-  ): T.GrpcServer<Services> {
+  build<This extends T.GrpcServerBuilder<Ctx, Services>>(this: This): T.GrpcServer<Services> {
     const executorTransformation = ExecutorTransformer.empty.transformContext<Ctx>(
       this.transformCtx,
     );

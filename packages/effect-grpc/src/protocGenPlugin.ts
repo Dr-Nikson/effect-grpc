@@ -1,7 +1,7 @@
 // #!/usr/bin/env -S node
-import {createEcmaScriptPlugin, GeneratedFile, runNodeJs, safeIdentifier, type Schema,} from "@bufbuild/protoplugin";
-import {DescMethod, DescService} from "@bufbuild/protobuf";
-import packageJson from "../package.json" with {type: "json"};
+import { createEcmaScriptPlugin, GeneratedFile, safeIdentifier, type Schema } from "@bufbuild/protoplugin";
+import { DescMethod, DescService } from "@bufbuild/protobuf";
+import packageJson from "../package.json" with { type: "json" };
 
 export const protocGenEffectGrpc = createEcmaScriptPlugin({
     name: "protoc-gen-effect-grpc",
