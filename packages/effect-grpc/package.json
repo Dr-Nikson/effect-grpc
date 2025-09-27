@@ -25,7 +25,6 @@
         "default": "./dist/protocGenPlugin.js"
       }
     }
-
   },
   "scripts": {
     "compile": "tsc --build tsconfig.json",
