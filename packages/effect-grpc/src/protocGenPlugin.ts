@@ -74,7 +74,7 @@ function generateEffectService(
     const importContext = f.import("Context", "effect");
     const importLayer = f.import("Layer", "effect");
     const importHandlerContext = f.import("HandlerContext", "@connectrpc/connect");
-    const importEffectGrpcService = f.import("Server", "@whisklabs/effect-protobuf");
+    const importEffectGrpcService = f.import("EffectGrpcServer", packageJson.name);
 
     const importService = f.importSchema(service);
 
@@ -229,7 +229,7 @@ function generateEffectService(
      * }
      * ```
      */
-    const importEffectGrpcClient = f.import("Client", "@whisklabs/effect-protobuf");
+    const importEffectGrpcClient = f.import("EffectGrpcClient", packageJson.name);
 
     const clientTagSymbol = safeIdentifier(service.name + "ClientTag");
     const makeClientTagSymbol = safeIdentifier("make" + service.name + "ClientTag");

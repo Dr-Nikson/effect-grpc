@@ -4,6 +4,9 @@
   "private": false,
   "type": "module",
   "packageManager": "pnpm@10.16.1",
+  "bin": {
+    "protoc-gen-effect": "./bin/protoc-gen-effect"
+  },
   "exports": {
     ".": {
       "import": {
@@ -41,9 +44,12 @@
     "@connectrpc/connect-node": "catalog:"
   },
   "peerDependencies": {
-    "effect": "catalog:^",
-    "@bufbuild/buf": "catalog:^",
-    "@bufbuild/protoc-gen-es": "catalog:^"
+    "@bufbuild/buf": "catalog:peer:^",
+    "@bufbuild/protobuf": "catalog:peer:^",
+    "@bufbuild/protoc-gen-es": "catalog:peer:^",
+    "@connectrpc/connect": "catalog:peer:^",
+    "@dr_nikson/effect-grpc": "workspace:^",
+    "effect": "catalog:peer:^"
   },
   "devDependencies": {
     "@bufbuild/buf": "catalog:",

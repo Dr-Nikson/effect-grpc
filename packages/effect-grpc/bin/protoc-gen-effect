@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { runNodeJs } = require("@bufbuild/protoplugin");
-const { protocGenEffectGrpc } = require("../dist/protocGenPlugin.js");
+import {runNodeJs} from "@bufbuild/protoplugin";
+import {protocGenEffectGrpc} from "../dist/protocGenPlugin.js";
 
 runNodeJs(protocGenEffectGrpc);

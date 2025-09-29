@@ -36,7 +36,9 @@
   },
   "dependencies": {
     "effect": "catalog:",
+    "@bufbuild/buf": "catalog:",
     "@bufbuild/protobuf": "catalog:",
+    "@bufbuild/protoc-gen-es": "catalog:",
     "@connectrpc/connect": "catalog:",
     "@dr_nikson/effect-grpc": "workspace:"
   },
