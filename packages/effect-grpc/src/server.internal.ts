@@ -73,8 +73,8 @@ class ExecutorTransformer<Ctx> {
   }
 }
 
-class EffectGrpcServerLive<Services, Ctx> implements T.GrpcServer<Services> {
-  readonly _Services: Types.Invariant<Services> = (a) => a;
+class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
+  readonly _Services: Types.Contravariant<Services> = (a) => a;
 
   constructor(
     public readonly services: Record<string & Services, T.GrpcService<any, any, Ctx>>,
@@ -204,8 +204,8 @@ export class ConnectEsGprcServerBuilder<Ctx, Services>
   }
 
   withService<S extends T.GrpcService<any, any, Ctx>>(
-    service: S,
-  ): T.GrpcServerBuilder<Ctx, Services | S["_Tag"]> {
+    service: T.UniqueTag<S, Services>,
+  ): T.GrpcServerBuilder<Ctx, T.ConcatServiceTags<S, Services>> {
     return new ConnectEsGprcServerBuilder(this.transformCtx, {
       ...this.services,
       [service._Tag]: service,

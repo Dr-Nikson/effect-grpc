@@ -1,8 +1,8 @@
-import { assertType, test } from "vitest";
+import { assertType, expectTypeOf, test } from "vitest";
 
 import { HandlerContext } from "@connectrpc/connect";
 
-import * as Server from "./server";
+import * as Server from "./server.js";
 
 test("GrpcServerBuilder#withService should work correctly", () => {
   const empty: Server.GrpcServerBuilder<HandlerContext, never> = null as any;
@@ -13,7 +13,8 @@ test("GrpcServerBuilder#withService should work correctly", () => {
   type MyService = Server.GrpcService<"DebugAPI", any, HandlerContext>;
 
   const service: MyService = null as any;
-  const has1Service = empty.withService(service);
+  const has1Service: Server.GrpcServerBuilder<HandlerContext, "DebugAPI"> =
+    empty.withService(service);
   const has1ServiceBuild = has1Service.build();
 
   assertType<Server.GrpcServerBuilder<HandlerContext, "DebugAPI">>(has1Service);
@@ -44,4 +45,27 @@ test("GrpcServerBuilder#withService should work correctly", () => {
   const service4: MyService4<AuthContext> = null as any;
   // @ts-expect-error - you cannot add service with mismatched context type
   assertType<any>(has2Service.withService(service4));
+});
+
+test("GrpcServer dependencies should be correctly interfered", () => {
+  type MyService = Server.GrpcService<"DebugAPI", any, HandlerContext>;
+  const myService: MyService = null as any;
+
+  type MyOtherService = Server.GrpcService<"HelloWorldAPI", any, HandlerContext>;
+  const myService2: MyOtherService = null as any;
+
+  const server1 = Server.GrpcServerBuilder().withService(myService).build();
+
+  const fun: (server: Server.GrpcServer<"DebugAPI" | "HelloWorldAPI">) => void = null as any;
+
+  // @ts-expect-error - you cannot call `fun` with partially implemented server
+  expectTypeOf(fun).toBeCallableWith(server1);
+
+  const server2 = Server.GrpcServerBuilder().withService(myService).withService(myService2).build();
+  const fun2: (server: Server.GrpcServer<"HelloWorldAPI">) => void = null as any;
+
+  // We can use only a subset of the implemented apis
+  expectTypeOf(fun2).toBeCallableWith(server2);
+  // And we can also use all implemented apis
+  expectTypeOf(fun).toBeCallableWith(server2);
 });

@@ -5,8 +5,8 @@ import { HandlerContext, ServiceImpl } from "@connectrpc/connect";
 
 import * as internal from "./server.internal.js";
 
-export interface GrpcServer<Services> {
-  readonly _Services: Types.Invariant<Services>;
+export interface GrpcServer<in Services> {
+  readonly _Services: Types.Contravariant<Services>;
 
   run(): Effect.Effect<never, never, Scope.Scope>;
 }
@@ -16,6 +16,18 @@ export interface GrpcServer<Services> {
 //     transformation: (executor: Executor<HandlerContext>) => Executor<Ctx>,
 //   ): GrpcServer<Services>;
 // } = null as any;
+
+export type ConcatServiceTags<S extends GrpcService<any, any, any>, Services> =
+  S extends GrpcService<infer Tag, any, any>
+    ? [Services] extends [never] ? Tag : Tag | Services
+    : never; // This should never be the case
+
+export type UniqueTag<S extends GrpcService<any, any, any>, Services> =
+  S extends GrpcService<infer Tag, any, any>
+    ? [Services] extends [never]
+      ? S // If Services === never => we allow S with any Tag
+      : Tag extends Services ? never : S // We do not allow S with Tag which is already present in Services
+    : never; // This should never be the case
 
 export interface GrpcServerBuilder<Ctx, Services> {
   readonly transformCtx: (ctx: HandlerContext) => Effect.Effect<Ctx>;
@@ -27,10 +39,8 @@ export interface GrpcServerBuilder<Ctx, Services> {
   ): GrpcServerBuilder<Ctx1, never>;
 
   withService<S extends GrpcService<any, any, Ctx>>(
-    service: [Services] extends [never] ? S
-    : S["_Tag"] extends Services ? never
-    : S,
-  ): GrpcServerBuilder<Ctx, Services | S["_Tag"]>;
+    service: UniqueTag<S, Services>,
+  ): GrpcServerBuilder<Ctx, ConcatServiceTags<S, Services>>;
 
   build<This extends GrpcServerBuilder<Ctx, Services>>(
     this: [Services] extends [never] ? never : This,
