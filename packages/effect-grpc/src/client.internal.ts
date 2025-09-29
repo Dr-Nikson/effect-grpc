@@ -13,7 +13,7 @@ import { createGrpcTransport } from "@connectrpc/connect-node";
 
 import { Executor, GrpcClient, RequestMeta } from "./client.js";
 
-export const grpcClientTypeId = Symbol("@tipizzato/effect-grpc/GrpcClient");
+export const grpcClientTypeId = Symbol("@dr_nikson/effect-grpc/GrpcClient");
 
 export function liveGrpcClient(): Layer.Layer<GrpcClient> {
   const prog = Effect.gen(function* () {

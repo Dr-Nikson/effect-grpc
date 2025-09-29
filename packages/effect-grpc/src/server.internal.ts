@@ -1,3 +1,4 @@
+// packages/effect-grpc/src/server.internal.ts
 import { Effect, Layer, ManagedRuntime, Scope, Types } from "effect";
 import http2 from "node:http2";
 
@@ -13,8 +14,16 @@ import { connectNodeAdapter } from "@connectrpc/connect-node";
 
 import type * as T from "./server.js";
 
-export const grpcServiceTypeId = Symbol("@tipizzato/effect-grpc/GrpcService");
+/**
+ * @internal
+ */
+export const grpcServiceTypeId = Symbol("@dr_nikson/effect-grpc/GrpcService");
 
+/**
+ * @internal
+ * Internal implementation for creating GrpcService instances.
+ * Used by the public GrpcService constructor in the main API.
+ */
 export function makeGrpcService<
   Tag,
   Proto extends GenService<RuntimeShape>,
@@ -23,7 +32,6 @@ export function makeGrpcService<
   return <Ctx>(implementation: (exec: T.Executor<Ctx>) => ServiceImpl<Proto>) => {
     return {
       Type: grpcServiceTypeId,
-      // _Tag: (a) => a,
       _Tag: tag,
       _Ctx: null as any,
 
@@ -33,6 +41,11 @@ export function makeGrpcService<
   };
 }
 
+/**
+ * @internal
+ * Live implementation of the Executor interface using Effect's ManagedRuntime.
+ * Handles the execution of Effect programs within gRPC service handlers.
+ */
 class ExecutorLive implements T.Executor<HandlerContext> {
   constructor(public readonly runtime: ManagedRuntime.ManagedRuntime<never, never>) {}
 
@@ -45,6 +58,11 @@ class ExecutorLive implements T.Executor<HandlerContext> {
   }
 }
 
+/**
+ * @internal
+ * Transformer class that handles context transformations for executors.
+ * Allows chaining context transformations in a type-safe manner.
+ */
 class ExecutorTransformer<Ctx> {
   constructor(
     public readonly transformation: (underlying: T.Executor<HandlerContext>) => T.Executor<Ctx>,
@@ -73,6 +91,11 @@ class ExecutorTransformer<Ctx> {
   }
 }
 
+/**
+ * @internal
+ * Live implementation of the GrpcServer interface.
+ * Manages the HTTP/2 server and routes gRPC requests to registered services.
+ */
 class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
   readonly _Services: Types.Contravariant<Services> = (a) => a;
 
@@ -181,6 +204,11 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
   }
 }
 
+/**
+ * @internal
+ * Internal implementation of the GrpcServerBuilder interface.
+ * Provides the fluent API for building gRPC servers with context transformation.
+ */
 export class ConnectEsGprcServerBuilder<Ctx, Services>
   implements T.GrpcServerBuilder<Ctx, Services>
 {

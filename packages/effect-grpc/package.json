@@ -44,11 +44,8 @@
     "@connectrpc/connect-node": "catalog:"
   },
   "peerDependencies": {
-    "@bufbuild/buf": "catalog:peer:^",
     "@bufbuild/protobuf": "catalog:peer:^",
-    "@bufbuild/protoc-gen-es": "catalog:peer:^",
     "@connectrpc/connect": "catalog:peer:^",
-    "@dr_nikson/effect-grpc": "workspace:^",
     "effect": "catalog:peer:^"
   },
   "devDependencies": {
