@@ -18,16 +18,19 @@ export interface GrpcServer<in Services> {
 // } = null as any;
 
 export type ConcatServiceTags<S extends GrpcService<any, any, any>, Services> =
-  S extends GrpcService<infer Tag, any, any>
-    ? [Services] extends [never] ? Tag : Tag | Services
-    : never; // This should never be the case
+  S extends GrpcService<infer Tag, any, any> ?
+    [Services] extends [never] ?
+      Tag
+    : Tag | Services
+  : never; // This should never be the case
 
 export type UniqueTag<S extends GrpcService<any, any, any>, Services> =
-  S extends GrpcService<infer Tag, any, any>
-    ? [Services] extends [never]
-      ? S // If Services === never => we allow S with any Tag
-      : Tag extends Services ? never : S // We do not allow S with Tag which is already present in Services
-    : never; // This should never be the case
+  S extends GrpcService<infer Tag, any, any> ?
+    [Services] extends [never] ?
+      S // If Services === never => we allow S with any Tag
+    : Tag extends Services ? never
+    : S // We do not allow S with Tag which is already present in Services
+  : never; // This should never be the case
 
 export interface GrpcServerBuilder<Ctx, Services> {
   readonly transformCtx: (ctx: HandlerContext) => Effect.Effect<Ctx>;
