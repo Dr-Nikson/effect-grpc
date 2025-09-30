@@ -60,9 +60,9 @@
     "@connectrpc/connect-node": "catalog:"
   },
   "peerDependencies": {
-    "@bufbuild/protobuf": "catalog:peer:^",
-    "@connectrpc/connect": "catalog:peer:^",
-    "effect": "catalog:peer:^"
+    "@bufbuild/protobuf": "catalog:peer",
+    "@connectrpc/connect": "catalog:peer",
+    "effect": "catalog:peer"
   },
   "devDependencies": {
     "@bufbuild/buf": "catalog:",
