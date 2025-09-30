@@ -8,8 +8,16 @@ import * as effectProto from "./generated/com/example/v1/hello_world_api_effect.
 const HelloWorldAPIClientTag = effectProto.HelloWorldAPIClient.makeTag<object>("{}");
 type HelloWorldAPIClientTag = typeof HelloWorldAPIClientTag;
 
-const debugApiClientLayer = effectProto.HelloWorldAPIClient.liveLayer<object>(() => ({}))(
-  HelloWorldAPIClientTag,
+const debugApiClientLayer = effectProto.HelloWorldAPIClient.liveLayer(HelloWorldAPIClientTag).pipe(
+  Layer.provideMerge(
+    // We provide config for local deployment http://localhost:8000
+    Layer.succeed(
+      effectProto.HelloWorldAPIConfigTag,
+      EffectGrpcClient.GrpcClientConfig({
+        baseUrl: "http://localhost:8000",
+      }),
+    ),
+  ),
 );
 
 const prog = Effect.gen(function* () {
@@ -27,7 +35,7 @@ const prog = Effect.gen(function* () {
 
 const deps = Layer.empty.pipe(
   Layer.provideMerge(debugApiClientLayer),
-  Layer.provideMerge(EffectGrpcClient.liveGrpcClientLayer()),
+  Layer.provideMerge(EffectGrpcClient.liveGrpcClientRuntimeLayer()),
   Layer.provideMerge(Logger.minimumLogLevel(LogLevel.Trace)),
 );
 

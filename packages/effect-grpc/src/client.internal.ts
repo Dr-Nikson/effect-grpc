@@ -1,4 +1,4 @@
-import { Effect, Layer } from "effect";
+import { Context, Effect, Layer } from "effect";
 
 import type { DescMessage, MessageInitShape, MessageShape } from "@bufbuild/protobuf";
 import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
@@ -11,39 +11,46 @@ import {
 } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 
-import { Executor, GrpcClient, RequestMeta } from "./client.js";
+import type * as T from "./client.js";
+import * as protoRuntime from "./protoRuntime.js";
 
-export const grpcClientTypeId = Symbol("@dr_nikson/effect-grpc/GrpcClient");
+export const grpcClientRuntimeTypeId = Symbol("@dr_nikson/effect-grpc/GrpcClientRuntime");
 
-export function liveGrpcClient(): Layer.Layer<GrpcClient> {
-  const prog = Effect.gen(function* () {
-    const transport: Transport = yield* Effect.sync(() =>
-      createGrpcTransport({
-        baseUrl: "http://localhost:8000",
-      }),
-    );
-    const instance: GrpcClient = {
-      Type: grpcClientTypeId,
+export const grpcClientRuntimeTag = Context.GenericTag<T.GrpcClientRuntime, T.GrpcClientRuntime>(
+  grpcClientRuntimeTypeId.toString(),
+);
 
-      makeExecutor<Shape extends GenServiceMethods>(
-        serviceDefinition: GenService<Shape>,
-        methodNames: ReadonlyArray<keyof GenService<Shape>["method"]>,
-      ) {
+// TODO: this abstraction is kinda useless, right? We can make more in use .. can we?
+export function liveGrpcClientRuntime(): Layer.Layer<T.GrpcClientRuntime> {
+  const instance: T.GrpcClientRuntime = {
+    Type: grpcClientRuntimeTypeId,
+
+    makeExecutor<Shape extends GenServiceMethods>(
+      serviceDefinition: GenService<Shape>,
+      methodNames: ReadonlyArray<keyof GenService<Shape>["method"]>,
+    ) {
+      return Effect.gen(function* () {
+        const transport: Transport = yield* Effect.sync(() =>
+          createGrpcTransport({
+            baseUrl: "http://localhost:8000",
+          }),
+        );
         const client: Client<GenService<Shape>> = createClient(serviceDefinition, transport);
-        const instance: Executor<Shape> = methodNames.reduce((acc, methodName) => {
-          const method = makeExecutorMethod(client, methodName, serviceDefinition);
+        const instance: protoRuntime.ClientExecutor<Shape> = methodNames.reduce(
+          (acc, methodName) => {
+            const method = makeExecutorMethod(client, methodName, serviceDefinition);
 
-          return method === null ? acc : { ...acc, [methodName]: method };
-        }, {} as any);
+            return method === null ? acc : { ...acc, [methodName]: method };
+          },
+          {} as any,
+        );
 
         return instance;
-      },
-    };
+      });
+    },
+  };
 
-    return instance;
-  });
-
-  return Layer.effect(GrpcClient, prog);
+  return Layer.succeed(grpcClientRuntimeTag, instance);
 }
 
 type UnaryFn<I extends DescMessage, O extends DescMessage> = (
@@ -60,7 +67,7 @@ function makeExecutorMethod<Shape extends GenServiceMethods>(
 
   switch (method.methodKind) {
     case "unary":
-      return (req: any, opts: RequestMeta): Effect.Effect<any> => {
+      return (req: any, opts: T.RequestMeta): Effect.Effect<any> => {
         return Effect.promise((signal) => {
           const method = client[methodName].bind(client) as UnaryFn<any, any>;
 
@@ -78,4 +85,19 @@ function makeExecutorMethod<Shape extends GenServiceMethods>(
     default:
       return null;
   }
+}
+
+export function makeGrpcClientConfigTag<Service extends string>(service: Service) {
+  return Context.GenericTag<T.GrpcClientConfig<Service>, T.GrpcClientConfig<Service>>(
+    `@dr_nikson/effect-grpc/GrpcClientConfig<${service}>`,
+  );
+}
+
+export function makeGrpcClientConfig<Service extends string>(
+  opts: Omit<T.GrpcClientConfig<Service>, "_Service">,
+) {
+  return {
+    ...opts,
+    _Service: () => void 0,
+  } as T.GrpcClientConfig<Service>;
 }

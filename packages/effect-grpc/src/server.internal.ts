@@ -12,6 +12,7 @@ import {
 } from "@connectrpc/connect";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 
+import * as ProtoRuntime from "./protoRuntime.js";
 import type * as T from "./server.js";
 
 /**
@@ -29,7 +30,7 @@ export function makeGrpcService<
   Proto extends GenService<RuntimeShape>,
   RuntimeShape extends GenServiceMethods,
 >(tag: Tag, definition: Proto) {
-  return <Ctx>(implementation: (exec: T.Executor<Ctx>) => ServiceImpl<Proto>) => {
+  return <Ctx>(implementation: (exec: ProtoRuntime.ServerExecutor<Ctx>) => ServiceImpl<Proto>) => {
     return {
       Type: grpcServiceTypeId,
       _Tag: tag,
@@ -43,66 +44,18 @@ export function makeGrpcService<
 
 /**
  * @internal
- * Live implementation of the Executor interface using Effect's ManagedRuntime.
- * Handles the execution of Effect programs within gRPC service handlers.
- */
-class ExecutorLive implements T.Executor<HandlerContext> {
-  constructor(public readonly runtime: ManagedRuntime.ManagedRuntime<never, never>) {}
-
-  unary<In, Out>(
-    req: In,
-    ctx: HandlerContext,
-    prog: (req: In, ctx: HandlerContext) => Effect.Effect<Out>,
-  ): Promise<Out> {
-    return this.runtime.runPromise(prog(req, ctx), { signal: ctx.signal });
-  }
-}
-
-/**
- * @internal
- * Transformer class that handles context transformations for executors.
- * Allows chaining context transformations in a type-safe manner.
- */
-class ExecutorTransformer<Ctx> {
-  constructor(
-    public readonly transformation: (underlying: T.Executor<HandlerContext>) => T.Executor<Ctx>,
-  ) {}
-
-  static get empty(): ExecutorTransformer<HandlerContext> {
-    return new ExecutorTransformer((underlying) => underlying);
-  }
-
-  transformContext<Ctx1>(f: (ctx: Ctx) => Effect.Effect<Ctx1>): ExecutorTransformer<Ctx1> {
-    return new ExecutorTransformer<Ctx1>((underlying) => {
-      const executor: T.Executor<Ctx> = this.transformation(underlying);
-
-      return {
-        unary<In, Out>(
-          req: In,
-          ctx: HandlerContext,
-          prog: (req: In, ctx: Ctx1) => Effect.Effect<Out>,
-        ): Promise<Out> {
-          return executor.unary(req, ctx, (req, ctx0) => {
-            return Effect.flatMap(f(ctx0), (ctx1) => prog(req, ctx1));
-          });
-        },
-      } as T.Executor<Ctx1>;
-    });
-  }
-}
-
-/**
- * @internal
  * Live implementation of the GrpcServer interface.
  * Manages the HTTP/2 server and routes gRPC requests to registered services.
  */
 class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
-  readonly _Services: Types.Contravariant<Services> = (a) => a;
-
   constructor(
     public readonly services: Record<string & Services, T.GrpcService<any, any, Ctx>>,
-    public readonly transformation: (executor: T.Executor<HandlerContext>) => T.Executor<Ctx>,
+    public readonly transformation: (
+      executor: ProtoRuntime.ServerExecutor<HandlerContext>,
+    ) => ProtoRuntime.ServerExecutor<Ctx>,
   ) {}
+
+  readonly _Services: Types.Contravariant<Services> = (a) => a;
 
   run(): Effect.Effect<never, never, Scope.Scope> {
     const routes = this.routes.bind(this);
@@ -177,7 +130,9 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
     });
   }
 
-  private routes(executor: T.Executor<Ctx>): (router: ConnectRouter) => ConnectRouter {
+  private routes(
+    executor: ProtoRuntime.ServerExecutor<Ctx>,
+  ): (router: ConnectRouter) => ConnectRouter {
     const allServices: T.GrpcService<any, any, Ctx>[] = Object.values(this.services);
 
     return (router: ConnectRouter) => {
@@ -187,7 +142,7 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
     };
   }
 
-  private makeExecutor(): Effect.Effect<T.Executor<Ctx>, never, Scope.Scope> {
+  private makeExecutor(): Effect.Effect<ProtoRuntime.ServerExecutor<Ctx>, never, Scope.Scope> {
     const { transformation } = this;
 
     return Effect.gen(function* () {
@@ -196,7 +151,7 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
         (runtime) => runtime.disposeEffect,
       );
 
-      const basicExecutor = new ExecutorLive(runtime);
+      const basicExecutor = ProtoRuntime.ServerExecutor(runtime);
       const transformedExecutor = transformation(basicExecutor);
 
       return transformedExecutor;
@@ -241,7 +196,7 @@ export class ConnectEsGprcServerBuilder<Ctx, Services>
   }
 
   build<This extends T.GrpcServerBuilder<Ctx, Services>>(this: This): T.GrpcServer<Services> {
-    const executorTransformation = ExecutorTransformer.empty.transformContext<Ctx>(
+    const executorTransformation = ProtoRuntime.ServerExecutorTransformer().transformContext<Ctx>(
       this.transformCtx,
     );
 

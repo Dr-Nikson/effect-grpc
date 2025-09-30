@@ -78,11 +78,17 @@ function generateEffectService(
 
     const importService = f.importSchema(service);
 
+    const serviceId = service.typeName;
+    const serviceIdSymbol = safeIdentifier(service.name + "Id");
     const serviceSymbol = safeIdentifier(service.name + "Service")
     const grpcServiceSymbol = safeIdentifier(service.name + "GrpcService");
     const serviceTagSymbol = safeIdentifier(service.name + "Tag");
     const makeTagSymbol = safeIdentifier("make" + service.name + "ServiceTag");
     const makeLiveLayerSymbol = safeIdentifier("make" + service.name + "LiveLayer");
+
+    f.print(f.export("const", serviceIdSymbol), " = ", f.string(serviceId), " as const;");
+    f.print(f.export("type", serviceIdSymbol), " = typeof ", serviceIdSymbol, ";");
+    f.print();
 
     f.print(f.jsDoc(service));
     f.print(f.export("interface", serviceSymbol), "<Ctx> {");
@@ -232,14 +238,29 @@ function generateEffectService(
     const importEffectGrpcClient = f.import("EffectGrpcClient", packageJson.name);
 
     const clientTagSymbol = safeIdentifier(service.name + "ClientTag");
+    const configTagSymbol = safeIdentifier(service.name + "ConfigTag");
     const makeClientTagSymbol = safeIdentifier("make" + service.name + "ClientTag");
     const makeClientLiveLayerSymbol = safeIdentifier("make" + service.name + "ClientLiveLayer");
 
     f.print(f.export("const", clientSymbol), ": {")
     f.print("  makeTag<Meta>(metaKey: string): ", clientTagSymbol, "<Meta>;");
     f.print();
-    f.print("  liveLayer<Meta>(transformMeta: (meta: Meta) => ", importEffectGrpcClient, ".RequestMeta):");
-    f.print("    <Tag extends ", clientTagSymbol, "<Meta>>(tag: Tag) => ", importLayer, ".Layer<", importContext, ".Tag.Identifier<Tag>, never, ", importEffectGrpcClient, ".GrpcClient>;");
+    f.print("  liveLayer<Tag extends ", clientTagSymbol, "<Meta>, Meta>(");
+    f.print("    transformMeta: (meta: Meta) => ", importEffectGrpcClient, ".RequestMeta,");
+    f.print("    tag: Tag");
+    f.print("  ): ", importLayer, ".Layer<");
+    f.print("    ", importContext, ".Tag.Identifier<Tag>,");
+    f.print("    never,");
+    f.print("    ", importContext, ".Tag.Identifier<", configTagSymbol, "> | ", importEffectGrpcClient, ".GrpcClientRuntime");
+    f.print("  >;");
+    f.print();
+    f.print("  liveLayer<Tag extends ", clientTagSymbol, "<object>>(");
+    f.print("    tag: Tag");
+    f.print("  ): ", importLayer, ".Layer<");
+    f.print("    ", importContext, ".Tag.Identifier<Tag>,");
+    f.print("    never,");
+    f.print("    ", importContext, ".Tag.Identifier<", configTagSymbol, "> | ", importEffectGrpcClient, ".GrpcClientRuntime");
+    f.print("  >;");
     f.print("} = {");
     f.print("  makeTag: ", makeClientTagSymbol, ",");
     f.print("  liveLayer: ", makeClientLiveLayerSymbol, ",");
@@ -252,6 +273,20 @@ function generateEffectService(
         f.export("type", clientTagSymbol), "<Meta>",
         " = ",
         importContext, ".Tag<", clientSymbol, "<Meta>, ", clientSymbol, "<Meta>>"
+    );
+
+    f.print();
+
+    // export type HelloWorldAPIConfigTag = Context.Tag<EffectGrpcClient.GrpcClientConfig<HelloWorldAPIId>, EffectGrpcClient.GrpcClientConfig<HelloWorldAPIId>>
+    f.print(
+        f.export("type", configTagSymbol),
+        " = ",
+        importContext, ".Tag<", importEffectGrpcClient, ".GrpcClientConfig<", serviceIdSymbol, ">, ", importEffectGrpcClient, ".GrpcClientConfig<", serviceIdSymbol, ">>"
+    );
+    // export const HelloWorldAPIConfigTag: HelloWorldAPIConfigTag = EffectGrpcClient.GrpcClientConfig.makeTag(HelloWorldAPIId);
+    f.print(
+        f.export("const", configTagSymbol), ": ", configTagSymbol,
+        " = ", importEffectGrpcClient, ".GrpcClientConfig.makeTag(", serviceIdSymbol, ");"
     );
 
     f.print();
@@ -284,11 +319,18 @@ function generateEffectService(
      * }
      * ```
      */
-    // function makeDebugAPIClientLiveLayer<Meta>(transformMeta: (meta: Meta) => RequestMeta)
-    f.print("function ", makeClientLiveLayerSymbol, "<Meta>(transformMeta: (meta: Meta) => ", importEffectGrpcClient, ".RequestMeta) {");
-    f.print("  return <Tag extends ", clientTagSymbol, "<Meta>>(tag: Tag) => {");
-    f.print("    const prog = ", importEffect, ".gen(function* () {");
-    f.print("      const grpcService = yield* ", importEffectGrpcClient, ".GrpcClient;");
+    // function makeDebugAPIClientLiveLayer<Tag extends DebugAPIClientTag<Meta>, Meta = object>(...args: readonly [(meta: Meta) => RequestMeta, Tag] | readonly [Tag])
+    f.print("function ", makeClientLiveLayerSymbol, "<Tag extends ", clientTagSymbol, "<Meta>, Meta = object>(");
+    f.print("  ...args: readonly [(meta: Meta) => ", importEffectGrpcClient, ".RequestMeta, Tag] | readonly [Tag]");
+    f.print(") {");
+    f.print("  const [transformMeta, tag] =");
+    f.print("    isDefaultMetaArguments(args) ?");
+    f.print("      ([() => ({}) as ", importEffectGrpcClient, ".RequestMeta, args[0]] as const)");
+    f.print("    : args;");
+    f.print();
+    f.print("  const prog = ", importEffect, ".gen(function* () {");
+    f.print("    const config = yield* ", configTagSymbol, ";");
+    f.print("    const grpcRuntime = yield* ", importEffectGrpcClient, ".GrpcClientRuntime;");
 
     // Collect method names for makeExecutor
     const methodNames = service.methods
@@ -296,23 +338,26 @@ function generateEffectService(
         .map(method => `"${method.localName}"`)
         .join(", ");
 
-    f.print("      const executor = grpcService.makeExecutor(", importService, ", [", methodNames, "]);");
+    f.print("    const executor = yield* grpcRuntime.makeExecutor(", importService, ", [", methodNames, "], config);");
     f.print();
-    f.print("      return {");
+    f.print("    return {");
 
     service.methods.forEach((method, index) => {
         if (method.methodKind === "unary") {
-            f.print("        ", method.localName, "(req, meta) {");
-            f.print("          return executor.", method.localName, "(req, transformMeta(meta));");
-            f.print("        }", index === service.methods.length - 1 ? "" : ",");
+            f.print("      ", method.localName, "(req, meta) {");
+            f.print("        return executor.", method.localName, "(req, transformMeta(meta));");
+            f.print("      }", index === service.methods.length - 1 ? "" : ",");
         }
     });
 
-    f.print("      } as ", clientSymbol, "<Meta>;");
-    f.print("    });");
+    f.print("    } as ", clientSymbol, "<Meta>;");
+    f.print("  });");
     f.print();
-    f.print("    return ", importLayer, ".effect(tag, prog);");
-    f.print("  };");
+    f.print("  return ", importLayer, ".effect(tag, prog);");
+    f.print();
+    f.print("  function isDefaultMetaArguments(args: unknown): args is readonly [Tag] {");
+    f.print("    return Array.isArray(args) && args.length === 1;");
+    f.print("  }");
     f.print("}");
 
 

@@ -4,6 +4,7 @@ import { Effect, Scope, Types } from "effect";
 import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
 import { HandlerContext, ServiceImpl } from "@connectrpc/connect";
 
+import * as ProtoRuntime from "./protoRuntime.js";
 import * as internal from "./server.internal.js";
 
 /**
@@ -207,7 +208,7 @@ export interface GrpcService<Tag, Proto extends GenService<any>, Ctx> {
 
   readonly definition: Proto;
 
-  implementation(executor: Executor<Ctx>): ServiceImpl<Proto>;
+  implementation(executor: ProtoRuntime.ServerExecutor<Ctx>): ServiceImpl<Proto>;
 }
 
 /**
@@ -243,50 +244,6 @@ export const GrpcService: {
     tag: Tag,
     definition: Proto,
   ): <Ctx>(
-    implementation: (exec: Executor<Ctx>) => ServiceImpl<Proto>,
+    implementation: (exec: ProtoRuntime.ServerExecutor<Ctx>) => ServiceImpl<Proto>,
   ) => GrpcService<Tag, Proto, Ctx>;
 } = internal.makeGrpcService;
-
-/**
- * Executor interface that provides methods for executing gRPC service operations within Effect programs.
- * The executor handles the bridge between the gRPC handler context and your custom context type.
- *
- * @template Ctx - The custom context type that will be provided to your service implementations
- *
- * @example
- * ```typescript
- * import { Effect } from "effect"
- * import { EffectGrpcServer } from "@dr_nikson/effect-grpc"
- *
- * interface AppContext {
- *   db: Database
- *   logger: Logger
- * }
- *
- * const userService = EffectGrpcServer.GrpcService("UserService", UserService)<AppContext>((exec) => ({
- *   // Use executor to run Effect programs
- *   getUser: (req) => exec.unary(req, ctx, (request, appCtx) =>
- *     Effect.gen(function* () {
- *       yield* appCtx.logger.info(`Getting user ${request.userId}`)
- *       const user = yield* appCtx.db.findUser(request.userId)
- *       return { user }
- *     })
- *   ),
- *
- *   // Executor handles errors and context transformation automatically
- *   createUser: (req) => exec.unary(req, ctx, (request, appCtx) =>
- *     Effect.gen(function* () {
- *       const user = yield* appCtx.db.createUser(request.userData)
- *       return { user }
- *     })
- *   )
- * }))
- * ```
- */
-export interface Executor<Ctx> {
-  unary<In, Out>(
-    req: In,
-    ctx: HandlerContext,
-    prog: (req: In, ctx: Ctx) => Effect.Effect<Out>,
-  ): Promise<Out>;
-}

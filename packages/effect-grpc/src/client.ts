@@ -1,13 +1,15 @@
 // packages/effect-grpc/src/client.ts
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Types } from "effect";
 
-import type { DescMessage, MessageInitShape, MessageShape } from "@bufbuild/protobuf";
-import type { GenMessage, GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
+import type { BinaryReadOptions, BinaryWriteOptions } from "@bufbuild/protobuf";
+import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
 import { type ContextValues } from "@connectrpc/connect";
+import type { Compression } from "@connectrpc/connect/protocol";
 
 import * as internal from "./client.internal.js";
+import type * as ProtoRuntime from "./protoRuntime.js";
 
-export type GrpcClientTypeId = typeof internal.grpcClientTypeId;
+export type GrpcClientRuntimeTypeId = typeof internal.grpcClientRuntimeTypeId;
 
 /**
  * Core interface for gRPC client operations in the Effect ecosystem.
@@ -35,13 +37,14 @@ export type GrpcClientTypeId = typeof internal.grpcClientTypeId;
  * @category Client
  * @since 0.2.0
  */
-export interface GrpcClient {
-  readonly Type: GrpcClientTypeId;
+export interface GrpcClientRuntime {
+  readonly Type: GrpcClientRuntimeTypeId;
 
   makeExecutor<Shape extends GenServiceMethods>(
     serviceDefinition: GenService<Shape>,
     methodNames: ReadonlyArray<keyof GenService<Shape>["method"]>,
-  ): Executor<Shape>;
+    config: GrpcClientConfig<any>,
+  ): Effect.Effect<ProtoRuntime.ClientExecutor<Shape>>;
 }
 /**
  * Context tag for accessing the GrpcClient service.
@@ -65,9 +68,8 @@ export interface GrpcClient {
  * @category Client
  * @since 0.2.0
  */
-export const GrpcClient = Context.GenericTag<GrpcClient, GrpcClient>(
-  "@dr_nikson/effect-grpc/GrpcClient",
-);
+export const GrpcClientRuntime: Context.Tag<GrpcClientRuntime, GrpcClientRuntime> =
+  internal.grpcClientRuntimeTag;
 
 /**
  * Creates a live layer implementation for the GrpcClient service.
@@ -91,9 +93,86 @@ export const GrpcClient = Context.GenericTag<GrpcClient, GrpcClient>(
  * @category Client
  * @since 0.2.0
  */
-export const liveGrpcClientLayer: {
-  (): Layer.Layer<GrpcClient>;
-} = internal.liveGrpcClient;
+export const liveGrpcClientRuntimeLayer: {
+  (): Layer.Layer<GrpcClientRuntime>;
+} = internal.liveGrpcClientRuntime;
+
+/**
+ * TODO: mention in the example services here is like "com.example.v1.GetGreetingResponse"
+ * @see [GrpcTransportOptions]{@link https://github.com/connectrpc/connect-es/blob/78b40abd3ecd2f4fa2dda6382e371be8e9de3f6d/packages/connect-node/src/grpc-transport.ts#L34}
+ *
+ */
+export interface GrpcClientConfig<in Service extends string> {
+  readonly _Service: Types.Contravariant<Service>;
+
+  /**
+   * Base URI for all requests.
+   *
+   * Requests will be made to <baseUrl>/<package>.<service>/method
+   *
+   * Example: `baseUrl: "https://example.com/my-api"`
+   *
+   * This will make a `POST /my-api/my_package.MyService/Foo` to
+   * `example.com`
+   */
+  readonly baseUrl: string;
+
+  /**
+   * Options for the binary wire format.
+   */
+  readonly binaryOptions?: Partial<BinaryReadOptions & BinaryWriteOptions>;
+
+  /**
+   * Compression algorithms available to a client. Clients ask servers to
+   * compress responses using any of the registered algorithms. The first
+   * registered algorithm is the most preferred.
+   *
+   * It is safe to use this option liberally: servers will ignore any
+   * compression algorithms they don't support. To compress requests, pair this
+   * option with `sendCompression`.
+   *
+   * If this option is not provided, the compression algorithms "gzip" and "br"
+   * (Brotli) are accepted. To opt out of response compression, pass an
+   * empty array.
+   */
+  readonly acceptCompression?: Compression[];
+
+  /**
+   * Configures the client to use the specified algorithm to compress request
+   * messages.
+   *
+   * Because some servers don't support compression, clients default to sending
+   * uncompressed requests.
+   */
+  readonly sendCompression?: Compression;
+
+  /**
+   * Sets a minimum size threshold for compression: Messages that are smaller
+   * than the configured minimum are sent uncompressed.
+   *
+   * The default value is 1 kibibyte, because the CPU cost of compressing very
+   * small messages usually isn't worth the small reduction in network I/O.
+   */
+  readonly compressMinBytes?: number;
+
+  /**
+   * The timeout in milliseconds to apply to all requests.
+   *
+   * This can be overridden on a per-request basis by passing a timeoutMs.
+   */
+  readonly defaultTimeoutMs?: number;
+}
+export const GrpcClientConfig: {
+  <Service extends string>(
+    opts: Omit<GrpcClientConfig<Service>, "_Service">,
+  ): GrpcClientConfig<Service>;
+
+  makeTag<Service extends string>(
+    service: Service,
+  ): Context.Tag<GrpcClientConfig<Service>, GrpcClientConfig<Service>>;
+} = Object.assign(internal.makeGrpcClientConfig.bind(null), {
+  makeTag: internal.makeGrpcClientConfigTag,
+});
 
 /**
  * Metadata that can be attached to gRPC requests.
@@ -111,47 +190,13 @@ export const liveGrpcClientLayer: {
  * };
  *
  * // Used in generated client code
- * const result = yield* executor.getGreeting(request, meta);
+ * const result = yield* client.getGreeting(request, meta);
  * ```
  *
  * @category Client
  * @since 0.2.0
  */
 export type RequestMeta = {
-  contextValues?: ContextValues;
-  headers?: Headers;
+  readonly contextValues?: ContextValues;
+  readonly headers?: Headers;
 };
-
-/**
- * Type-safe executor interface for gRPC service methods.
- *
- * Maps gRPC service method shapes to their corresponding executor functions,
- * providing type safety for method calls. Currently supports unary RPC calls.
- *
- * @example
- * ```typescript
- * import { EffectGrpcClient } from "@dr_nikson/effect-grpc";
- *
- * // This type is usually inferred from service definitions
- * declare const serviceDefinition: GenService<MyServiceMethods>;
- * declare const client: EffectGrpcClient.GrpcClient;
- *
- * const executor = client.makeExecutor(serviceDefinition, ["getGreeting"]);
- * // executor.getGreeting is now type-safe based on the service definition
- * ```
- *
- * @category Client
- * @since 0.2.0
- */
-export type Executor<RuntimeShape extends GenServiceMethods> = {
-  [P in keyof RuntimeShape]: RuntimeShape[P] extends (
-    { methodKind: "unary"; input: GenMessage<infer In>; output: GenMessage<infer Out> }
-  ) ?
-    UnaryExecutorFn<GenMessage<In>, GenMessage<Out>>
-  : "provided methodKind is not yet supported";
-};
-
-type UnaryExecutorFn<I extends DescMessage, O extends DescMessage> = (
-  request: MessageInitShape<I>,
-  meta?: RequestMeta,
-) => Effect.Effect<MessageShape<O>>;

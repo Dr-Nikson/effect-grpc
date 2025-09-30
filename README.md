@@ -6,6 +6,8 @@ Type-safe gRPC and Protocol Buffer support for the Effect ecosystem
 
 `effect-grpc` provides a seamless integration between gRPC/Protocol Buffers and the Effect TypeScript. It enables you to build type-safe, composable gRPC services and clients with all the benefits of Effect's powerful error handling, dependency injection, and functional programming patterns.
 
+**Built on battle-tested foundations:** This library is a thin wrapper around industry-standard, production-proven gRPC libraries including [Connect-RPC](https://connectrpc.com/) (Buf's modern gRPC implementation) and [@bufbuild/protobuf](https://github.com/bufbuild/protobuf-es) (official Protocol Buffers runtime for JavaScript/TypeScript), bringing Effect's functional programming benefits to the established gRPC ecosystem.
+
 ### Key Features
 
 - **Full Type Safety** - Generated TypeScript code from Protocol Buffers with complete type inference
@@ -161,17 +163,26 @@ import { NodeRuntime } from "@effect/platform-node";
 import * as effectProto from "./generated/example/v1/hello_effect.js";
 
 // Create a client tag
-const HelloClientTag = effectProto.HelloClient.makeTag<object>("{}");
-type HelloClientTag = typeof HelloClientTag;
+const HelloServiceClientTag = effectProto.HelloServiceClient.makeTag<object>("{}");
+type HelloServiceClientTag = typeof HelloServiceClientTag;
 
-// Create the client layer
-const helloClientLayer = effectProto.HelloClient.liveLayer<object>(() => ({}))(
-  HelloClientTag
+// Create the client layer with configuration
+const helloClientLayer = effectProto.HelloServiceClient.liveLayer(
+  HelloServiceClientTag
+).pipe(
+  Layer.provideMerge(
+    Layer.succeed(
+      effectProto.HelloServiceConfigTag,
+      EffectGrpcClient.GrpcClientConfig({
+        baseUrl: "http://localhost:8000"
+      })
+    )
+  )
 );
 
 // Use the client
 const program = Effect.gen(function* () {
-  const client = yield* HelloClientTag;
+  const client = yield* HelloServiceClientTag;
 
   const response = yield* client.sayHello({
     name: "World"
@@ -183,7 +194,7 @@ const program = Effect.gen(function* () {
 // Provide dependencies and run
 const dependencies = Layer.empty.pipe(
   Layer.provideMerge(helloClientLayer),
-  Layer.provideMerge(EffectGrpcClient.liveGrpcClientLayer()),
+  Layer.provideMerge(EffectGrpcClient.liveGrpcClientRuntimeLayer()),
   Layer.provideMerge(Logger.minimumLogLevel(LogLevel.Info))
 );
 
@@ -222,49 +233,481 @@ node dist/client.js
 
 ## API Reference
 
-### Server API
+This section documents the public API exported by `@dr_nikson/effect-grpc`. The library excludes internal runtime APIs from public documentation.
 
-#### `EffectGrpcServer.GrpcServerBuilder`
+### Server API (`EffectGrpcServer`)
 
-Creates a new gRPC server builder for composing services.
+The server API provides tools for building and running gRPC servers within Effect programs.
 
+#### Core Types
+
+##### `GrpcServer<Services>`
+
+Represents a running gRPC server instance.
+
+**Type Parameters:**
+- `Services` - Union type of all service tags registered with this server
+
+**Methods:**
+- `run(): Effect.Effect<never, never, Scope.Scope>` - Starts the server and returns an Effect that requires a Scope
+
+**Example:**
 ```typescript
-const serverBuilder = EffectGrpcServer.GrpcServerBuilder()
-  .withService(service1)
-  .withService(service2)
+const server: EffectGrpcServer.GrpcServer<"UserService" | "ProductService"> =
+  EffectGrpcServer.GrpcServerBuilder()
+    .withService(userService)
+    .withService(productService)
+    .build();
+
+// Run with proper resource management
+const program = Effect.scoped(server.run());
+```
+
+##### `GrpcServerBuilder<Ctx, Services>`
+
+Fluent builder interface for constructing gRPC servers.
+
+**Type Parameters:**
+- `Ctx` - Context type available to service handlers (defaults to `HandlerContext`)
+- `Services` - Union of currently registered service tags
+
+**Methods:**
+- `withContextTransformer<Ctx1>(f: (ctx: Ctx) => Effect.Effect<Ctx1>): GrpcServerBuilder<Ctx1, never>` - Transform the handler context (must be called before adding services)
+- `withService<S>(service: S): GrpcServerBuilder<Ctx, Services | Tag<S>>` - Add a service (enforces unique tags)
+- `build(): GrpcServer<Services>` - Build the server (requires at least one service)
+
+**Example:**
+```typescript
+// Simple server with HandlerContext
+const server = EffectGrpcServer.GrpcServerBuilder()
+  .withService(myService)
+  .build();
+
+// Server with custom context
+interface AppContext {
+  userId: string;
+  requestId: string;
+}
+
+const serverWithCtx = EffectGrpcServer.GrpcServerBuilder()
+  .withContextTransformer((handlerCtx: HandlerContext) =>
+    Effect.succeed({
+      userId: handlerCtx.requestHeader.get("user-id") ?? "anonymous",
+      requestId: crypto.randomUUID()
+    })
+  )
+  .withService(myService)
   .build();
 ```
 
-#### `EffectGrpcServer.GrpcService`
+##### `GrpcService<Tag, Proto, Ctx>`
 
-Type definition for a gRPC service that can be registered with the server.
+Represents a gRPC service implementation bound to a specific Protocol Buffer definition.
 
+**Type Parameters:**
+- `Tag` - Unique identifier for this service (typically the fully-qualified protobuf name)
+- `Proto` - The Protocol Buffer service definition from generated code
+- `Ctx` - Context type available to service method handlers
+
+**Note:** Instances are typically created by the `protoc-gen-effect` code generator.
+
+**Example:**
 ```typescript
-type MyService = EffectGrpcServer.GrpcService<
-  "my.package.MyService",
-  typeof MyServiceDefinition,
+// Generated by protoc-gen-effect
+const userService: EffectGrpcServer.GrpcService<
+  "com.example.UserService",
+  typeof UserServiceProto,
   HandlerContext
->;
+> = EffectGrpcServer.GrpcService("com.example.UserService", UserServiceProto)(
+  (exec) => ({
+    getUser: (req, ctx) => exec.unary(req, ctx, (req, ctx) =>
+      Effect.succeed({ user: { id: req.userId, name: "John" } })
+    )
+  })
+);
 ```
 
-### Client API
+#### Factory Functions
 
-#### `EffectGrpcClient.liveGrpcClientLayer`
+##### `GrpcServerBuilder()`
 
-Creates a live layer implementation for the GrpcClient service.
+Creates a new server builder instance with default `HandlerContext`.
 
+**Returns:** `GrpcServerBuilder<HandlerContext, never>`
+
+**Example:**
 ```typescript
-const layer = EffectGrpcClient.liveGrpcClientLayer();
+const builder = EffectGrpcServer.GrpcServerBuilder();
 ```
 
-#### `EffectGrpcClient.RequestMeta`
+##### `GrpcService(tag, definition)`
 
-Metadata that can be attached to gRPC requests.
+Creates a GrpcService factory (typically used by code generators).
 
+**Parameters:**
+- `tag` - Unique service identifier
+- `definition` - Protocol Buffer service definition
+
+**Returns:** Function that accepts implementation and returns `GrpcService`
+
+**Example:**
+```typescript
+// This is typically generated, not written manually
+const createService = EffectGrpcServer.GrpcService(
+  "com.example.MyService",
+  MyServiceProto
+);
+
+const service = createService<HandlerContext>((exec) => ({
+  myMethod: (req, ctx) => exec.unary(req, ctx, (req, ctx) =>
+    Effect.succeed({ result: "success" })
+  )
+}));
+```
+
+---
+
+### Client API (`EffectGrpcClient`)
+
+The client API provides tools for making gRPC calls from Effect programs.
+
+#### Core Types
+
+##### `GrpcClientRuntime`
+
+The runtime service that creates executors for invoking gRPC methods.
+
+**Methods:**
+- `makeExecutor<Shape>(serviceDefinition, methodNames, config): Effect.Effect<ClientExecutor<Shape>>` - Creates an executor for specified service methods
+
+**Note:** This is primarily used by generated client code, not called directly by users.
+
+**Example:**
+```typescript
+const program = Effect.gen(function* () {
+  const runtime = yield* EffectGrpcClient.GrpcClientRuntime;
+  const config = yield* MyServiceConfigTag;
+
+  const executor = yield* runtime.makeExecutor(
+    MyServiceProto,
+    ["getUser", "listUsers"],
+    config
+  );
+
+  return executor;
+});
+```
+
+##### `GrpcClientConfig<Service>`
+
+Configuration for connecting to a gRPC service.
+
+**Type Parameters:**
+- `Service` - The fully-qualified service name (e.g., "com.example.v1.UserService")
+
+**Properties:**
+- `baseUrl: string` - Base URL for gRPC requests (e.g., "http://localhost:8000")
+- `binaryOptions?: Partial<BinaryReadOptions & BinaryWriteOptions>` - Protocol Buffer binary format options
+- `acceptCompression?: Compression[]` - Accepted response compression algorithms (defaults to ["gzip", "br"])
+- `sendCompression?: Compression` - Compression algorithm for request messages
+- `compressMinBytes?: number` - Minimum message size for compression (defaults to 1024 bytes)
+- `defaultTimeoutMs?: number` - Default timeout for all requests in milliseconds
+
+**Example:**
+```typescript
+const config = EffectGrpcClient.GrpcClientConfig({
+  baseUrl: "https://api.example.com",
+  defaultTimeoutMs: 5000,
+  acceptCompression: ["gzip", "br"],
+  sendCompression: "gzip",
+  compressMinBytes: 1024
+});
+
+// Create a config tag for dependency injection
+const UserServiceConfigTag = EffectGrpcClient.GrpcClientConfig.makeTag(
+  "com.example.v1.UserService"
+);
+
+// Provide the config in a layer
+const configLayer = Layer.succeed(UserServiceConfigTag, config);
+```
+
+##### `RequestMeta`
+
+Metadata attached to individual gRPC requests.
+
+**Properties:**
+- `headers?: Headers` - HTTP headers to send with the request
+- `contextValues?: ContextValues` - Connect-RPC context values (e.g., timeout overrides)
+
+**Example:**
 ```typescript
 const meta: EffectGrpcClient.RequestMeta = {
-  headers: new Headers({ "Authorization": "Bearer token" }),
+  headers: new Headers({
+    "Authorization": "Bearer token123",
+    "X-Request-ID": crypto.randomUUID()
+  }),
+  contextValues: {
+    timeout: 3000 // Override default timeout for this request
+  }
 };
+
+// Use with generated client
+const response = yield* client.getUser({ userId: "123" }, meta);
+```
+
+#### Context Tags
+
+##### `GrpcClientRuntime`
+
+Tag for accessing the gRPC client runtime service.
+
+**Usage:**
+```typescript
+const program = Effect.gen(function* () {
+  const runtime = yield* EffectGrpcClient.GrpcClientRuntime;
+  // runtime is now available
+});
+```
+
+#### Factory Functions
+
+##### `liveGrpcClientRuntimeLayer()`
+
+Creates the live implementation layer for `GrpcClientRuntime`.
+
+**Returns:** `Layer.Layer<GrpcClientRuntime>`
+
+**Example:**
+```typescript
+const layer = Layer.empty.pipe(
+  Layer.provideMerge(EffectGrpcClient.liveGrpcClientRuntimeLayer())
+);
+```
+
+##### `GrpcClientConfig(opts)`
+
+Creates a client configuration object.
+
+**Parameters:**
+- `opts` - Configuration options (omit the `_Service` type parameter)
+
+**Returns:** `GrpcClientConfig<Service>`
+
+**Example:**
+```typescript
+const config = EffectGrpcClient.GrpcClientConfig({
+  baseUrl: "http://localhost:8000",
+  defaultTimeoutMs: 5000
+});
+```
+
+##### `GrpcClientConfig.makeTag(service)`
+
+Creates a Context tag for service-specific configuration.
+
+**Parameters:**
+- `service` - Fully-qualified service name
+
+**Returns:** `Context.Tag<GrpcClientConfig<Service>, GrpcClientConfig<Service>>`
+
+**Example:**
+```typescript
+const UserServiceConfigTag = EffectGrpcClient.GrpcClientConfig.makeTag(
+  "com.example.v1.UserService"
+);
+```
+
+---
+
+### Generated Code API
+
+The `protoc-gen-effect` plugin generates TypeScript code from `.proto` files with Effect integration. This section documents the structure of generated code.
+
+#### Service Implementation (Server-side)
+
+For each service in your `.proto` file, the generator creates:
+
+##### `{ServiceName}Id`
+
+Constant and type for the service identifier.
+
+**Example:**
+```typescript
+export const UserServiceId = "com.example.v1.UserService" as const;
+export type UserServiceId = typeof UserServiceId;
+```
+
+##### `{ServiceName}Service<Ctx>`
+
+Interface defining the service implementation contract.
+
+**Type Parameters:**
+- `Ctx` - Context type available in method handlers
+
+**Example:**
+```typescript
+export interface UserService<Ctx> {
+  getUser(
+    request: GetUserRequest,
+    ctx: Ctx
+  ): Effect.Effect<MessageInitShape<typeof GetUserResponseSchema>>;
+
+  listUsers(
+    request: ListUsersRequest,
+    ctx: Ctx
+  ): Effect.Effect<MessageInitShape<typeof ListUsersResponseSchema>>;
+}
+```
+
+##### `{ServiceName}Service.makeTag(ctxKey)`
+
+Creates a Context tag for the service.
+
+**Parameters:**
+- `ctxKey` - String identifier for the context type (e.g., "HandlerContext")
+
+**Returns:** `Context.Tag<{ServiceName}GrpcService<Ctx>, {ServiceName}GrpcService<Ctx>>`
+
+**Example:**
+```typescript
+const UserServiceTag = UserService.makeTag<HandlerContext>("HandlerContext");
+```
+
+##### `{ServiceName}Service.liveLayer(impl)`
+
+Creates a layer from a service implementation.
+
+**Parameters:**
+- `impl` - Implementation of the service interface
+
+**Returns:** Function accepting a tag and returning a `Layer`
+
+**Example:**
+```typescript
+const UserServiceLive: UserService<HandlerContext> = {
+  getUser(request) {
+    return Effect.succeed({ user: { id: request.userId, name: "John" } });
+  },
+  listUsers(request) {
+    return Effect.succeed({ users: [] });
+  }
+};
+
+const UserServiceTag = UserService.makeTag<HandlerContext>("HandlerContext");
+const layer = UserService.liveLayer(UserServiceLive)(UserServiceTag);
+```
+
+##### `{ServiceName}GrpcService<Ctx>`
+
+Type alias for the complete gRPC service (used with server builder).
+
+**Example:**
+```typescript
+type UserServiceGrpc = UserServiceGrpcService<HandlerContext>;
+```
+
+#### Client Implementation
+
+For each service, the generator also creates client-side types:
+
+##### `{ServiceName}Client<Meta>`
+
+Interface defining the client API.
+
+**Type Parameters:**
+- `Meta` - Type of metadata passed with each request
+
+**Example:**
+```typescript
+export interface UserServiceClient<Meta> {
+  getUser(
+    request: MessageInitShape<typeof GetUserRequestSchema>,
+    meta: Meta
+  ): Effect.Effect<GetUserResponse>;
+
+  listUsers(
+    request: MessageInitShape<typeof ListUsersRequestSchema>,
+    meta: Meta
+  ): Effect.Effect<ListUsersResponse>;
+}
+```
+
+##### `{ServiceName}Client.makeTag(metaKey)`
+
+Creates a Context tag for the client.
+
+**Parameters:**
+- `metaKey` - String identifier for the metadata type
+
+**Returns:** `Context.Tag<{ServiceName}Client<Meta>, {ServiceName}Client<Meta>>`
+
+**Example:**
+```typescript
+const UserServiceClientTag = UserServiceClient.makeTag<object>("{}");
+```
+
+##### `{ServiceName}Client.liveLayer(transformMeta, tag)` / `{ServiceName}Client.liveLayer(tag)`
+
+Creates a layer for the client (two overloads).
+
+**Overload 1: With metadata transformation**
+```typescript
+liveLayer<Tag extends {ServiceName}ClientTag<Meta>, Meta>(
+  transformMeta: (meta: Meta) => EffectGrpcClient.RequestMeta,
+  tag: Tag
+): Layer.Layer<...>
+```
+
+**Overload 2: Default metadata (empty object)**
+```typescript
+liveLayer<Tag extends {ServiceName}ClientTag<object>>(
+  tag: Tag
+): Layer.Layer<...>
+```
+
+**Example:**
+```typescript
+// With custom metadata transformation
+interface MyMeta {
+  authToken: string;
+}
+
+const clientLayerWithMeta = UserServiceClient.liveLayer(
+  (meta: MyMeta) => ({
+    headers: new Headers({ "Authorization": `Bearer ${meta.authToken}` })
+  }),
+  UserServiceClientTag
+).pipe(
+  Layer.provideMerge(
+    Layer.succeed(UserServiceConfigTag, config)
+  )
+);
+
+// With default empty metadata
+const clientLayer = UserServiceClient.liveLayer(
+  UserServiceClientTag
+).pipe(
+  Layer.provideMerge(
+    Layer.succeed(UserServiceConfigTag, config)
+  )
+);
+```
+
+##### `{ServiceName}ConfigTag`
+
+Pre-created config tag for the service.
+
+**Example:**
+```typescript
+export const UserServiceConfigTag: UserServiceConfigTag =
+  EffectGrpcClient.GrpcClientConfig.makeTag(UserServiceId);
+
+// Use it to provide configuration
+const configLayer = Layer.succeed(
+  UserServiceConfigTag,
+  EffectGrpcClient.GrpcClientConfig({ baseUrl: "http://localhost:8000" })
+);
 ```
 
 ## Advanced Usage
@@ -296,47 +739,74 @@ const serviceImpl = {
 
 ### Dependency Injection
 
-Leverage Effect's powerful dependency injection:
-
-// TODO: THIS NEEDS TO BE REWROTE
+Leverage Effect's powerful dependency injection to compose your services with external dependencies:
 
 ```typescript
-// Define a database service
-import {Layer} from "effect";
+import { Context, Effect, Layer } from "effect";
+import { HandlerContext } from "@connectrpc/connect";
+import * as effectProto from "./generated/user_effect.js";
 
+// Define a database service tag
 class DatabaseService extends Context.Tag("DatabaseService")<
-    DatabaseService,
-    {
-        readonly getUser: (id: string) => Effect.Effect<User>
-    }
->() {
-}
+  DatabaseService,
+  {
+    readonly getUser: (id: string) => Effect.Effect<User>;
+    readonly saveUser: (user: User) => Effect.Effect<void>;
+  }
+>() {}
 
-// Use it in your gRPC service
-class UserServiceLive implements effectProto.UserService<HandlerContext> {
-    constructor(readonly db: Context.Service<DatabaseService>) {
-    }
+// Implement your gRPC service with database dependency
+const UserServiceLive: effectProto.UserService<HandlerContext> = {
+  getUser(request) {
+    return Effect.gen(function* () {
+      // Access the database service from context
+      const db = yield* DatabaseService;
 
-    static get layer(): Layer.Layer<effectProto.UserService<HandlerContext>, never, DatabaseService> {
-        return Layer.project(
-            Layer.service(DatabaseService)
-        )
-    }
+      // Use it in your business logic
+      const user = yield* db.getUser(request.userId);
 
-    getUser(request) {
-        const {db} = this;
+      return { user };
+    });
+  },
 
-        return Effect.gen(function* () {
-            const user = yield* db.getUser(request.userId);
-            return user;
-        });
-    }
+  updateUser(request) {
+    return Effect.gen(function* () {
+      const db = yield* DatabaseService;
+
+      yield* db.saveUser(request.user);
+
+      return { success: true };
+    });
+  }
 };
 
-// Provide the database layer when composing your application
-const layer = Layer.empty.pipe(
-    Layer.provideMerge(databaseLayer),
-    Layer.provideMerge(userServiceLayer)
+// Create service tag and layer
+const UserServiceTag = effectProto.UserService.makeTag<HandlerContext>("HandlerContext");
+const userServiceLayer = effectProto.UserService.liveLayer(UserServiceLive)(UserServiceTag);
+
+// Create a mock database layer for testing
+const mockDatabaseLayer = Layer.succeed(DatabaseService, {
+  getUser: (id) => Effect.succeed({ id, name: "Mock User" }),
+  saveUser: (_user) => Effect.succeed(void 0)
+});
+
+// Compose all layers together
+const appLayer = Layer.empty.pipe(
+  Layer.provideMerge(mockDatabaseLayer),
+  Layer.provideMerge(userServiceLayer)
+);
+
+// Build and run your server with all dependencies
+const program = Effect.gen(function* () {
+  const userService = yield* UserServiceTag;
+
+  const server = EffectGrpcServer.GrpcServerBuilder()
+    .withService(userService)
+    .build();
+
+  return yield* server.run();
+}).pipe(
+  Effect.provide(appLayer)
 );
 ```
 
@@ -425,7 +895,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-[MIT License](LICENSE)
+[Apache License Version 2.0](LICENSE)
 
 ## Acknowledgments
 
