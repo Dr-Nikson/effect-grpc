@@ -90,6 +90,8 @@ jobs:
           path: |
             packages/*/dist
             packages/*/bin
+            packages/*/*.tsbuildinfo
+            *.tsbuildinfo
           retention-days: 7
           if-no-files-found: error
 
@@ -114,8 +116,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Build
+        run: pnpm -r run build
+
       - name: Run tests:types
-        run: pnpm run test:types
+        run: pnpm -r run test:types
 
       - name: Run tests
-        run: pnpm run test
+        run: pnpm -r run test
