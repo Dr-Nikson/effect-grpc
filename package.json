@@ -1,0 +1,45 @@
+{
+  "name": "effect-grpc",
+  "private": true,
+  "workspaces": [
+    "packages/effect-grpc",
+    "packages/example"
+  ],
+  "type": "module",
+  "packageManager": "pnpm@10.16.1",
+  "scripts": {
+    "clean": "rm -rf ./dist ./packages/*/dist ./*.tsbuildinfo ./packages/*/*.tsbuildinfo",
+    "compile": "tsc --build",
+    "build": "pnpm run clean && pnpm run compile",
+    "codestyle": "prettier --check \"packages/*/src/**/*.{ts,tsx}\"",
+    "codestyle:fix": "prettier --check \"packages/*/src/**/*.{ts,tsx}\" --write",
+    "lint": "eslint \"packages/*/src/**/*.{ts,tsx}\" --format stylish",
+    "test": "echo \"No test specified\" && exit 0",
+    "test:types": "echo \"No test types specified\" && exit 0",
+    "changeset": "changeset",
+    "changeset:version": "changeset version && pnpm install --lockfile-only",
+    "changeset:publish": "pnpm -r run build && changeset publish",
+    "changeset:pre:enter": "changeset pre enter",
+    "changeset:pre:exit": "changeset pre exit",
+    "release": "pnpm run build && pnpm run test:types && pnpm run lint && pnpm run codestyle && pnpm changeset:publish"
+  },
+  "devDependencies": {
+    "@changesets/changelog-github": "^0.5.1",
+    "@changesets/cli": "^2.29.7",
+    "@effect/eslint-plugin": "0.3.2",
+    "@effect/language-service": "catalog:",
+    "@eslint/js": "9.35.0",
+    "@trivago/prettier-plugin-sort-imports": "6.0.0-0",
+    "@tsconfig/node24": "24.0.1",
+    "@types/node": "catalog:",
+    "eslint": "9.35.0",
+    "eslint-config-prettier": "10.1.8",
+    "prettier": "3.6.2",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "typescript-eslint": "8.43.0"
+  },
+  "engines": {
+    "node": ">= 22"
+  }
+}

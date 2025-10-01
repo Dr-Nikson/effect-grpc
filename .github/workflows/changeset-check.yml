@@ -1,0 +1,33 @@
+name: Changeset Check
+
+on:
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  check:
+    name: Check for changesets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5.0.0
+        with:
+          node-version: '24.x'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Check changeset status
+        run: pnpm exec changeset status --since=origin/master

@@ -1,0 +1,58 @@
+{
+  "name": "@dr_nikson/effect-grpc",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "packageManager": "pnpm@10.16.1",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./protoc-gen-effect": {
+      "import": {
+        "types": "./dist/protocGenPlugin.d.ts",
+        "default": "./dist/protocGenPlugin.js"
+      },
+      "require": {
+        "types": "./dist/protocGenPlugin.d.ts",
+        "default": "./dist/protocGenPlugin.js"
+      }
+    }
+
+  },
+  "scripts": {
+    "compile": "tsc --build tsconfig.json",
+    "clean": "rm -rf ./dist ./tsconfig.tsbuildinfo",
+    "generate:proto": "pnpm buf generate",
+    "build": "pnpm run clean && pnpm run compile",
+    "test": "echo \"No test specified\" && exit 0",
+    "test:types": "vitest --typecheck.only --watch=false --config vitest.config.ts"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "catalog:",
+    "@bufbuild/protoplugin": "catalog:",
+    "@connectrpc/connect": "catalog:",
+    "@connectrpc/connect-node": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:^",
+    "@bufbuild/buf": "catalog:^",
+    "@bufbuild/protoc-gen-es": "catalog:^"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "catalog:",
+    "@bufbuild/protoc-gen-es": "catalog:",
+    "@effect/platform": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "effect": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

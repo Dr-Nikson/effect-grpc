@@ -1,3 +1,9 @@
+# Idea
+.idea/
+
+# TOKENS
+.npmrc
+
 # Logs
 logs
 *.log
@@ -124,6 +130,7 @@ dist
 
 # Stores VSCode versions used for testing VSCode extensions
 .vscode-test
+*.code-workspace
 
 # yarn v3
 .pnp.*
@@ -137,3 +144,6 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# generated protobuf:
+packages/*/src/generated
