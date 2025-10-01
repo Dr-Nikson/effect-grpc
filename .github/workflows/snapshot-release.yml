@@ -131,22 +131,22 @@ jobs:
               issue_number: context.issue.number,
               body: `## 🚀 Snapshot Published!
 
-**Version:** \`${version}\`
-**Tag:** \`${tag}\`
-
-### Install:
-\`\`\`bash
-pnpm add @dr_nikson/effect-grpc@${tag}
-# or
-npm install @dr_nikson/effect-grpc@${tag}
-\`\`\`
-
-### Using specific version:
-\`\`\`bash
-pnpm add @dr_nikson/effect-grpc@${version}
-\`\`\`
-
-This snapshot will be available until a newer version is published.`
+              **Version:** \`${version}\`
+              **Tag:** \`${tag}\`
+              
+              ### Install:
+              \`\`\`bash
+              pnpm add @dr_nikson/effect-grpc@${tag}
+              # or
+              npm install @dr_nikson/effect-grpc@${tag}
+              \`\`\`
+              
+              ### Using specific version:
+              \`\`\`bash
+              pnpm add @dr_nikson/effect-grpc@${version}
+              \`\`\`
+              
+              This snapshot will be available until a newer version is published.`
             });
 
       - name: Handle failure
