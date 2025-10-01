@@ -95,6 +95,8 @@ jobs:
 
       - name: Version snapshot
         run: pnpm changeset version --snapshot ${{ steps.tag.outputs.tag }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish snapshot
         id: publish
