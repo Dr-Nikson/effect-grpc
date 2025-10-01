@@ -43,5 +43,18 @@ export default tseslint.config(
     rules: {
       "@typescript-eslint/explicit-function-return-type": "off",
     },
+  },
+  {
+    ignores: ["**/src/generated/**"],
+  },
+  {
+    files: ["**/*.test-d.ts"],
+    languageOptions: {
+      parserOptions: {
+        project: "./packages/*/tsconfig.test-d.json",
+        ecmaVersion: 2020,
+        sourceType: "module",
+      }
+    }
   }
 );

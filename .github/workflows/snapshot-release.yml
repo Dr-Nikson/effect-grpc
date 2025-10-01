@@ -1,0 +1,162 @@
+name: Snapshot Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Snapshot tag name (e.g., mvp, beta, pr-123)'
+        required: true
+        default: 'snapshot'
+  issue_comment:
+    types: [created]
+
+concurrency:
+  group: snapshot-${{ github.ref }}-${{ github.event.inputs.tag || 'pr' }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+jobs:
+  snapshot:
+    name: Publish Snapshot
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       startsWith(github.event.comment.body, '/snapshot'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: npm-publish
+      url: https://www.npmjs.com/package/@dr_nikson/effect-grpc
+    steps:
+      - name: Determine snapshot tag
+        id: tag
+        uses: actions/github-script@v7
+        with:
+          script: |
+            let tag = 'snapshot';
+            let prNumber = null;
+            let prSha = null;
+
+            if (context.eventName === 'issue_comment') {
+              // Extract custom tag from comment if provided
+              const comment = context.payload.comment.body.trim();
+              const match = comment.match(/^\/snapshot(?:\s+(\S+))?/);
+              const customTag = match && match[1];
+
+              // Get PR details
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number
+              });
+
+              prNumber = pr.number;
+              prSha = pr.head.sha;
+              tag = customTag || `pr-${prNumber}`;
+
+              core.setOutput('pr-number', prNumber);
+              core.setOutput('pr-sha', prSha);
+            } else {
+              // workflow_dispatch
+              tag = context.payload.inputs.tag;
+            }
+
+            core.setOutput('tag', tag);
+            console.log(`Snapshot tag: ${tag}`);
+            return tag;
+
+      - name: Checkout repository
+        uses: actions/checkout@v5.0.0
+        with:
+          ref: ${{ steps.tag.outputs.pr-sha || github.ref }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5.0.0
+        with:
+          node-version: '24.x'
+          cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build packages
+        run: pnpm -r run build
+
+      - name: Version snapshot
+        run: pnpm changeset version --snapshot ${{ steps.tag.outputs.tag }}
+
+      - name: Publish snapshot
+        id: publish
+        run: |
+          pnpm exec changeset publish --tag ${{ steps.tag.outputs.tag }}
+
+          # Get published version
+          VERSION=$(node -p "require('./packages/effect-grpc/package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
+
+      - name: Output to console
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "✅ Snapshot published!"
+          echo "Version: ${{ steps.publish.outputs.version }}"
+          echo "Tag: ${{ steps.tag.outputs.tag }}"
+          echo "Install with: pnpm add @dr_nikson/effect-grpc@${{ steps.tag.outputs.tag }}"
+
+      - name: Comment on PR
+        if: github.event_name == 'issue_comment'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const version = '${{ steps.publish.outputs.version }}';
+            const tag = '${{ steps.tag.outputs.tag }}';
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `## 🚀 Snapshot Published!
+
+**Version:** \`${version}\`
+**Tag:** \`${tag}\`
+
+### Install:
+\`\`\`bash
+pnpm add @dr_nikson/effect-grpc@${tag}
+# or
+npm install @dr_nikson/effect-grpc@${tag}
+\`\`\`
+
+### Using specific version:
+\`\`\`bash
+pnpm add @dr_nikson/effect-grpc@${version}
+\`\`\`
+
+This snapshot will be available until a newer version is published.`
+            });
+
+      - name: Handle failure
+        if: failure() && github.event_name == 'issue_comment'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `❌ Snapshot publish failed. Check the [workflow run](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}) for details.`
+            });
