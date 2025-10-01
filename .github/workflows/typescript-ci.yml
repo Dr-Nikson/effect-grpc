@@ -59,6 +59,8 @@ jobs:
     needs:
       - codestyle
       - lint
+    outputs:
+      artifact-name: build-artifacts-${{ github.sha }}
 
     steps:
       - name: Checkout repository
@@ -77,6 +79,19 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install
+
+      - name: Build packages
+        run: pnpm -r run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-${{ github.sha }}
+          path: |
+            packages/*/dist
+            packages/*/bin
+          retention-days: 7
+          if-no-files-found: error
 
   test:
     runs-on: ubuntu-latest
