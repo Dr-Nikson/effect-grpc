@@ -11,7 +11,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/dr_nikson/effect-grpc.git",
+    "url": "https://github.com/Dr-Nikson/effect-grpc.git",
     "directory": "packages/effect-grpc"
   },
   "license": "MIT",
