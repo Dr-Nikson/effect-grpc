@@ -1,9 +1,28 @@
 {
   "name": "@dr_nikson/effect-grpc",
   "version": "0.1.0",
+  "description": "gRPC and Protobuf capabilities for the Effect ecosystem",
   "private": false,
   "type": "module",
   "packageManager": "pnpm@10.16.1",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Dr-Nikson/effect-grpc.git",
+    "directory": "packages/effect-grpc"
+  },
+  "license": "MIT",
+  "author": "dr_nikson",
+  "files": [
+    "dist",
+    "bin"
+  ],
+  "bin": {
+    "protoc-gen-effect": "./bin/protoc-gen-effect"
+  },
   "exports": {
     ".": {
       "import": {
@@ -25,7 +44,6 @@
         "default": "./dist/protocGenPlugin.js"
       }
     }
-
   },
   "scripts": {
     "compile": "tsc --build tsconfig.json",
@@ -42,9 +60,9 @@
     "@connectrpc/connect-node": "catalog:"
   },
   "peerDependencies": {
-    "effect": "catalog:^",
-    "@bufbuild/buf": "catalog:^",
-    "@bufbuild/protoc-gen-es": "catalog:^"
+    "@bufbuild/protobuf": "catalog:peer",
+    "@connectrpc/connect": "catalog:peer",
+    "effect": "catalog:peer"
   },
   "devDependencies": {
     "@bufbuild/buf": "catalog:",
