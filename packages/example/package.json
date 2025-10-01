@@ -1,7 +1,7 @@
 {
-  "name": "@dr_nikson/effect-grpc",
+  "name": "@dr_nikson/effect-grpc-example",
   "version": "0.1.0",
-  "private": false,
+  "private": true,
   "type": "module",
   "packageManager": "pnpm@10.16.1",
   "exports": {
@@ -25,26 +25,20 @@
         "default": "./dist/protocGenPlugin.js"
       }
     }
-
   },
   "scripts": {
     "compile": "tsc --build tsconfig.json",
     "clean": "rm -rf ./dist ./tsconfig.tsbuildinfo",
     "generate:proto": "pnpm buf generate",
-    "build": "pnpm run clean && pnpm run compile",
+    "build": "pnpm run clean && pnpm run generate:proto && pnpm run compile",
     "test": "echo \"No test specified\" && exit 0",
-    "test:types": "vitest --typecheck.only --watch=false --config vitest.config.ts"
+    "test:types": "echo \"No test specified\" && exit 0"
   },
   "dependencies": {
+    "effect": "catalog:",
     "@bufbuild/protobuf": "catalog:",
-    "@bufbuild/protoplugin": "catalog:",
     "@connectrpc/connect": "catalog:",
-    "@connectrpc/connect-node": "catalog:"
-  },
-  "peerDependencies": {
-    "effect": "catalog:^",
-    "@bufbuild/buf": "catalog:^",
-    "@bufbuild/protoc-gen-es": "catalog:^"
+    "@dr_nikson/effect-grpc": "workspace:"
   },
   "devDependencies": {
     "@bufbuild/buf": "catalog:",
