@@ -177,7 +177,7 @@ jobs:
       - name: Publish snapshot
         id: publish
         run: |
-          changeset publish --tag ${{ steps.tag.outputs.tag }}
+          pnpm exec changeset publish --tag ${{ steps.tag.outputs.tag }}
 
           # Get published version
           VERSION=$(node -p "require('./packages/effect-grpc/package.json').version" 2>/dev/null || echo "unknown")
