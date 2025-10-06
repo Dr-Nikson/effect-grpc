@@ -1,5 +1,5 @@
 // packages/effect-grpc/src/server.internal.ts
-import { Effect, Layer, ManagedRuntime, Scope, Types } from "effect";
+import { Effect, Scope, Types } from "effect";
 import http2 from "node:http2";
 
 import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
@@ -66,7 +66,6 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
 
     return Effect.gen(function* () {
       const executor = yield* makeExecutor();
-
       const handler = yield* Effect.sync(() =>
         connectNodeAdapter({
           routes: routes(executor),
@@ -142,15 +141,11 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
     };
   }
 
-  private makeExecutor(): Effect.Effect<ProtoRuntime.ServerExecutor<Ctx>, never, Scope.Scope> {
+  private makeExecutor(): Effect.Effect<ProtoRuntime.ServerExecutor<Ctx>> {
     const { transformation } = this;
 
     return Effect.gen(function* () {
-      const runtime = yield* Effect.acquireRelease(
-        Effect.sync(() => ManagedRuntime.make(Layer.empty)),
-        (runtime) => runtime.disposeEffect,
-      );
-
+      const runtime = yield* Effect.runtime();
       const basicExecutor = ProtoRuntime.ServerExecutor(runtime);
       const transformedExecutor = transformation(basicExecutor);
 

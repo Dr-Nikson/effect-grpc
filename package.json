@@ -11,6 +11,7 @@
     "clean": "rm -rf ./dist ./packages/*/dist ./*.tsbuildinfo ./packages/*/*.tsbuildinfo",
     "compile": "tsc --build",
     "build": "pnpm run clean && pnpm run compile",
+    "build:recur": "pnpm -r run build",
     "codestyle": "prettier --check \"packages/*/src/**/*.{ts,tsx}\"",
     "codestyle:fix": "prettier --check \"packages/*/src/**/*.{ts,tsx}\" --write",
     "lint": "eslint \"packages/*/src/**/*.{ts,tsx}\" --format stylish",

@@ -1,4 +1,4 @@
-import { Effect, ManagedRuntime } from "effect";
+import { Effect, Runtime } from "effect";
 
 import type { DescMessage, MessageInitShape, MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
@@ -85,7 +85,7 @@ export interface ServerExecutor<Ctx> {
   ): Promise<Out>;
 }
 export const ServerExecutor: {
-  (runtime: ManagedRuntime.ManagedRuntime<never, never>): ServerExecutor<HandlerContext>;
+  (runtime: Runtime.Runtime<never>): ServerExecutor<HandlerContext>;
 } = internal.ServerExecutorLive.make;
 
 export interface ServerExecutorTransformer<Ctx> {
