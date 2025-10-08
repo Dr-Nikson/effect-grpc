@@ -1,7 +1,9 @@
 name: Release
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Typescript CI"]
+    types: [completed]
     branches:
       - master
 
@@ -16,12 +18,15 @@ permissions:
 jobs:
   release:
     name: Release
+    # Only run if CI succeeded
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5.0.0
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
 
       - name: Install pnpm
@@ -37,7 +42,21 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-${{ github.event.workflow_run.head_sha }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Verify build artifacts
+        run: |
+          echo "Checking build artifacts..."
+          ls -la packages/*/dist || (echo "❌ dist folders not found" && exit 1)
+          ls -la packages/*/bin || echo "⚠️  bin folders not found (may not exist)"
+          echo "✅ Build artifacts restored successfully"
 
       - name: Create Release Pull Request or Publish
         id: changesets

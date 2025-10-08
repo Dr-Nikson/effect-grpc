@@ -49,30 +49,31 @@ This file defines the core project structure and coding standards for the Effect
 
 When developing new features or making changes, follow this iterative process:
 
-1. **Implement Changes:** Write or modify the necessary code in the relevant package(s) (e.g., within `packages/effect-grpc/src` or `packages/example/src`).
-2. **Generate Protocol Buffers (if needed):** If working with `.proto` files, regenerate the TypeScript bindings:
+1. **Documentation:** use `context7` MCP to fetch relevant documentation and API reference for all 3rd party tools, libraries 
+2. **Implement Changes:** Write or modify the necessary code in the relevant package(s) (e.g., within `packages/effect-grpc/src` or `packages/example/src`).
+3. **Generate Protocol Buffers (if needed):** If working with `.proto` files, regenerate the TypeScript bindings:
     ```bash
     # From package directory or use workspace command
     pnpm run generate:proto
     ```
 
-3.  **Compile Package:** Build the specific package you are working on to check for TypeScript errors. Run this command from the **root directory**. Use the package **name** defined in its `package.json`:
+4. **Compile Package:** Build the specific package you are working on to check for TypeScript errors. Run this command from the **root directory**. Use the package **name** defined in its `package.json`:
     ```bash
     # Example for the 'effect-grpc' package (path: packages/effect-grpc)
     pnpm --filter ./packages/effect-grpc run build
     ```
 
-4.  **Fix Compilation Errors:** If the build fails, address the TypeScript errors reported by the compiler. Repeat steps 1-3 until the package compiles successfully.
+5. **Fix Compilation Errors:** If the build fails, address the TypeScript errors reported by the compiler. Repeat steps 1-3 until the package compiles successfully.
 
-5.  **Run Type Tests:** Execute the type tests using Vitest for modules you have modified. Ensure you are using Node.js v22+ as specified in `engines`. Run the test command from the **root directory**:
+6. **Run Type Tests:** Execute the type tests using Vitest for modules you have modified. Ensure you are using Node.js v22+ as specified in `engines`. Run the test command from the **root directory**:
     ```bash
     # Run type tests for specific package
     pnpm --filter ./packages/effect-grpc run test:types
     ```
 
-6.  **Fix Type Test Errors:** If any type tests fail, debug the issues in your code or types. Repeat the cycle (steps 1-5) until all relevant tests pass and the package builds without errors.
+7. **Fix Type Test Errors:** If any type tests fail, debug the issues in your code or types. Repeat the cycle (steps 1-5) until all relevant tests pass and the package builds without errors.
 
-7.  **Check & Fix Code Style:** Run the linters and formatters to ensure code adheres to the project's style guide. Execute these commands from the **root directory**:
+8. **Check & Fix Code Style:** Run the linters and formatters to ensure code adheres to the project's style guide. Execute these commands from the **root directory**:
     ```bash
     # Run Prettier to automatically format code
     pnpm run codestyle:fix
@@ -81,7 +82,7 @@ When developing new features or making changes, follow this iterative process:
     ```
     If any linting errors are reported, review them. If code logic was changed during fixes, you might need to repeat steps 2-6 to ensure everything still compiles and passes tests.
 
-8.  **Build Entire Monorepo:** After confirming the individual package is correct and styled properly, compile the entire monorepo to check for cross-package compatibility and integration issues. Run this command from the **root directory**:
+9. **Build Entire Monorepo:** After confirming the individual package is correct and styled properly, compile the entire monorepo to check for cross-package compatibility and integration issues. Run this command from the **root directory**:
     ```bash
     pnpm -r run build # This builds all workspaces
     ```
