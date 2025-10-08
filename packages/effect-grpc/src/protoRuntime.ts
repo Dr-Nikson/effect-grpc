@@ -2,10 +2,10 @@ import { Effect, Runtime } from "effect";
 
 import type { DescMessage, MessageInitShape, MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
-import { HandlerContext } from "@connectrpc/connect";
+import type { HandlerContext } from "@connectrpc/connect";
 
 import * as internal from "./protoRuntime.internal.js";
-import { RequestMeta } from "./client.js";
+import type { RequestMeta } from "./client.js";
 
 /**
  * Type-safe executor interface for gRPC service methods.

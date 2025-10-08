@@ -1,6 +1,6 @@
 import { assertType, expectTypeOf, test } from "vitest";
 
-import { HandlerContext } from "@connectrpc/connect";
+import type { HandlerContext } from "@connectrpc/connect";
 
 import * as Server from "./server.js";
 

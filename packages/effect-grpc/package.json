@@ -1,6 +1,6 @@
 {
   "name": "@dr_nikson/effect-grpc",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "description": "gRPC and Protobuf capabilities for the Effect ecosystem",
   "private": false,
   "type": "module",
@@ -51,7 +51,8 @@
     "generate:proto": "pnpm buf generate",
     "build": "pnpm run clean && pnpm run compile",
     "test": "echo \"No test specified\" && exit 0",
-    "test:types": "vitest --typecheck.only --watch=false --config vitest.config.ts"
+    "test:types": "vitest --typecheck.only --watch=false --config vitest.config.ts",
+    "prepublishOnly": "cp ../../README.md ."
   },
   "dependencies": {
     "@bufbuild/protobuf": "catalog:",

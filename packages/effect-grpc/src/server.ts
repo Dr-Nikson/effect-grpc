@@ -2,7 +2,7 @@
 import { Effect, Scope, Types } from "effect";
 
 import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
-import { HandlerContext, ServiceImpl } from "@connectrpc/connect";
+import type { HandlerContext, ServiceImpl } from "@connectrpc/connect";
 
 import * as ProtoRuntime from "./protoRuntime.js";
 import * as internal from "./server.internal.js";

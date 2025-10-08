@@ -1,6 +1,7 @@
 // #!/usr/bin/env -S node
-import { createEcmaScriptPlugin, GeneratedFile, safeIdentifier, type Schema } from "@bufbuild/protoplugin";
-import { DescMethod, DescService } from "@bufbuild/protobuf";
+import type { GeneratedFile, Schema } from "@bufbuild/protoplugin";
+import { createEcmaScriptPlugin, safeIdentifier } from "@bufbuild/protoplugin";
+import type { DescMethod, DescService } from "@bufbuild/protobuf";
 import packageJson from "../package.json" with { type: "json" };
 
 export const protocGenEffectGrpc = createEcmaScriptPlugin({
@@ -73,7 +74,7 @@ function generateEffectService(
     const importEffect = f.import("Effect", "effect");
     const importContext = f.import("Context", "effect");
     const importLayer = f.import("Layer", "effect");
-    const importHandlerContext = f.import("HandlerContext", "@connectrpc/connect");
+    const importHandlerContext = f.import("HandlerContext", "@connectrpc/connect", true);
     const importEffectGrpcService = f.import("EffectGrpcServer", packageJson.name);
 
     const importService = f.importSchema(service);

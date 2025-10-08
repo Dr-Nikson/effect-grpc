@@ -3,13 +3,13 @@ import { Effect, Scope, Types } from "effect";
 import http2 from "node:http2";
 
 import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
-import {
+import type {
   ConnectRouter,
-  type ContextValues,
+  ContextValues,
   HandlerContext,
   ServiceImpl,
-  createContextValues,
 } from "@connectrpc/connect";
+import { createContextValues } from "@connectrpc/connect";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 
 import * as ProtoRuntime from "./protoRuntime.js";

@@ -2,13 +2,8 @@ import { Context, Effect, Layer } from "effect";
 
 import type { DescMessage, MessageInitShape, MessageShape } from "@bufbuild/protobuf";
 import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
-import {
-  CallOptions,
-  Client,
-  Transport,
-  createClient,
-  createContextValues,
-} from "@connectrpc/connect";
+import type { CallOptions, Client, Transport } from "@connectrpc/connect";
+import { createClient, createContextValues } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 
 import type * as T from "./client.js";

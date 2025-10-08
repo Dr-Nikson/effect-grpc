@@ -1,6 +1,6 @@
 import { Context, Effect, Layer, LogLevel, Logger } from "effect";
 
-import { HandlerContext } from "@connectrpc/connect";
+import type { HandlerContext } from "@connectrpc/connect";
 import { EffectGrpcServer } from "@dr_nikson/effect-grpc";
 import { NodeRuntime } from "@effect/platform-node";
 

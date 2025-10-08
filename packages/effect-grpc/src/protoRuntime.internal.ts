@@ -1,6 +1,6 @@
 import { Effect, Runtime } from "effect";
 
-import { HandlerContext } from "@connectrpc/connect";
+import type { HandlerContext } from "@connectrpc/connect";
 
 import type * as T from "./protoRuntime.js";
 
