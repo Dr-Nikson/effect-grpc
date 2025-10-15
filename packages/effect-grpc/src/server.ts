@@ -4,6 +4,7 @@ import { Effect, Scope, Types } from "effect";
 import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
 import type { HandlerContext, ServiceImpl } from "@connectrpc/connect";
 
+import * as GrpcException from "./grpcException.js";
 import * as ProtoRuntime from "./protoRuntime.js";
 import * as internal from "./server.internal.js";
 
@@ -127,12 +128,12 @@ export type UniqueTag<S extends GrpcService<any, any, any>, Services> =
  * ```
  */
 export interface GrpcServerBuilder<Ctx, Services> {
-  readonly transformCtx: (ctx: HandlerContext) => Effect.Effect<Ctx>;
+  readonly transformCtx: (ctx: HandlerContext) => Effect.Effect<Ctx, GrpcException.GrpcException>;
   readonly services: Record<string & Services, GrpcService<any, any, Ctx>>;
 
   withContextTransformer<This extends GrpcServerBuilder<Ctx, Services>, Ctx1>(
     this: [Services] extends [never] ? This : never,
-    f: (ctx: Ctx) => Effect.Effect<Ctx1>,
+    f: (ctx: Ctx) => Effect.Effect<Ctx1, GrpcException.GrpcException>,
   ): GrpcServerBuilder<Ctx1, never>;
 
   withService<S extends GrpcService<any, any, Ctx>>(

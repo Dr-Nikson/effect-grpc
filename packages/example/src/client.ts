@@ -22,15 +22,17 @@ const debugApiClientLayer = effectProto.HelloWorldAPIClient.liveLayer(HelloWorld
 
 const prog = Effect.gen(function* () {
   const client = yield* HelloWorldAPIClientTag;
+  const request = {
+    name: "Meowucher",
+  };
 
-  const response = yield* client.getGreeting(
-    {
-      name: "Meowucher",
-    },
-    {},
-  );
+  const response = yield* client.getGreeting(request, {});
 
   yield* Effect.logInfo(`Got some response from gRPC: ${response.greeting}`);
+
+  const neverActuallyHappen = yield* client.faceTheError(request, {});
+
+  yield* Effect.logInfo(`What is never happen? huh?: ${neverActuallyHappen.greeting}`);
 });
 
 const deps = Layer.empty.pipe(

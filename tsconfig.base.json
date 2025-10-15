@@ -27,14 +27,7 @@
         "name": "@effect/language-service",
         "diagnosticSeverity": {
           "deterministicKeys": "error" // enables reporting of wrong keys
-        },
-        "keyPatterns": [
-          {
-            "target": "service", // what key type to target between service|error
-            "pattern": "default", // the chosen pattern
-            "skipLeadingPath": ["src/"] // other pattern specific configs
-          }
-        ]
+        }
       }
     ]
   }

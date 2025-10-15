@@ -1,7 +1,7 @@
 import { Context, Effect, Layer, LogLevel, Logger } from "effect";
 
-import type { HandlerContext } from "@connectrpc/connect";
-import { EffectGrpcServer } from "@dr_nikson/effect-grpc";
+import { Code, type HandlerContext } from "@connectrpc/connect";
+import { EffectGrpcServer, GrpcException } from "@dr_nikson/effect-grpc";
 import { NodeRuntime } from "@effect/platform-node";
 
 import * as effectProto from "./generated/com/example/v1/hello_world_api_effect.js";
@@ -20,6 +20,16 @@ const HelloWorldAPIServiceLive: effectProto.HelloWorldAPIService<HandlerContext>
       }),
     );
   },
+
+  faceTheError: Effect.fn("HelloWorldAPIServiceLive.faceTheError")(function* (
+    request: proto.GetGreetingRequest,
+  ) {
+    yield* Effect.logInfo(
+      `faceTheError called, now you(${request.name}) will face the consequences!`,
+    );
+
+    return yield* GrpcException.create(Code.FailedPrecondition, "Face the consequences!");
+  }),
 };
 
 const debugApiLayer =

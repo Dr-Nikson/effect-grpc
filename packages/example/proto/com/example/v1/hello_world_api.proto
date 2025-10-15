@@ -9,6 +9,8 @@ package com.example.v1;
 service HelloWorldAPI {
   // Returns the greeting
   rpc GetGreeting(GetGreetingRequest) returns (GetGreetingResponse);
+  // Always fails with the error
+  rpc FaceTheError(GetGreetingRequest) returns (GetGreetingResponse);
 }
 
 message GetGreetingRequest {

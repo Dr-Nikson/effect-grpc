@@ -7,7 +7,7 @@ import { HandlerContext } from "@connectrpc/connect";
 
 import { GetGreetingRequestSchema, GetGreetingResponseSchema, HelloWorldAPI } from "./hello_world_api_pb.js";
 import type { GetGreetingRequest, GetGreetingResponse } from "./hello_world_api_pb.js";
-import { EffectGrpcClient, EffectGrpcServer } from "../src";
+import { EffectGrpcClient, EffectGrpcServer, GrpcException } from "../src";
 
 
 export const HelloWorldAPIId = "com.example.v1.HelloWorldAPI" as const;
@@ -28,7 +28,7 @@ export interface HelloWorldAPIService<Ctx> {
   getGreeting(
     request: GetGreetingRequest,
     ctx: Ctx,
-  ): Effect.Effect<MessageInitShape<typeof GetGreetingResponseSchema>>;
+  ): Effect.Effect<MessageInitShape<typeof GetGreetingResponseSchema>, GrpcException.GrpcException>;
 }
 export const HelloWorldAPIService: {
   makeTag<Ctx>(ctxKey: string): HelloWorldAPITag<Ctx>;

@@ -76,6 +76,7 @@ function generateEffectService(
     const importLayer = f.import("Layer", "effect");
     const importHandlerContext = f.import("HandlerContext", "@connectrpc/connect", true);
     const importEffectGrpcService = f.import("EffectGrpcServer", packageJson.name);
+    const importGrpcException = f.import("GrpcException", packageJson.name);
 
     const importService = f.importSchema(service);
 
@@ -394,7 +395,7 @@ function generateEffectService(
             case "unary":
                 f.print();
                 f.print(f.jsDoc(method, "  "));
-                f.print("  ", method.localName, "(request: ", inputType, ", ctx: Ctx): ", importEffect, ".Effect<", importMessageInitShape, "<typeof ", outputDesc, ">>;");
+                f.print("  ", method.localName, "(request: ", inputType, ", ctx: Ctx): ", importEffect, ".Effect<", importMessageInitShape, "<typeof ", outputDesc, ">, ", importGrpcException, ".GrpcException>;");
                 return;
             default:
                 f.print("// Method[", method.localName, "] wasn't generated: methodKind is not yet supported [", method.methodKind, "]");

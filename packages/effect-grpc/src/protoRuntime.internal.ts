@@ -1,7 +1,9 @@
-import { Effect, Runtime } from "effect";
+import { Cause, Effect, Exit, Runtime } from "effect";
 
+import { Code, ConnectError } from "@connectrpc/connect";
 import type { HandlerContext } from "@connectrpc/connect";
 
+import * as GrpcException from "./grpcException.js";
 import type * as T from "./protoRuntime.js";
 
 /**
@@ -19,9 +21,32 @@ export class ServerExecutorLive implements T.ServerExecutor<HandlerContext> {
   unary<In, Out>(
     req: In,
     ctx: HandlerContext,
-    prog: (req: In, ctx: HandlerContext) => Effect.Effect<Out>,
+    prog: (req: In, ctx: HandlerContext) => Effect.Effect<Out, GrpcException.GrpcException>,
   ): Promise<Out> {
-    return Runtime.runPromise(this.runtime, prog(req, ctx), { signal: ctx.signal });
+    return Runtime.runPromiseExit(this.runtime, prog(req, ctx), { signal: ctx.signal }).then(
+      Exit.match({
+        onFailure: (cause) => {
+          throw Cause.match(cause, {
+            onEmpty: new ConnectError("Unknown error", Code.Unknown),
+            onFail: (error) => GrpcException.toConnectError(error),
+            onDie: (defect) =>
+              new ConnectError(
+                "Internal server error",
+                Code.Internal,
+                undefined,
+                undefined,
+                defect,
+              ),
+            onInterrupt: () => new ConnectError("Request was canceled", Code.Aborted),
+            onSequential: (left, right) =>
+              new ConnectError(`${left.rawMessage}; ${right.rawMessage}`, Code.Internal),
+            onParallel: (left, right) =>
+              new ConnectError(`${left.rawMessage} | ${right.rawMessage}`, Code.Internal),
+          });
+        },
+        onSuccess: (value) => value,
+      }),
+    );
   }
 }
 
@@ -42,7 +67,7 @@ export class ServerExecutorTransformerLive<Ctx> implements T.ServerExecutorTrans
   }
 
   transformContext<Ctx1>(
-    f: (ctx: Ctx) => Effect.Effect<Ctx1>,
+    f: (ctx: Ctx) => Effect.Effect<Ctx1, GrpcException.GrpcException>,
   ): ServerExecutorTransformerLive<Ctx1> {
     return new ServerExecutorTransformerLive<Ctx1>((underlying) => {
       const executor: T.ServerExecutor<Ctx> = this.transformation(underlying);
@@ -51,7 +76,7 @@ export class ServerExecutorTransformerLive<Ctx> implements T.ServerExecutorTrans
         unary<In, Out>(
           req: In,
           ctx: HandlerContext,
-          prog: (req: In, ctx: Ctx1) => Effect.Effect<Out>,
+          prog: (req: In, ctx: Ctx1) => Effect.Effect<Out, GrpcException.GrpcException>,
         ): Promise<Out> {
           return executor.unary(req, ctx, (req, ctx0) => {
             return Effect.flatMap(f(ctx0), (ctx1) => prog(req, ctx1));

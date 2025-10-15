@@ -4,6 +4,7 @@ import type { DescMessage, MessageInitShape, MessageShape } from "@bufbuild/prot
 import type { GenMessage, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
 import type { HandlerContext } from "@connectrpc/connect";
 
+import * as GrpcException from "./grpcException.js";
 import * as internal from "./protoRuntime.internal.js";
 import type { RequestMeta } from "./client.js";
 
@@ -81,7 +82,7 @@ export interface ServerExecutor<Ctx> {
   unary<In, Out>(
     req: In,
     ctx: HandlerContext,
-    prog: (req: In, ctx: Ctx) => Effect.Effect<Out>,
+    prog: (req: In, ctx: Ctx) => Effect.Effect<Out, GrpcException.GrpcException>,
   ): Promise<Out>;
 }
 export const ServerExecutor: {
@@ -91,7 +92,9 @@ export const ServerExecutor: {
 export interface ServerExecutorTransformer<Ctx> {
   readonly transformation: (underlying: ServerExecutor<HandlerContext>) => ServerExecutor<Ctx>;
 
-  transformContext<Ctx1>(f: (ctx: Ctx) => Effect.Effect<Ctx1>): ServerExecutorTransformer<Ctx1>;
+  transformContext<Ctx1>(
+    f: (ctx: Ctx) => Effect.Effect<Ctx1, GrpcException.GrpcException>,
+  ): ServerExecutorTransformer<Ctx1>;
 }
 export const ServerExecutorTransformer: {
   (): ServerExecutorTransformer<HandlerContext>;

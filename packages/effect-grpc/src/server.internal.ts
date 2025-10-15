@@ -12,6 +12,7 @@ import type {
 import { createContextValues } from "@connectrpc/connect";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 
+import * as GrpcException from "./grpcException.js";
 import * as ProtoRuntime from "./protoRuntime.js";
 import type * as T from "./server.js";
 
@@ -160,7 +161,9 @@ export class ConnectEsGprcServerBuilder<Ctx, Services>
   implements T.GrpcServerBuilder<Ctx, Services>
 {
   constructor(
-    public readonly transformCtx: (ctx: HandlerContext) => Effect.Effect<Ctx>,
+    public readonly transformCtx: (
+      ctx: HandlerContext,
+    ) => Effect.Effect<Ctx, GrpcException.GrpcException>,
     public readonly services: Record<string, T.GrpcService<any, any, Ctx>>,
   ) {}
 
@@ -170,7 +173,7 @@ export class ConnectEsGprcServerBuilder<Ctx, Services>
 
   withContextTransformer<This extends T.GrpcServerBuilder<Ctx, Services>, Ctx1>(
     this: This,
-    f: (ctx: Ctx) => Effect.Effect<Ctx1>,
+    f: (ctx: Ctx) => Effect.Effect<Ctx1, GrpcException.GrpcException>,
   ): T.GrpcServerBuilder<Ctx1, never> {
     return new ConnectEsGprcServerBuilder<Ctx1, never>(
       (ctx) => Effect.flatMap(this.transformCtx(ctx), f),

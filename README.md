@@ -712,30 +712,54 @@ const configLayer = Layer.succeed(
 
 ## Advanced Usage
 
-### Error Handling
+### Error Handling with GrpcException
 
-effect-grpc integrates with Effect's error handling system:
+effect-grpc provides `GrpcException`, a typed error that extends Effect's `Data.TaggedError` for handling gRPC errors. All generated service methods return `Effect<Success, GrpcException>`.
 
 ```typescript
-const serviceImpl = {
-  myMethod(request) {
+import { Effect } from "effect";
+import { HandlerContext } from "@connectrpc/connect";
+import { GrpcException } from "@dr_nikson/effect-grpc";
+import { Code } from "@connectrpc/connect";
+
+import * as effectProto from "./generated/example/v1/user_effect.js";
+import * as proto from "./generated/example/v1/user_pb.js";
+
+// Implement the service with error handling
+const UserServiceLive: effectProto.UserService<HandlerContext> = {
+  getUser(request: proto.GetUserRequest) {
     return Effect.gen(function* () {
-      // Validate input
-      if (!request.id) {
-        return yield* Effect.fail(new InvalidInputError("ID is required"));
+      // Input validation with gRPC status codes
+      if (!request.userId) {
+        return yield* Effect.fail(
+          GrpcException.create(Code.InvalidArgument, "User ID is required")
+        );
       }
 
-      // Business logic with error handling
-      const result = yield* Effect.tryPromise({
-        try: () => fetchData(request.id),
-        catch: (error) => new DatabaseError("Failed to fetch data", { cause: error })
+      // Convert unknown errors to GrpcException
+      const user = yield* Effect.tryPromise({
+        try: () => database.findUser(request.userId),
+        catch: (error) => GrpcException.from(Code.Internal, error)
       });
 
-      return { data: result };
+      if (!user) {
+        return yield* Effect.fail(
+          GrpcException.create(Code.NotFound, "User not found")
+        );
+      }
+
+      return { user };
     });
   }
 };
 ```
+
+**GrpcException API:**
+- `GrpcException.create(code, message, cause?)` - Create a new exception
+- `GrpcException.from(code, cause)` - Convert any error to GrpcException
+- `GrpcException.withDescription(error, desc)` - Add context description
+
+For gRPC status codes and error handling best practices, see [Connect RPC Error Handling](https://connectrpc.com/docs/node/errors).
 
 ### Dependency Injection
 
