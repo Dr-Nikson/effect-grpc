@@ -37,7 +37,7 @@ import * as internal from "./server.internal.js";
 export interface GrpcServer<in Services> {
   readonly _Services: Types.Contravariant<Services>;
 
-  run(): Effect.Effect<never, never, Scope.Scope>;
+  run(options: { host: string; port: number }): Effect.Effect<never, never, Scope.Scope>;
 }
 
 /**

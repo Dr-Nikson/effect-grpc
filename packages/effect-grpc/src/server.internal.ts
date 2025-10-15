@@ -57,12 +57,9 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
 
   readonly _Services: Types.Contravariant<Services> = (a) => a;
 
-  run(): Effect.Effect<never, never, Scope.Scope> {
+  run(options: { host: string; port: number }): Effect.Effect<never, never, Scope.Scope> {
     const routes = this.routes.bind(this);
     const makeExecutor = this.makeExecutor.bind(this);
-
-    const HOST = "localhost";
-    const PORT = 8000;
 
     return Effect.gen(function* () {
       const executor = yield* makeExecutor();
@@ -89,7 +86,7 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
       //     exposedHeaders: [...connectCors.exposedHeaders],
       // })
       type Srv = http2.Http2Server;
-      const startServer = Effect.async<Srv>((resume) => {
+      const startServer = Effect.async<Srv>((resume, signal) => {
         const server = http2
           .createServer(handler)
           .addListener("connect", (req, socket, head) => {
@@ -107,11 +104,11 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
           .addListener("dropRequest", (req, socket) => {
             console.warn("Dropped request", req.url, socket);
           })
-          .listen({ port: PORT, host: HOST }, () => {
+          .listen({ ...options, signal }, () => {
             resume(
-              Effect.logInfo(`gRPC server listening on http://${HOST}:${PORT}`).pipe(
-                Effect.as(server),
-              ),
+              Effect.logInfo(
+                `gRPC server listening on http://${options.host}:${options.port}`,
+              ).pipe(Effect.as(server)),
             );
           });
       });

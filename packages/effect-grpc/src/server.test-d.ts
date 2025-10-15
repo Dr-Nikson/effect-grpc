@@ -13,8 +13,7 @@ test("GrpcServerBuilder#withService should work correctly", () => {
   type MyService = Server.GrpcService<"DebugAPI", any, HandlerContext>;
 
   const service: MyService = null as any;
-  const has1Service: Server.GrpcServerBuilder<HandlerContext, "DebugAPI"> =
-    empty.withService(service);
+  const has1Service = empty.withService(service);
   const has1ServiceBuild = has1Service.build();
 
   assertType<Server.GrpcServerBuilder<HandlerContext, "DebugAPI">>(has1Service);
