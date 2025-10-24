@@ -1,9 +1,11 @@
 // packages/effect-grpc/src/client.ts
-import { Context, Effect, Layer, Types } from "effect";
+import type * as http2 from "node:http2";
+import { Context, Effect, Layer, Scope, Types } from "effect";
 
 import type { BinaryReadOptions, BinaryWriteOptions } from "@bufbuild/protobuf";
 import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
 import { type ContextValues } from "@connectrpc/connect";
+import type { Http2SessionOptions } from "@connectrpc/connect-node";
 import type { Compression } from "@connectrpc/connect/protocol";
 
 import * as internal from "./client.internal.js";
@@ -44,7 +46,7 @@ export interface GrpcClientRuntime {
     serviceDefinition: GenService<Shape>,
     methodNames: ReadonlyArray<keyof GenService<Shape>["method"]>,
     config: GrpcClientConfig<any>,
-  ): Effect.Effect<ProtoRuntime.ClientExecutor<Shape>>;
+  ): Effect.Effect<ProtoRuntime.ClientExecutor<Shape>, never, Scope.Scope>;
 }
 /**
  * Context tag for accessing the GrpcClient service.
@@ -115,7 +117,7 @@ export interface GrpcClientConfig<in Service extends string> {
    * This will make a `POST /my-api/my_package.MyService/Foo` to
    * `example.com`
    */
-  readonly baseUrl: string;
+  readonly baseUrl: URL;
 
   /**
    * Options for the binary wire format.
@@ -161,6 +163,41 @@ export interface GrpcClientConfig<in Service extends string> {
    * This can be overridden on a per-request basis by passing a timeoutMs.
    */
   readonly defaultTimeoutMs?: number;
+
+  /**
+   * Options for HTTP/2 session keepalive behavior.
+   *
+   * Configure PING frame intervals and timeouts to maintain long-lived
+   * HTTP/2 connections. This is important for detecting dead connections
+   * and preventing resource exhaustion.
+   *
+   * @example
+   * ```typescript
+   * const config = GrpcClientConfig({
+   *   baseUrl: new URL("http://localhost:8080"),
+   *   pingOptions: {
+   *     pingIntervalMs: 30000,  // Send PING every 30 seconds
+   *     pingTimeoutMs: 15000,   // Timeout after 15 seconds
+   *     pingIdleConnection: true,
+   *     idleConnectionTimeoutMs: 900000, // Close idle connections after 15 minutes
+   *   }
+   * });
+   * ```
+   *
+   * @see [Http2SessionOptions]{@link https://connectrpc.com/docs/node/using-clients}
+   */
+  readonly pingOptions?: Http2SessionOptions;
+
+  /**
+   * Advanced options for the underlying Node.js HTTP/2 client session.
+   *
+   * These options are passed directly to Node.js's `http2.connect()`.
+   * Use this to configure TLS settings, ALPN protocols, and other
+   * low-level HTTP/2 behavior.
+   *
+   * @see [Node.js HTTP/2 ClientSessionOptions]{@link https://nodejs.org/api/http2.html#http2connectauthority-options-listener}
+   */
+  readonly http2SessionOptions?: http2.ClientSessionOptions | http2.SecureClientSessionOptions;
 }
 export const GrpcClientConfig: {
   <Service extends string>(

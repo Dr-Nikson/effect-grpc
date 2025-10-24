@@ -94,7 +94,52 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
             console.log("Connected to server", req.url, socket, head);
           })
           .addListener("connection", (socket) => {
-            console.log("New connection", socket.remoteAddress, socket.remotePort);
+            console.log("New TCP connection:", socket.remoteAddress, socket.remotePort);
+
+            // Track when TCP socket closes
+            socket.on("close", (hadError: boolean) => {
+              console.log(
+                "TCP connection closed:",
+                socket.remoteAddress,
+                socket.remotePort,
+                hadError ? "(with error)" : "(clean)",
+              );
+            });
+
+            // Track socket errors
+            socket.on("error", (err: Error) => {
+              console.error("TCP socket error:", socket.remoteAddress, err);
+            });
+          })
+          .addListener("sessionError", (err) => {
+            console.error("Session Error", err);
+          })
+          .addListener("session", (session) => {
+            console.log("New HTTP/2 session created");
+
+            // Track when session closes
+            session.on("close", () => {
+              console.log("HTTP/2 session closed");
+            });
+
+            // Track session errors
+            session.on("error", (err) => {
+              console.error("HTTP/2 session error:", err);
+            });
+
+            // Track when session is going away
+            session.on("goaway", (errorCode, lastStreamID) => {
+              console.log("HTTP/2 session GOAWAY:", { errorCode, lastStreamID });
+            });
+
+            // Track individual streams (requests)
+            session.on("stream", (stream, headers) => {
+              console.log("New stream on session:", headers[":path"]);
+
+              stream.on("close", () => {
+                console.log("Stream closed:", headers[":path"]);
+              });
+            });
           })
           .addListener("error", (err) => {
             console.error("Server error", err);
@@ -115,9 +160,15 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
       });
 
       const stopServer = (server: http2.Http2Server) =>
-        Effect.async((resume) => {
-          // Gracefully stop the server
-          server.close(() => resume(Effect.logInfo("gRPC server stopped")));
+        Effect.gen(function* () {
+          yield* Effect.logInfo("gRPC server is stopping...");
+
+          yield* Effect.async((resume) => {
+            // Then close the server
+            server.close(() => {
+              return resume(Effect.logInfo("gRPC server stopped"));
+            });
+          });
         });
 
       // eslint-disable-next-line @typescript-eslint/no-unused-vars

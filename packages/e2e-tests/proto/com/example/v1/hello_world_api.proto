@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package com.example.v1;
+
+
+/** Temporary service for debugging purposes.
+ *
+ */
+service HelloWorldAPI {
+  // Returns the greeting
+  rpc GetGreeting(GetGreetingRequest) returns (GetGreetingResponse);
+  // Always fails with the error
+  rpc FaceTheError(GetGreetingRequest) returns (GetGreetingResponse);
+}
+
+message GetGreetingRequest {
+  // Just a string as an example of payload. Could be anything.
+  string name = 1;
+}
+
+message GetGreetingResponse {
+  // Just a string as an example of payload. Could be anything.
+  string greeting = 1;
+}

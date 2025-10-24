@@ -3,6 +3,7 @@
   "private": true,
   "workspaces": [
     "packages/effect-grpc",
+    "packages/e2e-tests",
     "packages/example"
   ],
   "type": "module",
@@ -15,8 +16,8 @@
     "codestyle": "prettier --check \"packages/*/src/**/*.{ts,tsx}\"",
     "codestyle:fix": "prettier --check \"packages/*/src/**/*.{ts,tsx}\" --write",
     "lint": "eslint \"packages/*/src/**/*.{ts,tsx}\" --format stylish",
-    "test": "echo \"No test specified\" && exit 0",
-    "test:types": "echo \"No test types specified\" && exit 0",
+    "test": "pnpm -r run test",
+    "test:types": "pnpm -r run test:types",
     "changeset": "changeset",
     "changeset:version": "changeset version && pnpm install --lockfile-only",
     "changeset:publish": "pnpm -r run build && changeset publish",

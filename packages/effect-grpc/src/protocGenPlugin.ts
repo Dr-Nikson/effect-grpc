@@ -74,6 +74,7 @@ function generateEffectService(
     const importEffect = f.import("Effect", "effect");
     const importContext = f.import("Context", "effect");
     const importLayer = f.import("Layer", "effect");
+    const importScope = f.import("Scope", "effect");
     const importHandlerContext = f.import("HandlerContext", "@connectrpc/connect", true);
     const importEffectGrpcService = f.import("EffectGrpcServer", packageJson.name);
     const importGrpcException = f.import("GrpcException", packageJson.name);
@@ -253,7 +254,7 @@ function generateEffectService(
     f.print("  ): ", importLayer, ".Layer<");
     f.print("    ", importContext, ".Tag.Identifier<Tag>,");
     f.print("    never,");
-    f.print("    ", importContext, ".Tag.Identifier<", configTagSymbol, "> | ", importEffectGrpcClient, ".GrpcClientRuntime");
+    f.print("    ", importContext, ".Tag.Identifier<", configTagSymbol, "> | ", importEffectGrpcClient, ".GrpcClientRuntime | ", importScope, ".Scope");
     f.print("  >;");
     f.print();
     f.print("  liveLayer<Tag extends ", clientTagSymbol, "<object>>(");
@@ -261,7 +262,7 @@ function generateEffectService(
     f.print("  ): ", importLayer, ".Layer<");
     f.print("    ", importContext, ".Tag.Identifier<Tag>,");
     f.print("    never,");
-    f.print("    ", importContext, ".Tag.Identifier<", configTagSymbol, "> | ", importEffectGrpcClient, ".GrpcClientRuntime");
+    f.print("    ", importContext, ".Tag.Identifier<", configTagSymbol, "> | ", importEffectGrpcClient, ".GrpcClientRuntime | ", importScope, ".Scope");
     f.print("  >;");
     f.print("} = {");
     f.print("  makeTag: ", makeClientTagSymbol, ",");

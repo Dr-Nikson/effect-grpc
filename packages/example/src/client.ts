@@ -14,7 +14,7 @@ const debugApiClientLayer = effectProto.HelloWorldAPIClient.liveLayer(HelloWorld
     Layer.succeed(
       effectProto.HelloWorldAPIConfigTag,
       EffectGrpcClient.GrpcClientConfig({
-        baseUrl: "http://localhost:8000",
+        baseUrl: new URL("http://localhost:8000"),
       }),
     ),
   ),
@@ -41,4 +41,4 @@ const deps = Layer.empty.pipe(
   Layer.provideMerge(Logger.minimumLogLevel(LogLevel.Trace)),
 );
 
-NodeRuntime.runMain(Effect.provide(prog, deps));
+NodeRuntime.runMain(Effect.provide(prog, deps).pipe(Effect.scoped));
