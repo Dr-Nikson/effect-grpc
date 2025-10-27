@@ -58,6 +58,12 @@ jobs:
           ls -la packages/*/bin || echo "⚠️  bin folders not found (may not exist)"
           echo "✅ Build artifacts restored successfully"
 
+      - name: Remove executable bit from bin files
+        run: |
+          echo "Removing executable bit from bin files for github-api commit mode..."
+          find packages/*/bin -type f -exec chmod -x {} \; 2>/dev/null || true
+          echo "✅ Executable bits removed"
+
       - name: Create Release Pull Request or Publish
         id: changesets
         uses: changesets/action@v1
