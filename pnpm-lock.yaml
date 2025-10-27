@@ -33,6 +33,9 @@ catalogs:
     '@effect/platform-node':
       specifier: 0.96.1
       version: 0.96.1
+    '@effect/vitest':
+      specifier: 0.19.4
+      version: 0.19.4
     '@types/node':
       specifier: 24.4.0
       version: 24.4.0
@@ -95,6 +98,52 @@ importers:
       typescript-eslint:
         specifier: 8.43.0
         version: 8.43.0(eslint@9.35.0)(typescript@5.9.2)
+
+  packages/e2e-tests:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 'catalog:'
+        version: 2.8.0
+      '@connectrpc/connect':
+        specifier: 'catalog:'
+        version: 2.1.0(@bufbuild/protobuf@2.8.0)
+      '@connectrpc/connect-node':
+        specifier: 'catalog:'
+        version: 2.1.0(@bufbuild/protobuf@2.8.0)(@connectrpc/connect@2.1.0(@bufbuild/protobuf@2.8.0))
+      '@dr_nikson/effect-grpc':
+        specifier: workspace:*
+        version: link:../effect-grpc
+      effect:
+        specifier: 'catalog:'
+        version: 3.17.14
+      get-port-please:
+        specifier: 3.1.2
+        version: 3.1.2
+    devDependencies:
+      '@bufbuild/buf':
+        specifier: 'catalog:'
+        version: 1.57.0
+      '@bufbuild/protoc-gen-es':
+        specifier: 'catalog:'
+        version: 2.8.0(@bufbuild/protobuf@2.8.0)
+      '@effect/platform':
+        specifier: 'catalog:'
+        version: 0.90.10(effect@3.17.14)
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 0.96.1(@effect/cluster@0.48.16(@effect/platform@0.90.10(effect@3.17.14))(@effect/rpc@0.69.5(@effect/platform@0.90.10(effect@3.17.14))(effect@3.17.14))(@effect/sql@0.44.2(@effect/experimental@0.54.6(@effect/platform@0.90.10(effect@3.17.14))(effect@3.17.14))(@effect/platform@0.90.10(effect@3.17.14))(effect@3.17.14))(@effect/workflow@0.9.6(@effect/platform@0.90.10(effect@3.17.14))(@effect/rpc@0.69.5(@effect/platform@0.90.10(effect@3.17.14))(effect@3.17.14))(effect@3.17.14))(effect@3.17.14))(@effect/platform@0.90.10(effect@3.17.14))(@effect/rpc@0.69.5(@effect/platform@0.90.10(effect@3.17.14))(effect@3.17.14))(@effect/sql@0.44.2(@effect/experimental@0.54.6(@effect/platform@0.90.10(effect@3.17.14))(effect@3.17.14))(@effect/platform@0.90.10(effect@3.17.14))(effect@3.17.14))(effect@3.17.14)
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 0.19.4(effect@3.17.14)(vitest@3.2.4(@types/node@24.4.0)(tsx@4.20.5))
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.4.0
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.2
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.4(@types/node@24.4.0)(tsx@4.20.5)
 
   packages/effect-grpc:
     dependencies:
@@ -422,6 +471,12 @@ packages:
       '@effect/experimental': ^0.54.6
       '@effect/platform': ^0.90.4
       effect: ^3.17.7
+
+  '@effect/vitest@0.19.4':
+    resolution: {integrity: sha512-3CwFCUs2r5Z3Kp9Ax79eb5eHK1WHE3Xtdx2P1tRDHxwTUNKIGpEYDqODDS3VOR9gDojlZqIUzfpU698CoHDpEA==}
+    peerDependencies:
+      effect: ^3.13.6
+      vitest: ^3.0.0
 
   '@effect/workflow@0.9.6':
     resolution: {integrity: sha512-uPBpSJ8NYwYA6VLZovfejwNik+2kAaoDtlPi+VTlxFMscWNYx+xlGiRg8CO/oa2pHCwkJYjOI27SGOlUawiz1w==}
@@ -1327,6 +1382,9 @@ packages:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
+
+  get-port-please@3.1.2:
+    resolution: {integrity: sha512-Gxc29eLs1fbn6LQ4jSU4vXjlwyZhF5HsGuMAa7gqBP4Rw4yxxltyDUuF5MBclFzDTXO+ACchGQoeela4DSfzdQ==}
 
   get-tsconfig@4.10.1:
     resolution: {integrity: sha512-auHyJ4AgMz7vgS8Hp3N6HXSmlMdUyhSUrfBF16w153rxtLIEOE+HGqaBppczZvnHLqQJfiHotCYpNhl0lUROFQ==}
@@ -2279,6 +2337,11 @@ snapshots:
       effect: 3.17.14
       uuid: 11.1.0
 
+  '@effect/vitest@0.19.4(effect@3.17.14)(vitest@3.2.4(@types/node@24.4.0)(tsx@4.20.5))':
+    dependencies:
+      effect: 3.17.14
+      vitest: 3.2.4(@types/node@24.4.0)(tsx@4.20.5)
+
   '@effect/workflow@0.9.6(@effect/platform@0.90.10(effect@3.17.14))(@effect/rpc@0.69.5(@effect/platform@0.90.10(effect@3.17.14))(effect@3.17.14))(effect@3.17.14)':
     dependencies:
       '@effect/platform': 0.90.10(effect@3.17.14)
@@ -3089,6 +3152,8 @@ snapshots:
 
   fsevents@2.3.3:
     optional: true
+
+  get-port-please@3.1.2: {}
 
   get-tsconfig@4.10.1:
     dependencies:

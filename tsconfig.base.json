@@ -19,8 +19,16 @@
     "isolatedModules": true,
     "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "verbatimModuleSyntax": true,
     "plugins": [
-      { "name": "@effect/language-service" }
+      {
+        "name": "@effect/language-service",
+        "diagnosticSeverity": {
+          "deterministicKeys": "error" // enables reporting of wrong keys
+        }
+      }
     ]
   }
 }

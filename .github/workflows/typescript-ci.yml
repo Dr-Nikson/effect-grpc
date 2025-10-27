@@ -59,6 +59,8 @@ jobs:
     needs:
       - codestyle
       - lint
+    outputs:
+      artifact-name: build-artifacts-${{ github.sha }}
 
     steps:
       - name: Checkout repository
@@ -77,6 +79,21 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install
+
+      - name: Build packages
+        run: pnpm -r run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-${{ github.sha }}
+          path: |
+            packages/*/dist
+            packages/*/bin
+            packages/*/*.tsbuildinfo
+            *.tsbuildinfo
+          retention-days: 7
+          if-no-files-found: error
 
   test:
     runs-on: ubuntu-latest
@@ -99,8 +116,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Build
+        run: pnpm -r run build
+
       - name: Run tests:types
-        run: pnpm run test:types
+        run: pnpm -r run test:types
 
       - name: Run tests
-        run: pnpm run test
+        run: pnpm -r run test

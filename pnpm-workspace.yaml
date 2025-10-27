@@ -12,6 +12,7 @@ catalogs:
     '@effect/language-service': 0.41.0
     '@effect/platform': 0.90.10
     '@effect/platform-node': 0.96.1
+    '@effect/vitest': 0.19.4
     '@types/node': 24.4.0
     effect: 3.17.14
     tsx: 4.20.5

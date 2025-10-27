@@ -1,0 +1,33 @@
+{
+  "name": "@dr_nikson/effect-grpc-e2e-tests",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.16.1",
+  "scripts": {
+    "compile": "tsc --build tsconfig.json",
+    "clean": "rm -rf ./dist ./tsconfig.tsbuildinfo ./src/generated",
+    "generate:proto": "pnpm buf generate",
+    "build": "pnpm run clean && pnpm run generate:proto && pnpm run compile",
+    "test": "vitest run",
+    "test:types": "echo \"No type tests\" && exit 0"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "catalog:",
+    "@connectrpc/connect": "catalog:",
+    "@connectrpc/connect-node": "catalog:",
+    "@dr_nikson/effect-grpc": "workspace:*",
+    "effect": "catalog:",
+    "get-port-please": "3.1.2"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "catalog:",
+    "@bufbuild/protoc-gen-es": "catalog:",
+    "@effect/platform": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "@effect/vitest": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
