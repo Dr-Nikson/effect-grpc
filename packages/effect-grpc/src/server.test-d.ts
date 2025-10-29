@@ -44,6 +44,13 @@ test("GrpcServerBuilder#withService should work correctly", () => {
   const service4: MyService4<AuthContext> = null as any;
   // @ts-expect-error - you cannot add service with mismatched context type
   assertType<any>(has2Service.withService(service4));
+
+  type MyService5 = Server.GrpcService<"AnyServiceApi", any, any>;
+  const service5: MyService5 = null as any;
+  // It is possible to add service with `any` context
+  assertType<
+    Server.GrpcServerBuilder<HandlerContext, "DebugAPI" | "PingPongApi" | "AnyServiceApi">
+  >(has2Service.withService(service5));
 });
 
 test("GrpcServer dependencies should be correctly interfered", () => {

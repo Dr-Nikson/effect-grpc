@@ -86,16 +86,16 @@ export interface ServerExecutor<Ctx> {
   ): Promise<Out>;
 }
 export const ServerExecutor: {
-  (runtime: Runtime.Runtime<never>): ServerExecutor<HandlerContext>;
+  (runtime: Runtime.Runtime<never>): ServerExecutor<any>;
 } = internal.ServerExecutorLive.make;
 
 export interface ServerExecutorTransformer<Ctx> {
   readonly transformation: (underlying: ServerExecutor<HandlerContext>) => ServerExecutor<Ctx>;
 
   transformContext<Ctx1>(
-    f: (ctx: Ctx) => Effect.Effect<Ctx1, GrpcException.GrpcException>,
+    f: (handlerCtx: HandlerContext) => Effect.Effect<Ctx1, GrpcException.GrpcException>,
   ): ServerExecutorTransformer<Ctx1>;
 }
 export const ServerExecutorTransformer: {
-  (): ServerExecutorTransformer<HandlerContext>;
+  (): ServerExecutorTransformer<any>;
 } = internal.ServerExecutorTransformerLive.empty;

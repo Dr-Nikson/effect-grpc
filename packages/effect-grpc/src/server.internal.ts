@@ -213,21 +213,22 @@ export class ConnectEsGprcServerBuilder<Ctx, Services>
 {
   constructor(
     public readonly transformCtx: (
-      ctx: HandlerContext,
+      handlerCtx: HandlerContext,
     ) => Effect.Effect<Ctx, GrpcException.GrpcException>,
     public readonly services: Record<string, T.GrpcService<any, any, Ctx>>,
   ) {}
 
-  static get empty(): T.GrpcServerBuilder<HandlerContext, never> {
-    return new ConnectEsGprcServerBuilder<HandlerContext, never>((ctx) => Effect.succeed(ctx), {});
+  static get empty(): T.GrpcServerBuilder<any, never> {
+    return new ConnectEsGprcServerBuilder<any, never>(() => Effect.succeed(undefined), {});
   }
 
   withContextTransformer<This extends T.GrpcServerBuilder<Ctx, Services>, Ctx1>(
     this: This,
-    f: (ctx: Ctx) => Effect.Effect<Ctx1, GrpcException.GrpcException>,
+    f: (originalCtx: HandlerContext, ctx: Ctx) => Effect.Effect<Ctx1, GrpcException.GrpcException>,
   ): T.GrpcServerBuilder<Ctx1, never> {
     return new ConnectEsGprcServerBuilder<Ctx1, never>(
-      (ctx) => Effect.flatMap(this.transformCtx(ctx), f),
+      (handlerCtx) =>
+        Effect.flatMap(this.transformCtx(handlerCtx), (currentCtx) => f(handlerCtx, currentCtx)),
       {},
     );
   }

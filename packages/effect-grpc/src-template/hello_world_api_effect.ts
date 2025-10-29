@@ -2,12 +2,19 @@
 // @generated from file com/example/v1/hello_world_api.proto (package com.example.v1, syntax proto3)
 /* eslint-disable */
 import { Context, Effect, Layer, Scope } from "effect";
-import type { MessageInitShape } from "@bufbuild/protobuf";
-import { HandlerContext } from "@connectrpc/connect";
 
-import { GetGreetingRequestSchema, GetGreetingResponseSchema, HelloWorldAPI } from "./hello_world_api_pb.js";
-import type { GetGreetingRequest, GetGreetingResponse } from "./hello_world_api_pb.js";
+
+
+import type { MessageInitShape } from "@bufbuild/protobuf";
+
+
+
 import { EffectGrpcClient, EffectGrpcServer, GrpcException } from "../src";
+import type { GetGreetingRequest, GetGreetingResponse } from "./hello_world_api_pb.js";
+import { GetGreetingRequestSchema, GetGreetingResponseSchema, HelloWorldAPI } from "./hello_world_api_pb.js";
+
+
+
 
 
 export const HelloWorldAPIId = "com.example.v1.HelloWorldAPI" as const;
@@ -19,7 +26,7 @@ export type HelloWorldAPIId = typeof HelloWorldAPIId;
  *
  * @generated from service com.example.v1.HelloWorldAPI
  */
-export interface HelloWorldAPIService<Ctx> {
+export interface HelloWorldAPIService<Ctx = any> {
   /**
    * Returns the greeting
    *
@@ -30,36 +37,9 @@ export interface HelloWorldAPIService<Ctx> {
     ctx: Ctx,
   ): Effect.Effect<MessageInitShape<typeof GetGreetingResponseSchema>, GrpcException.GrpcException>;
 }
-export const HelloWorldAPIService: {
-  makeTag<Ctx>(ctxKey: string): HelloWorldAPITag<Ctx>;
 
-  liveLayer<Ctx>(
-    service: HelloWorldAPIService<Ctx>,
-  ): <Tag extends HelloWorldAPITag<Ctx>>(
-    tag: Tag,
-  ) => Layer.Layer<Context.Tag.Identifier<Tag>, never, never>;
-} = {
-  makeTag: makeHelloWorldAPIServiceTag,
-  liveLayer: makeHelloWorldAPILiveLayer,
-};
-
-export type HelloWorldAPIGrpcService<Ctx = HandlerContext> = EffectGrpcServer.GrpcService<
-  HelloWorldAPIId,
-  typeof HelloWorldAPI,
-  Ctx
->;
-export type HelloWorldAPITag<Ctx> = Context.Tag<
-  HelloWorldAPIGrpcService<Ctx>,
-  HelloWorldAPIGrpcService<Ctx>
->;
-function makeHelloWorldAPIServiceTag<Ctx>(ctxKey: string): HelloWorldAPITag<Ctx> {
-  return Context.GenericTag<HelloWorldAPIGrpcService<Ctx>>(
-    `com.example.v1.HelloWorldAPI<${ctxKey}>`,
-  );
-}
-
-function makeHelloWorldAPILiveLayer<Ctx>(service: HelloWorldAPIService<Ctx>) {
-  return <Tag extends HelloWorldAPITag<Ctx>>(tag: Tag) => {
+export function helloWorldAPIServiceLiveLayer<Ctx>(service: HelloWorldAPIService<Ctx>) {
+  return <Tag extends HelloWorldAPIServiceTag<Ctx>>(tag: Tag) => {
     const instance: HelloWorldAPIGrpcService<Ctx> = EffectGrpcServer.GrpcService(
       HelloWorldAPIId,
       HelloWorldAPI,
@@ -71,6 +51,19 @@ function makeHelloWorldAPILiveLayer<Ctx>(service: HelloWorldAPIService<Ctx>) {
     return Layer.succeed(tag, instance);
   };
 }
+
+export type HelloWorldAPIGrpcService<Ctx = any> = EffectGrpcServer.GrpcService<
+  HelloWorldAPIId,
+  typeof HelloWorldAPI,
+  Ctx
+>;
+export type HelloWorldAPIServiceTag<Ctx = any> = Context.Tag<
+  HelloWorldAPIGrpcService<Ctx>,
+  HelloWorldAPIGrpcService<Ctx>
+>;
+export const HelloWorldAPIServiceTag: HelloWorldAPIServiceTag & {
+  <Ctx>(ctxKey: string): HelloWorldAPIServiceTag<Ctx>;
+} = Object.assign(makeHelloWorldAPIServiceTag(), makeHelloWorldAPIServiceTag);
 
 /**
  * * Temporary service for debugging purposes.
@@ -98,7 +91,9 @@ export const HelloWorldAPIClient: {
   ): Layer.Layer<
     Context.Tag.Identifier<Tag>,
     never,
-    Context.Tag.Identifier<HelloWorldAPIConfigTag> | EffectGrpcClient.GrpcClientRuntime | Scope.Scope
+    | Context.Tag.Identifier<HelloWorldAPIConfigTag>
+    | EffectGrpcClient.GrpcClientRuntime
+    | Scope.Scope
   >;
 
   liveLayer<Tag extends HelloWorldAPIClientTag<object>>(
@@ -106,7 +101,9 @@ export const HelloWorldAPIClient: {
   ): Layer.Layer<
     Context.Tag.Identifier<Tag>,
     never,
-    Context.Tag.Identifier<HelloWorldAPIConfigTag> | EffectGrpcClient.GrpcClientRuntime | Scope.Scope
+    | Context.Tag.Identifier<HelloWorldAPIConfigTag>
+    | EffectGrpcClient.GrpcClientRuntime
+    | Scope.Scope
   >;
 } = {
   makeTag: makeHelloWorldAPIClientTag,
@@ -124,6 +121,14 @@ export type HelloWorldAPIConfigTag = Context.Tag<
 >;
 export const HelloWorldAPIConfigTag: HelloWorldAPIConfigTag =
   EffectGrpcClient.GrpcClientConfig.makeTag(HelloWorldAPIId);
+
+function makeHelloWorldAPIServiceTag<Ctx = any>(
+  ctxKey: string = "any",
+): HelloWorldAPIServiceTag<Ctx> {
+  return Context.GenericTag<HelloWorldAPIGrpcService<Ctx>>(
+    `com.example.v1.HelloWorldAPI<${ctxKey}>`,
+  );
+}
 
 function makeHelloWorldAPIClientTag<Meta>(metaKey: string): HelloWorldAPIClientTag<Meta> {
   return Context.GenericTag<HelloWorldAPIClient<Meta>>(

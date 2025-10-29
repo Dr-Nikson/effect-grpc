@@ -75,7 +75,6 @@ function generateEffectService(
     const importContext = f.import("Context", "effect");
     const importLayer = f.import("Layer", "effect");
     const importScope = f.import("Scope", "effect");
-    const importHandlerContext = f.import("HandlerContext", "@connectrpc/connect", true);
     const importEffectGrpcService = f.import("EffectGrpcServer", packageJson.name);
     const importGrpcException = f.import("GrpcException", packageJson.name);
 
@@ -85,7 +84,7 @@ function generateEffectService(
     const serviceIdSymbol = safeIdentifier(service.name + "Id");
     const serviceSymbol = safeIdentifier(service.name + "Service")
     const grpcServiceSymbol = safeIdentifier(service.name + "GrpcService");
-    const serviceTagSymbol = safeIdentifier(service.name + "Tag");
+    const serviceTagSymbol = safeIdentifier(service.name + "ServiceTag");
     const makeTagSymbol = safeIdentifier("make" + service.name + "ServiceTag");
     const makeLiveLayerSymbol = safeIdentifier("make" + service.name + "LiveLayer");
 
@@ -94,7 +93,7 @@ function generateEffectService(
     f.print();
 
     f.print(f.jsDoc(service));
-    f.print(f.export("interface", serviceSymbol), "<Ctx> {");
+    f.print(f.export("interface", serviceSymbol), "<Ctx = any> {");
 
     service.methods.forEach(generateServerMethod);
 
@@ -104,54 +103,56 @@ function generateEffectService(
      * @example
      * ```typescript
      * export const DebugAPIService: {
-     *     makeTag<Ctx>(ctxKey: string): DebugAPITag<Ctx>;
-     *
      *     liveLayer<Ctx>(service: DebugAPIService<Ctx>):
-     *         <Tag extends DebugAPITag<Ctx>>(tag: Tag) => Layer.Layer<Context.Tag.Identifier<Tag>, never, never>;
+     *         <Tag extends DebugAPIServiceTag<Ctx>>(tag: Tag) => Layer.Layer<Context.Tag.Identifier<Tag>, never, never>;
      * } = {
-     *     makeTag: makeDebugAPIServiceTag,
      *     liveLayer: makeDebugApiLiveLayer
      * };
      * ```
      */
     f.print(f.export("const", serviceSymbol), ": {")
-    f.print("  makeTag<Ctx>(ctxKey: string): ", serviceTagSymbol, "<Ctx>;");
-    f.print();
     f.print("  liveLayer<Ctx>(");
     f.print("    service: ", serviceSymbol, "<Ctx>");
     f.print(
         "  ): <Tag extends ", serviceTagSymbol, "<Ctx>>(tag: Tag) => ", importLayer, ".Layer<", importContext, ".Tag.Identifier<Tag>, never, never>;"
     );
     f.print("} = {");
-    f.print("    makeTag: ", makeTagSymbol, ",")
-    f.print("    liveLayer: ", makeLiveLayerSymbol);
+    f.print("  liveLayer: ", makeLiveLayerSymbol);
     f.print("};");
 
     f.print();
 
-    // export type DebugAPIGrpcService<Ctx = HandlerContext> = EffectGrpcServer.GrpcService<"DebugAPI", typeof proto.DebugAPI, Ctx>
+    // export type DebugAPIGrpcService<Ctx = any> = EffectGrpcServer.GrpcService<"DebugAPI", typeof proto.DebugAPI, Ctx>
     f.print(
-        f.export("type", grpcServiceSymbol), "<Ctx = ", importHandlerContext, ">",
+        f.export("type", grpcServiceSymbol), "<Ctx = any>",
         " = ", importEffectGrpcService, `.GrpcService<"`, service.typeName, `", typeof `, importService, ", Ctx>"
     )
 
-    // export type DebugAPITag<Ctx> = Context.Tag<DebugAPIGrpcService<Ctx>, DebugAPIGrpcService<Ctx>>
+    // export type DebugAPIServiceTag<Ctx = any> = Context.Tag<DebugAPIGrpcService<Ctx>, DebugAPIGrpcService<Ctx>>
     f.print(
-        f.export("type", serviceTagSymbol), "<Ctx>",
+        f.export("type", serviceTagSymbol), "<Ctx = any>",
         " = ",
         importContext, ".Tag<", grpcServiceSymbol, "<Ctx>, ", grpcServiceSymbol, "<Ctx>>"
     );
 
+    // export const DebugAPIServiceTag: DebugAPIServiceTag & { <Ctx>(ctxKey: string): DebugAPIServiceTag<Ctx> } = Object.assign(makeDebugAPIServiceTag(), makeDebugAPIServiceTag);
+    f.print(
+        f.export("const", serviceTagSymbol), ": ", serviceTagSymbol, " & {",
+        " <Ctx>(ctxKey: string): ", serviceTagSymbol, "<Ctx>;",
+        " } = Object.assign(", makeTagSymbol, "(), ", makeTagSymbol, ");"
+    );
+
+    f.print();
 
     /**
      * @example
      * ```typescript
-     * function makeDebugAPIServiceTag<Ctx>(ctxKey: string & keyof Ctx): DebugAPITag<Ctx> {
-     *     return Context.GenericTag<DebugAPIGrpcService<Ctx>, DebugAPIGrpcService<Ctx>>(`${proto.DebugAPI.typeName}<${ctxKey}}>`);
+     * function makeDebugAPIServiceTag<Ctx = any>(ctxKey: string = "any"): DebugAPITag<Ctx> {
+     *     return Context.GenericTag<DebugAPIGrpcService<Ctx>>(`${proto.DebugAPI.typeName}<${ctxKey}}>`);
      * }
      * ```
      */
-    f.print( "function ", makeTagSymbol, "<Ctx>(ctxKey: string): ", serviceTagSymbol, "<Ctx> {");
+    f.print( "function ", makeTagSymbol, "<Ctx = any>(ctxKey: string = ", f.string("any"), "): ", serviceTagSymbol, "<Ctx> {");
     f.print("  return ", importContext, ".GenericTag<", grpcServiceSymbol, "<Ctx>>(`", service.typeName, "<${ctxKey}>`);")
     f.print("}")
 
