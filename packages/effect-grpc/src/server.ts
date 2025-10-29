@@ -133,7 +133,7 @@ export interface GrpcServerBuilder<Ctx, Services> {
 
   withContextTransformer<This extends GrpcServerBuilder<Ctx, Services>, Ctx1>(
     this: [Services] extends [never] ? This : never,
-    f: (ctx: Ctx) => Effect.Effect<Ctx1, GrpcException.GrpcException>,
+    f: (originalCtx: HandlerContext, ctx: Ctx) => Effect.Effect<Ctx1, GrpcException.GrpcException>,
   ): GrpcServerBuilder<Ctx1, never>;
 
   withService<S extends GrpcService<any, any, Ctx>>(
@@ -146,7 +146,7 @@ export interface GrpcServerBuilder<Ctx, Services> {
 }
 
 /**
- * Creates a new GrpcServerBuilder instance with default HandlerContext.
+ * Creates a new GrpcServerBuilder instance with any context (no specific context required).
  * This is the entry point for building a gRPC server.
  *
  * @example
@@ -163,7 +163,7 @@ export interface GrpcServerBuilder<Ctx, Services> {
  * ```
  */
 export const GrpcServerBuilder: {
-  (): GrpcServerBuilder<HandlerContext, never>;
+  (): GrpcServerBuilder<any, never>;
 } = () => internal.ConnectEsGprcServerBuilder.empty;
 
 export type GrpcServiceTypeId = typeof internal.grpcServiceTypeId;
