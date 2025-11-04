@@ -5,10 +5,10 @@ import { NodeRuntime } from "@effect/platform-node";
 
 import * as effectProto from "./generated/com/example/v1/hello_world_api_effect.js";
 
-const HelloWorldAPIClientTag = effectProto.HelloWorldAPIClient.makeTag<object>("{}");
+const HelloWorldAPIClientTag = effectProto.HelloWorldAPIClientTag<object>("{}");
 type HelloWorldAPIClientTag = typeof HelloWorldAPIClientTag;
 
-const debugApiClientLayer = effectProto.HelloWorldAPIClient.liveLayer(HelloWorldAPIClientTag).pipe(
+const debugApiClientLayer = effectProto.helloWorldAPIClientLiveLayer(HelloWorldAPIClientTag).pipe(
   Layer.provideMerge(
     // We provide config for local deployment http://localhost:8000
     Layer.succeed(

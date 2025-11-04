@@ -2,27 +2,55 @@
 // @generated from file com/example/v1/hello_world_api.proto (package com.example.v1, syntax proto3)
 /* eslint-disable */
 import { Context, Effect, Layer, Scope } from "effect";
-
-
-
 import type { MessageInitShape } from "@bufbuild/protobuf";
-
-
 
 import { EffectGrpcClient, EffectGrpcServer, GrpcException } from "../src";
 import type { GetGreetingRequest, GetGreetingResponse } from "./hello_world_api_pb.js";
 import { GetGreetingRequestSchema, GetGreetingResponseSchema, HelloWorldAPI } from "./hello_world_api_pb.js";
 
 
-
-
-
-export const HelloWorldAPIId = "com.example.v1.HelloWorldAPI" as const;
-export type HelloWorldAPIId = typeof HelloWorldAPIId;
+/**
+ * Unique identifier for the HelloWorldAPI gRPC service.
+ *
+ * This constant represents the fully qualified service name from the Protocol Buffer definition.
+ * It's used to identify and wire gRPC dependencies.
+ *
+ * @generated from service com.example.v1.HelloWorldAPI
+ */
+export const HelloWorldAPIProtoId = "com.example.v1.HelloWorldAPI" as const;
+export type HelloWorldAPIProtoId = typeof HelloWorldAPIProtoId;
 
 /**
- * * Temporary service for debugging purposes.
+ * Temporary service for debugging purposes.
  *
+ * @typeParam Ctx - The type of context passed to service methods. Use this to inject
+ *                  dependencies or pass request-scoped data (e.g., authentication info)
+ *
+ * @example
+ * ```typescript
+ * import { Effect } from "effect";
+ * import * as effectProto from "./hello_world_api_effect.js";
+ *
+ * // Simple implementation with default context
+ * const service: effectProto.HelloWorldAPIService = {
+ *   getGreeting: (request) =>
+ *     Effect.succeed({ greeting: `Hello, ${request.name}!` })
+ * };
+ *
+ * // Implementation with typed context
+ * interface MyContext {
+ *   userId: string;
+ *   logger: Logger;
+ * }
+ *
+ * const serviceWithContext: effectProto.HelloWorldAPIService<MyContext> = {
+ *   getGreeting: (request, ctx) =>
+ *     Effect.gen(function* () {
+ *       yield* ctx.logger.info(`User ${ctx.userId} requested greeting for ${request.name}`);
+ *       return { greeting: `Hello, ${request.name}!` };
+ *     })
+ * };
+ * ```
  *
  * @generated from service com.example.v1.HelloWorldAPI
  */
@@ -38,29 +66,141 @@ export interface HelloWorldAPIService<Ctx = any> {
   ): Effect.Effect<MessageInitShape<typeof GetGreetingResponseSchema>, GrpcException.GrpcException>;
 }
 
-export function helloWorldAPIServiceLiveLayer<Ctx>(service: HelloWorldAPIService<Ctx>) {
-  return <Tag extends HelloWorldAPIServiceTag<Ctx>>(tag: Tag) => {
-    const instance: HelloWorldAPIGrpcService<Ctx> = EffectGrpcServer.GrpcService(
-      HelloWorldAPIId,
-      HelloWorldAPI,
-    )((executor) => ({
-      getGreeting: (req, ctx) =>
-        executor.unary(req, ctx, (req, ctx) => service.getGreeting(req, ctx)),
-    }));
+/**
+ * Creates a Layer that provides a gRPC service implementation.
+ *
+ * This function takes your service implementation and wraps it in a Layer that can be
+ * composed with other layers to build your application. The returned function accepts
+ * a Context.Tag to identify the service in the Effect context.
+ *
+ * @typeParam Ctx - The context type used by your service implementation
+ *
+ * @param service - Your implementation of the HelloWorldAPIService interface
+ * @returns A function that accepts a tag and returns a Layer providing the gRPC service
+ *
+ * @example
+ * ```typescript
+ * import { Effect, Layer } from "effect";
+ * import * as effectProto from "./hello_world_api_effect.js";
+ *
+ * // Define your service implementation
+ * const myService: effectProto.HelloWorldAPIService = {
+ *   getGreeting: (request) =>
+ *     Effect.succeed({ greeting: `Hello, ${request.name}!` })
+ * };
+ *
+ * // Create the service layer
+ * const ServiceLayer = effectProto.helloWorldAPIServiceLiveLayer(myService)(effectProto.HelloWorldAPIServiceTag);
+ *
+ * // Use it in your server application
+ * const ServerLayer = Layer.mergeAll(
+ *   ServiceLayer,
+ *   // ... other layers
+ * );
+ * ```
+ *
+ * @example
+ * ```typescript
+ * import { Effect, Layer } from "effect";
+ * import * as effectProto from "./hello_world_api_effect.js";
+ *
+ * // With typed context
+ * interface MyContext {
+ *   database: Database;
+ * }
+ *
+ * const serviceWithDb: effectProto.HelloWorldAPIService<MyContext> = {
+ *   getGreeting: (request, ctx) =>
+ *     Effect.gen(function* () {
+ *       const user = yield* ctx.database.findUser(request.name);
+ *       return { greeting: `Hello, ${user.displayName}!` };
+ *     })
+ * };
+ *
+ * const MyContextTag = effectProto.HelloWorldAPIServiceTag<MyContext>("MyContext");
+ * const ServiceLayer = effectProto.helloWorldAPIServiceLiveLayer(serviceWithDb)(MyContextTag);
+ * ```
+ *
+ * @generated from service com.example.v1.HelloWorldAPI
+ */
+export const helloWorldAPIServiceLiveLayer: {
+  <Tag extends HelloWorldAPIServiceTag<Ctx>, Ctx>(
+    tag: Tag,
+    service: HelloWorldAPIService<Ctx>,
+  ): Layer.Layer<Context.Tag.Identifier<Tag>>;
+} = makeHelloWorldAPIServiceLiveLayer;
 
-    return Layer.succeed(tag, instance);
-  };
-}
-
+/**
+ * Type alias for the wrapped gRPC service.
+ *
+ * This represents the Effect-wrapped version of your service implementation,
+ * ready to be registered with a gRPC server.
+ *
+ * @typeParam Ctx - The context type used by the service
+ *
+ * @generated from service com.example.v1.HelloWorldAPI
+ */
 export type HelloWorldAPIGrpcService<Ctx = any> = EffectGrpcServer.GrpcService<
-  HelloWorldAPIId,
+  HelloWorldAPIProtoId,
   typeof HelloWorldAPI,
   Ctx
 >;
+
+/**
+ * Type alias for the service Context.Tag.
+ *
+ * Used to identify and retrieve the service from the Effect context.
+ *
+ * @typeParam Ctx - The context type used by the service
+ *
+ * @generated from service com.example.v1.HelloWorldAPI
+ */
 export type HelloWorldAPIServiceTag<Ctx = any> = Context.Tag<
   HelloWorldAPIGrpcService<Ctx>,
   HelloWorldAPIGrpcService<Ctx>
 >;
+
+/**
+ * Context.Tag for identifying the HelloWorldAPI service implementation.
+ *
+ * This tag is used to provide and retrieve the service from the Effect context.
+ * It supports both default (any) context and typed context via the function overload.
+ *
+ * @example
+ * ```typescript
+ * import { Effect } from "effect";
+ * import * as effectProto from "./hello_world_api_effect.js";
+ *
+ * // Use default context tag
+ * const myService = {
+ *   getGreeting: (request) => Effect.succeed({ greeting: `Hello, ${request.name}!` })
+ * };
+ * const ServiceLayer = effectProto.helloWorldAPIServiceLiveLayer(myService)(effectProto.HelloWorldAPIServiceTag);
+ * ```
+ *
+ * @example
+ * ```typescript
+ * import { Effect } from "effect";
+ * import * as effectProto from "./hello_world_api_effect.js";
+ *
+ * // Create a typed context tag
+ * interface MyContext {
+ *   userId: string;
+ * }
+ *
+ * // Use the function overload to create a typed tag
+ * const TypedServiceTag = effectProto.HelloWorldAPIServiceTag<MyContext>("MyContext");
+ *
+ * const serviceWithContext = {
+ *   getGreeting: (request, ctx: MyContext) =>
+ *     Effect.succeed({ greeting: `Hello, ${request.name} from ${ctx.userId}!` })
+ * };
+ *
+ * const ServiceLayer = effectProto.helloWorldAPIServiceLiveLayer(serviceWithContext)(TypedServiceTag);
+ * ```
+ *
+ * @generated from service com.example.v1.HelloWorldAPI
+ */
 export const HelloWorldAPIServiceTag: HelloWorldAPIServiceTag & {
   <Ctx>(ctxKey: string): HelloWorldAPIServiceTag<Ctx>;
 } = Object.assign(makeHelloWorldAPIServiceTag(), makeHelloWorldAPIServiceTag);
@@ -68,6 +208,54 @@ export const HelloWorldAPIServiceTag: HelloWorldAPIServiceTag & {
 /**
  * * Temporary service for debugging purposes.
  *
+ * Client interface for making gRPC calls to HelloWorldAPI service.
+ *
+ * This interface defines the client-side methods for calling the gRPC service.
+ * Each method accepts a request message and metadata, and returns an Effect that
+ * produces the response or fails with an error.
+ *
+ * The client is typically obtained from the Effect context using HelloWorldAPIClientTag
+ * after providing the helloWorldAPIClientLiveLayer in your Layer composition.
+ *
+ * @typeParam Meta - The type of metadata to pass with each request. This can be used
+ *                   for authentication tokens, tracing headers, or other per-request data.
+ *
+ * @example
+ * ```typescript
+ * import { Effect } from "effect";
+ * import * as effectProto from "./hello_world_api_effect.js";
+ *
+ * // Use the client in an Effect
+ * const program = Effect.gen(function* () {
+ *   const client = yield* effectProto.HelloWorldAPIClientTag;
+ *   const response = yield* client.getGreeting({ name: "World" }, {});
+ *
+ *   yield* Effect.logInfo(response.greeting); // "Hello, World!"
+ * });
+ * ```
+ *
+ * @example
+ * ```typescript
+ * import { Effect } from "effect";
+ * import * as effectProto from "./hello_world_api_effect.js";
+ *
+ * // With typed metadata for authentication
+ * interface AuthMeta {
+ *   authToken: string;
+ *   requestId: string;
+ * }
+ *
+ * const ClientTag = effectProto.HelloWorldAPIClientTag<AuthMeta>("AuthMeta");
+ *
+ * const program = Effect.gen(function* () {
+ *   const client = yield* ClientTag;
+ *   const response = yield* client.getGreeting(
+ *     { name: "Alice" },
+ *     { authToken: "bearer xyz", requestId: "req-123" }
+ *   );
+ *   return response;
+ * });
+ * ```
  *
  * @generated from service com.example.v1.HelloWorldAPI
  */
@@ -82,61 +270,284 @@ export interface HelloWorldAPIClient<Meta> {
     meta: Meta,
   ): Effect.Effect<GetGreetingResponse>;
 }
-export const HelloWorldAPIClient: {
-  makeTag<Meta>(metaKey: string): HelloWorldAPIClientTag<Meta>;
 
-  liveLayer<Tag extends HelloWorldAPIClientTag<Meta>, Meta>(
+/**
+ * Type alias for the client Context.Tag.
+ *
+ * Used to identify and retrieve the client from the Effect context.
+ *
+ * @typeParam Meta - The metadata type used by the client
+ *
+ * @generated from service com.example.v1.HelloWorldAPI
+ */
+export type HelloWorldAPIClientTag<Meta = any> = Context.Tag<
+  HelloWorldAPIClient<Meta>,
+  HelloWorldAPIClient<Meta>
+>;
+
+/**
+ * Context.Tag for identifying the HelloWorldAPI client.
+ *
+ * This tag is used to provide and retrieve the gRPC client from the Effect context.
+ * It supports both default (any) metadata and typed metadata via the function overload.
+ *
+ * @example
+ * ```typescript
+ * import { Effect, Layer } from "effect";
+ * import * as effectProto from "./hello_world_api_effect.js";
+ * import { EffectGrpcClient } from "@dr_nikson/effect-grpc";
+ *
+ * // Use default metadata type
+ * const ClientLayer = effectProto.helloWorldAPIClientLiveLayer(effectProto.HelloWorldAPIClientTag);
+ *
+ * // Use the client
+ * const program = Effect.gen(function* () {
+ *   const client = yield* effectProto.HelloWorldAPIClientTag;
+ *   return yield* client.getGreeting({ name: "World" }, {});
+ * });
+ *
+ * // Provide all required layers
+ * const appLayer = Layer.mergeAll(
+ *   ClientLayer,
+ *   Layer.succeed(effectProto.HelloWorldAPIConfigTag, { baseUrl: "http://localhost:50051" }),
+ *   EffectGrpcClient.GrpcClientRuntimeLive
+ * );
+ * ```
+ *
+ * @example
+ * ```typescript
+ * import { Effect, Layer } from "effect";
+ * import * as effectProto from "./hello_world_api_effect.js";
+ *
+ * // Create a typed metadata tag
+ * interface RequestMeta {
+ *   userId: string;
+ *   traceId: string;
+ * }
+ *
+ * const TypedClientTag = effectProto.HelloWorldAPIClientTag<RequestMeta>("RequestMeta");
+ *
+ * const ClientLayer = effectProto.helloWorldAPIClientLiveLayer(
+ *   (meta: RequestMeta) => ({
+ *     headers: {
+ *       "x-user-id": meta.userId,
+ *       "x-trace-id": meta.traceId
+ *     }
+ *   }),
+ *   TypedClientTag
+ * );
+ *
+ * const program = Effect.gen(function* () {
+ *   const client = yield* TypedClientTag;
+ *   return yield* client.getGreeting(
+ *     { name: "Alice" },
+ *     { userId: "user-123", traceId: "trace-456" }
+ *   );
+ * });
+ * ```
+ *
+ * @generated from service com.example.v1.HelloWorldAPI
+ */
+export const HelloWorldAPIClientTag: HelloWorldAPIClientTag & {
+  <Meta>(metaKey: string): HelloWorldAPIClientTag<Meta>;
+} = Object.assign(makeHelloWorldAPIClientTag<any>("any"), makeHelloWorldAPIClientTag);
+
+/**
+ * Creates a Layer that provides a gRPC client for the HelloWorldAPI service.
+ *
+ * This function creates a client that can make gRPC calls to the service.
+ * It has two overloads:
+ * 1. Simple version: Just pass the tag (uses default empty metadata)
+ * 2. Advanced version: Pass a metadata transformer function and the tag
+ *
+ * The client layer requires:
+ * - HelloWorldAPIConfigTag: Configuration with the server URL
+ * - EffectGrpcClient.GrpcClientRuntime: The gRPC runtime
+ * - Scope.Scope: For resource management
+ *
+ * @example
+ * ```typescript
+ * import { Effect, Layer } from "effect";
+ * import * as effectProto from "./hello_world_api_effect.js";
+ * import { EffectGrpcClient } from "@dr_nikson/effect-grpc";
+ *
+ * // Simple usage with default metadata
+ * const ClientLayer = effectProto.helloWorldAPIClientLiveLayer(effectProto.HelloWorldAPIClientTag);
+ *
+ * // Configuration layer
+ * const ConfigLayer = Layer.succeed(
+ *   effectProto.HelloWorldAPIConfigTag,
+ *   { baseUrl: new URL("http://localhost:50051") }
+ * );
+ *
+ * // Complete application layer
+ * const AppLayer = Layer.mergeAll(
+ *   ClientLayer,
+ *   ConfigLayer,
+ *   EffectGrpcClient.GrpcClientRuntimeLive
+ * );
+ *
+ * // Use the client
+ * const program = Effect.gen(function* () {
+ *   const client = yield* effectProto.HelloWorldAPIClientTag;
+ *   const response = yield* client.getGreeting({ name: "World" }, {});
+ *   console.log(response.greeting);
+ * });
+ *
+ * // Run with the layer
+ * Effect.runPromise(Effect.provide(program, AppLayer));
+ * ```
+ *
+ * @example
+ * ```typescript
+ * import { Effect } from "effect";
+ * import * as effectProto from "./hello_world_api_effect.js";
+ *
+ * // Advanced usage with metadata transformation
+ * interface AppMeta {
+ *   userId: string;
+ *   authToken: string;
+ * }
+ *
+ * const AppClientTag = effectProto.HelloWorldAPIClientTag<AppMeta>("AppMeta");
+ *
+ * // Transform app metadata to gRPC headers
+ * const ClientLayer = effectProto.helloWorldAPIClientLiveLayer(
+ *   (meta: AppMeta) => ({
+ *     headers: {
+ *       "authorization": `Bearer ${meta.authToken}`,
+ *       "x-user-id": meta.userId
+ *     }
+ *   }),
+ *   AppClientTag
+ * );
+ *
+ * const program = Effect.gen(function* () {
+ *   const client = yield* AppClientTag;
+ *   const response = yield* client.getGreeting(
+ *     { name: "Alice" },
+ *     { userId: "123", authToken: "abc" }
+ *   );
+ *   return response;
+ * });
+ * ```
+ *
+ * @generated from service com.example.v1.HelloWorldAPI
+ */
+export const helloWorldAPIClientLiveLayer: {
+  <Tag extends HelloWorldAPIClientTag<Meta>, Meta>(
     transformMeta: (meta: Meta) => EffectGrpcClient.RequestMeta,
     tag: Tag,
   ): Layer.Layer<
     Context.Tag.Identifier<Tag>,
     never,
-    | Context.Tag.Identifier<HelloWorldAPIConfigTag>
-    | EffectGrpcClient.GrpcClientRuntime
-    | Scope.Scope
+    HelloWorldAPIConfigTag["Identifier"] | EffectGrpcClient.GrpcClientRuntime | Scope.Scope
   >;
 
-  liveLayer<Tag extends HelloWorldAPIClientTag<object>>(
+  <Tag extends HelloWorldAPIClientTag>(
     tag: Tag,
   ): Layer.Layer<
     Context.Tag.Identifier<Tag>,
     never,
-    | Context.Tag.Identifier<HelloWorldAPIConfigTag>
-    | EffectGrpcClient.GrpcClientRuntime
-    | Scope.Scope
+    HelloWorldAPIConfigTag["Identifier"] | EffectGrpcClient.GrpcClientRuntime | Scope.Scope
   >;
-} = {
-  makeTag: makeHelloWorldAPIClientTag,
-  liveLayer: makeHelloWorldAPIClientLiveLayer,
-};
+} = makeHelloWorldAPIClientLiveLayer;
 
-export type HelloWorldAPIClientTag<Meta> = Context.Tag<
-  HelloWorldAPIClient<Meta>,
-  HelloWorldAPIClient<Meta>
->;
-
+/**
+ * Type alias for the client configuration Context.Tag.
+ *
+ * This tag provides the configuration required by the gRPC client,
+ * such as the server URL and connection options.
+ *
+ * @generated from service com.example.v1.HelloWorldAPI
+ */
 export type HelloWorldAPIConfigTag = Context.Tag<
-  EffectGrpcClient.GrpcClientConfig<HelloWorldAPIId>,
-  EffectGrpcClient.GrpcClientConfig<HelloWorldAPIId>
+  EffectGrpcClient.GrpcClientConfig<HelloWorldAPIProtoId>,
+  EffectGrpcClient.GrpcClientConfig<HelloWorldAPIProtoId>
 >;
+
+/**
+ * Context.Tag for the HelloWorldAPI client configuration.
+ *
+ * This tag is used to provide the gRPC client configuration, which includes:
+ * - baseUrl: The URL of the gRPC server (e.g., "http://localhost:50051")
+ * - Additional connection options (timeouts, interceptors, etc.)
+ *
+ * You must provide this configuration as a Layer when using the client.
+ *
+ * @example
+ * ```typescript
+ * import { Layer } from "effect";
+ * import * as effectProto from "./hello_world_api_effect.js";
+ *
+ * // Simple configuration with just the base URL
+ * const ConfigLayer = Layer.succeed(
+ *   effectProto.HelloWorldAPIConfigTag,
+ *   { baseUrl: new URL("http://localhost:50051") }
+ * );
+ * ```
+ *
+ * @example
+ * ```typescript
+ * import { Layer } from "effect";
+ * import * as effectProto from "./hello_world_api_effect.js";
+ *
+ * // Configuration with additional options
+ * const ConfigLayer = Layer.succeed(
+ *   effectProto.HelloWorldAPIConfigTag,
+ *   {
+ *     baseUrl: new URL("https://api.example.com"),
+ *     // Add interceptors, timeouts, or other Connect-RPC options here
+ *   }
+ * );
+ * ```
+ *
+ * @example
+ * ```typescript
+ * import { Effect, Layer, Config } from "effect";
+ * import * as effectProto from "./hello_world_api_effect.js";
+ *
+ * // Use with environment variables
+ * const ConfigLayer = Layer.effect(
+ *   effectProto.HelloWorldAPIConfigTag,
+ *   Effect.gen(function* () {
+ *     const serverUrl = yield* Config.string("GRPC_SERVER_URL");
+ *     return { baseUrl: new URL(serverUrl) };
+ *   })
+ * );
+ * ```
+ *
+ * @generated from service com.example.v1.HelloWorldAPI
+ */
 export const HelloWorldAPIConfigTag: HelloWorldAPIConfigTag =
-  EffectGrpcClient.GrpcClientConfig.makeTag(HelloWorldAPIId);
+  EffectGrpcClient.GrpcClientConfig.makeTag(HelloWorldAPIProtoId);
+
+function makeHelloWorldAPIServiceLiveLayer<Tag extends HelloWorldAPIServiceTag<Ctx>, Ctx>(
+  tag: Tag,
+  service: HelloWorldAPIService<Ctx>,
+): Layer.Layer<Context.Tag.Identifier<Tag>> {
+  const instance: HelloWorldAPIGrpcService<Ctx> = EffectGrpcServer.GrpcService(
+    HelloWorldAPIProtoId,
+    HelloWorldAPI,
+  )((executor) => ({
+    getGreeting: (req, ctx) =>
+      executor.unary(req, ctx, (req, ctx) => service.getGreeting(req, ctx)),
+  }));
+
+  return Layer.succeed(tag, instance);
+}
 
 function makeHelloWorldAPIServiceTag<Ctx = any>(
   ctxKey: string = "any",
 ): HelloWorldAPIServiceTag<Ctx> {
-  return Context.GenericTag<HelloWorldAPIGrpcService<Ctx>>(
-    `com.example.v1.HelloWorldAPI<${ctxKey}>`,
-  );
+  return Context.GenericTag<HelloWorldAPIGrpcService<Ctx>>(`${HelloWorldAPIProtoId}<${ctxKey}>`);
 }
 
 function makeHelloWorldAPIClientTag<Meta>(metaKey: string): HelloWorldAPIClientTag<Meta> {
-  return Context.GenericTag<HelloWorldAPIClient<Meta>>(
-    `com.example.v1.HelloWorldAPIClient<${metaKey}>`,
-  );
+  return Context.GenericTag<HelloWorldAPIClient<Meta>>(`${HelloWorldAPIProtoId}<${metaKey}>`);
 }
 
-function makeHelloWorldAPIClientLiveLayer<Tag extends HelloWorldAPIClientTag<Meta>, Meta = object>(
+function makeHelloWorldAPIClientLiveLayer<Tag extends HelloWorldAPIClientTag<Meta>, Meta = any>(
   ...args: readonly [(meta: Meta) => EffectGrpcClient.RequestMeta, Tag] | readonly [Tag]
 ) {
   const [transformMeta, tag] =

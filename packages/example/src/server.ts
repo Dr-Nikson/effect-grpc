@@ -30,8 +30,10 @@ const HelloWorldAPIServiceLive: effectProto.HelloWorldAPIService = {
   }),
 };
 
-const debugApiLayer =
-  effectProto.HelloWorldAPIService.liveLayer(HelloWorldAPIServiceLive)(HelloWorldAPITag);
+const debugApiLayer = effectProto.helloWorldAPIServiceLiveLayer(
+  HelloWorldAPITag,
+  HelloWorldAPIServiceLive,
+);
 
 function gRpcServer(): Effect.Effect<
   EffectGrpcServer.GrpcServer<"com.example.v1.HelloWorldAPI">,
