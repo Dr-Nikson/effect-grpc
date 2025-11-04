@@ -1,5 +1,29 @@
 # @dr_nikson/effect-grpc
 
+## 3.0.0-alpha.1
+
+### Major Changes
+
+- [#25](https://github.com/Dr-Nikson/effect-grpc/pull/25) [`9346226`](https://github.com/Dr-Nikson/effect-grpc/commit/934622682aceb4451b673b10ff2c84b740e5c212) Thanks [@Dr-Nikson](https://github.com/Dr-Nikson)! - Refactor code generator API structure and add comprehensive JSDoc documentation
+
+  **Breaking Changes:**
+  - Service layer API: `Service.liveLayer(service)(tag)` → `serviceLiveLayer(tag, service)`
+  - Client tag API: `Client.makeTag<Meta>("key")` → `ClientTag<Meta>("key")`
+  - Client layer API: `Client.liveLayer(tag)` → `clientLiveLayer(tag)`
+  - Service ID naming: `ServiceId` → `ServiceProtoId`
+  - Default context type changed from `HandlerContext` to `any` for better flexibility
+
+  **Improvements:**
+  - Added comprehensive JSDoc documentation with usage examples for all generated exports
+  - Fixed nested comment syntax in JSDoc that was breaking TypeScript parsing
+  - Fixed import paths in JSDoc examples to use correct proto file basename
+  - Improved type signature formatting for better readability
+  - Simplified API with direct exports instead of namespace objects
+  - Updated transformCtx signature to only accept HandlerContext as input
+  - Support dual-context transformation API in withContextTransformer
+
+  Closes #13, #24
+
 ## 3.0.0-alpha.0
 
 ### Major Changes

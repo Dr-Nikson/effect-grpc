@@ -7,6 +7,7 @@
     "@dr_nikson/effect-grpc-e2e-tests": "0.1.0"
   },
   "changesets": [
+    "public-cows-refuse",
     "sharp-pots-ring",
     "spicy-rivers-chew"
   ]
