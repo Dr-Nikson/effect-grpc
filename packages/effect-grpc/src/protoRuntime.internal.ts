@@ -11,19 +11,20 @@ import type * as T from "./protoRuntime.js";
  * Live implementation of the Executor interface using Effect's ManagedRuntime.
  * Handles the execution of Effect programs within gRPC service handlers.
  */
-export class ServerExecutorLive implements T.ServerExecutor<HandlerContext> {
+export class ServerExecutorLive implements T.ServerExecutor<any> {
   constructor(public readonly runtime: Runtime.Runtime<never>) {}
 
-  static make(runtime: Runtime.Runtime<never>): T.ServerExecutor<HandlerContext> {
+  static make(runtime: Runtime.Runtime<never>): T.ServerExecutor<any> {
     return new ServerExecutorLive(runtime);
   }
 
   unary<In, Out>(
     req: In,
     ctx: HandlerContext,
-    prog: (req: In, ctx: HandlerContext) => Effect.Effect<Out, GrpcException.GrpcException>,
+    prog: (req: In, ctx: any) => Effect.Effect<Out, GrpcException.GrpcException>,
   ): Promise<Out> {
-    return Runtime.runPromiseExit(this.runtime, prog(req, ctx), { signal: ctx.signal }).then(
+    // Pass undefined as the context since the default is 'any' and no transformation has been applied
+    return Runtime.runPromiseExit(this.runtime, prog(req, undefined), { signal: ctx.signal }).then(
       Exit.match({
         onFailure: (cause) => {
           throw Cause.match(cause, {
@@ -62,24 +63,22 @@ export class ServerExecutorTransformerLive<Ctx> implements T.ServerExecutorTrans
     ) => T.ServerExecutor<Ctx>,
   ) {}
 
-  static empty(): ServerExecutorTransformerLive<HandlerContext> {
+  static empty(): ServerExecutorTransformerLive<any> {
     return new ServerExecutorTransformerLive((underlying) => underlying);
   }
 
   transformContext<Ctx1>(
-    f: (ctx: Ctx) => Effect.Effect<Ctx1, GrpcException.GrpcException>,
+    f: (handlerCtx: HandlerContext) => Effect.Effect<Ctx1, GrpcException.GrpcException>,
   ): ServerExecutorTransformerLive<Ctx1> {
     return new ServerExecutorTransformerLive<Ctx1>((underlying) => {
-      const executor: T.ServerExecutor<Ctx> = this.transformation(underlying);
-
       return {
         unary<In, Out>(
           req: In,
-          ctx: HandlerContext,
+          handlerCtx: HandlerContext,
           prog: (req: In, ctx: Ctx1) => Effect.Effect<Out, GrpcException.GrpcException>,
         ): Promise<Out> {
-          return executor.unary(req, ctx, (req, ctx0) => {
-            return Effect.flatMap(f(ctx0), (ctx1) => prog(req, ctx1));
+          return underlying.unary(req, handlerCtx, (req) => {
+            return Effect.flatMap(f(handlerCtx), (ctx1) => prog(req, ctx1));
           });
         },
       } as T.ServerExecutor<Ctx1>;

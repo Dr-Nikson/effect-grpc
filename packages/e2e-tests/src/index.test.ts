@@ -2,7 +2,7 @@
 import { Brand, Cause, Context, Effect, Exit, Layer, LogLevel, Logger, Option } from "effect";
 import { getPort } from "get-port-please";
 
-import { Code, type HandlerContext } from "@connectrpc/connect";
+import { Code } from "@connectrpc/connect";
 import { EffectGrpcClient, EffectGrpcServer, GrpcException } from "@dr_nikson/effect-grpc";
 import { describe, expect, it } from "@effect/vitest";
 
@@ -19,13 +19,8 @@ const PortLive = Layer.effect(
   Effect.promise(() => getPort()).pipe(Effect.map((port) => port as Port)),
 );
 
-// Server service tag and implementation
-const HelloWorldAPIServiceTag = effectProto.HelloWorldAPIService.makeTag<HandlerContext>(
-  "HandlerContext" as const,
-);
-type HelloWorldAPIServiceTag = Context.Tag.Identifier<typeof HelloWorldAPIServiceTag>;
-
-const HelloWorldAPIServiceLive: effectProto.HelloWorldAPIService<HandlerContext> = {
+// Server service implementation
+const HelloWorldAPIServiceLive: effectProto.HelloWorldAPIService = {
   getGreeting(request: proto.GetGreetingRequest) {
     return Effect.logInfo("getGreeting called in E2E test").pipe(
       Effect.as({
@@ -46,20 +41,19 @@ const HelloWorldAPIServiceLive: effectProto.HelloWorldAPIService<HandlerContext>
   }),
 };
 
-const serverServiceLayer =
-  effectProto.HelloWorldAPIService.liveLayer(HelloWorldAPIServiceLive)(HelloWorldAPIServiceTag);
-
-// Client tag
-const HelloWorldAPIClientTag = effectProto.HelloWorldAPIClient.makeTag<object>("{}" as const);
-type HelloWorldAPIClientTag = typeof HelloWorldAPIClientTag;
+const serverServiceLayer = effectProto.helloWorldAPIServiceLiveLayer(
+  effectProto.HelloWorldAPIServiceTag,
+  HelloWorldAPIServiceLive,
+);
 
 function createServer(): Effect.Effect<
   EffectGrpcServer.GrpcServer<"com.example.v1.HelloWorldAPI">,
   never,
-  HelloWorldAPIServiceTag
+  effectProto.HelloWorldAPIServiceTag["Identifier"]
 > {
   return Effect.gen(function* () {
-    const service: effectProto.HelloWorldAPIGrpcService = yield* HelloWorldAPIServiceTag;
+    const service: effectProto.HelloWorldAPIGrpcService =
+      yield* effectProto.HelloWorldAPIServiceTag;
 
     return EffectGrpcServer.GrpcServerBuilder().withService(service).build();
   });
@@ -78,10 +72,12 @@ const ClientConfigLayer = Layer.service(Port).pipe(
 );
 
 // Client layer - depends on ClientConfig and GrpcClientRuntime
-const clientLayer = effectProto.HelloWorldAPIClient.liveLayer(HelloWorldAPIClientTag).pipe(
-  Layer.provide(ClientConfigLayer),
-  Layer.provide(EffectGrpcClient.liveGrpcClientRuntimeLayer()),
-);
+const clientLayer = effectProto
+  .helloWorldAPIClientLiveLayer(effectProto.HelloWorldAPIClientTag)
+  .pipe(
+    Layer.provide(ClientConfigLayer),
+    Layer.provide(EffectGrpcClient.liveGrpcClientRuntimeLayer()),
+  );
 
 describe("E2E gRPC Client-Server Tests", () => {
   it.scopedLive("should successfully call getGreeting RPC", () =>
@@ -99,7 +95,7 @@ describe("E2E gRPC Client-Server Tests", () => {
 
       const result = yield* Effect.gen(function* () {
         // Get client and make request that should fail
-        const client = yield* HelloWorldAPIClientTag;
+        const client = yield* effectProto.HelloWorldAPIClientTag;
         const result = yield* client.getGreeting({ name: "TestUser" }, {});
 
         return result;
@@ -134,8 +130,8 @@ describe("E2E gRPC Client-Server Tests", () => {
 
       const result = yield* Effect.gen(function* () {
         // Get client and make request that should fail
-        const client = yield* HelloWorldAPIClientTag;
-        const result = yield* Effect.exit(client.faceTheError({ name: "TestUser" }, {}));
+        const client = yield* effectProto.HelloWorldAPIClientTag;
+        const result = yield* Effect.exit(client.faceTheError({ name: "TestUser" }, null));
 
         return result;
       }).pipe(Effect.provide(clientLayer), Effect.scoped);

@@ -1,18 +1,16 @@
 import { Context, Effect, Layer, LogLevel, Logger } from "effect";
 
-import { Code, type HandlerContext } from "@connectrpc/connect";
+import { Code } from "@connectrpc/connect";
 import { EffectGrpcServer, GrpcException } from "@dr_nikson/effect-grpc";
 import { NodeRuntime } from "@effect/platform-node";
 
 import * as effectProto from "./generated/com/example/v1/hello_world_api_effect.js";
 import * as proto from "./generated/com/example/v1/hello_world_api_pb.js";
 
-const HelloWorldAPITag = effectProto.HelloWorldAPIService.makeTag<HandlerContext>(
-  "HandlerContext" as const,
-);
+const HelloWorldAPITag = effectProto.HelloWorldAPIServiceTag;
 type HelloWorldAPITag = Context.Tag.Identifier<typeof HelloWorldAPITag>;
 
-const HelloWorldAPIServiceLive: effectProto.HelloWorldAPIService<HandlerContext> = {
+const HelloWorldAPIServiceLive: effectProto.HelloWorldAPIService = {
   getGreeting(request: proto.GetGreetingRequest) {
     return Effect.logInfo("getGreeting called, this is really cool!").pipe(
       Effect.as({
@@ -32,8 +30,10 @@ const HelloWorldAPIServiceLive: effectProto.HelloWorldAPIService<HandlerContext>
   }),
 };
 
-const debugApiLayer =
-  effectProto.HelloWorldAPIService.liveLayer(HelloWorldAPIServiceLive)(HelloWorldAPITag);
+const debugApiLayer = effectProto.helloWorldAPIServiceLiveLayer(
+  HelloWorldAPITag,
+  HelloWorldAPIServiceLive,
+);
 
 function gRpcServer(): Effect.Effect<
   EffectGrpcServer.GrpcServer<"com.example.v1.HelloWorldAPI">,
