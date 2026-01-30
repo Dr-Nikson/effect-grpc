@@ -1,5 +1,5 @@
 ---
-"@dr_nikson/effect-grpc": patch
+"@dr_nikson/effect-grpc": minor
 ---
 
 fix(server): enforce context type safety in GrpcServerBuilder
@@ -15,16 +15,17 @@ Services with specific context types now require `withContextTransformer` before
 ```typescript
 // Before (broken - compiled but failed at runtime)
 const server = GrpcServerBuilder()
-  .withService(myHandlerContextService)
-  .build();
+.withService(myHandlerContextService)
+.build();
 
 // After (correct)
 const server = GrpcServerBuilder()
-  .withContextTransformer((ctx) => Effect.succeed(ctx))
-  .withService(myHandlerContextService)
-  .build();
+.withContextTransformer((ctx) => Effect.succeed(ctx))
+.withService(myHandlerContextService)
+.build();
 ```
 
 Services with `any` context can still be added directly without transformation.
 
 Fixes #31
+

@@ -9,7 +9,6 @@
   "changesets": [
     "public-cows-refuse",
     "sharp-pots-ring",
-    "spicy-rivers-chew",
-    "fix-context-type-safety"
+    "spicy-rivers-chew"
   ]
 }
