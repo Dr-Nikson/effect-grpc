@@ -208,9 +208,10 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
  * Internal implementation of the GrpcServerBuilder interface.
  * Provides the fluent API for building gRPC servers with context transformation.
  */
-export class ConnectEsGprcServerBuilder<Ctx, Services>
-  implements T.GrpcServerBuilder<Ctx, Services>
-{
+export class ConnectEsGprcServerBuilder<Ctx, Services> implements T.GrpcServerBuilder<
+  Ctx,
+  Services
+> {
   constructor(
     public readonly transformCtx: (
       handlerCtx: HandlerContext,
@@ -218,8 +219,8 @@ export class ConnectEsGprcServerBuilder<Ctx, Services>
     public readonly services: Record<string, T.GrpcService<any, any, Ctx>>,
   ) {}
 
-  static get empty(): T.GrpcServerBuilder<any, never> {
-    return new ConnectEsGprcServerBuilder<any, never>(() => Effect.succeed(undefined), {});
+  static get empty(): T.GrpcServerBuilder<unknown, never> {
+    return new ConnectEsGprcServerBuilder<unknown, never>(() => Effect.succeed(undefined), {});
   }
 
   withContextTransformer<This extends T.GrpcServerBuilder<Ctx, Services>, Ctx1>(
