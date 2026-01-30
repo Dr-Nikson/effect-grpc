@@ -208,10 +208,9 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
  * Internal implementation of the GrpcServerBuilder interface.
  * Provides the fluent API for building gRPC servers with context transformation.
  */
-export class ConnectEsGprcServerBuilder<Ctx, Services> implements T.GrpcServerBuilder<
-  Ctx,
-  Services
-> {
+export class ConnectEsGprcServerBuilder<Ctx, Services>
+  implements T.GrpcServerBuilder<Ctx, Services>
+{
   constructor(
     public readonly transformCtx: (
       handlerCtx: HandlerContext,
