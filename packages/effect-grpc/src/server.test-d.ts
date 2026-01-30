@@ -1,3 +1,5 @@
+// packages/effect-grpc/src/server.test-d.ts
+import { Effect } from "effect";
 import { assertType, expectTypeOf, test } from "vitest";
 
 import type { HandlerContext } from "@connectrpc/connect";
@@ -5,15 +7,22 @@ import type { HandlerContext } from "@connectrpc/connect";
 import * as Server from "./server.js";
 
 test("GrpcServerBuilder#withService should work correctly", () => {
-  const empty: Server.GrpcServerBuilder<HandlerContext, never> = null as any;
+  const empty = Server.GrpcServerBuilder();
+
+  // Builder starts with unknown context
+  assertType<Server.GrpcServerBuilder<unknown, never>>(empty);
 
   // @ts-expect-error - Empty builder cannot be built
   assertType<Server.GrpcServer>(empty.build());
 
+  // Services with specific context require transformation first
+  const builder = empty.withContextTransformer((ctx) => Effect.succeed(ctx));
+  assertType<Server.GrpcServerBuilder<HandlerContext, never>>(builder);
+
   type MyService = Server.GrpcService<"DebugAPI", any, HandlerContext>;
 
   const service: MyService = null as any;
-  const has1Service = empty.withService(service);
+  const has1Service = builder.withService(service);
   const has1ServiceBuild = has1Service.build();
 
   assertType<Server.GrpcServerBuilder<HandlerContext, "DebugAPI">>(has1Service);
@@ -53,21 +62,41 @@ test("GrpcServerBuilder#withService should work correctly", () => {
   >(has2Service.withService(service5));
 });
 
-test("GrpcServer dependencies should be correctly interfered", () => {
+test("GrpcServerBuilder should enforce context type safety", () => {
+  const empty = Server.GrpcServerBuilder();
+
+  // Services with HandlerContext CANNOT be added to unknown-context builder
+  type HandlerContextService = Server.GrpcService<"DebugAPI", any, HandlerContext>;
+  const service: HandlerContextService = null as any;
+
+  // @ts-expect-error - Cannot add HandlerContext service to unknown-context builder
+  empty.withService(service);
+
+  // Services with `any` context CAN be added to unknown-context builder
+  type AnyContextService = Server.GrpcService<"AnyApi", any, any>;
+  const anyService: AnyContextService = null as any;
+  const builderWithAnyService = empty.withService(anyService);
+  assertType<Server.GrpcServerBuilder<unknown, "AnyApi">>(builderWithAnyService);
+});
+
+test("GrpcServer dependencies should be correctly inferred", () => {
+  // Must use withContextTransformer first for HandlerContext services
+  const builder = Server.GrpcServerBuilder().withContextTransformer((ctx) => Effect.succeed(ctx));
+
   type MyService = Server.GrpcService<"DebugAPI", any, HandlerContext>;
   const myService: MyService = null as any;
 
   type MyOtherService = Server.GrpcService<"HelloWorldAPI", any, HandlerContext>;
   const myService2: MyOtherService = null as any;
 
-  const server1 = Server.GrpcServerBuilder().withService(myService).build();
+  const server1 = builder.withService(myService).build();
 
   const fun: (server: Server.GrpcServer<"DebugAPI" | "HelloWorldAPI">) => void = null as any;
 
   // @ts-expect-error - you cannot call `fun` with partially implemented server
   expectTypeOf(fun).toBeCallableWith(server1);
 
-  const server2 = Server.GrpcServerBuilder().withService(myService).withService(myService2).build();
+  const server2 = builder.withService(myService).withService(myService2).build();
   const fun2: (server: Server.GrpcServer<"HelloWorldAPI">) => void = null as any;
 
   // We can use only a subset of the implemented apis

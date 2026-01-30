@@ -146,24 +146,33 @@ export interface GrpcServerBuilder<Ctx, Services> {
 }
 
 /**
- * Creates a new GrpcServerBuilder instance with any context (no specific context required).
+ * Creates a new GrpcServerBuilder instance with unknown context.
  * This is the entry point for building a gRPC server.
+ *
+ * The builder starts with `unknown` context type to enforce type safety:
+ * - Services with `any` context can be added directly (TypeScript's `any` bypasses checks)
+ * - Services with specific context requirements (e.g., `HandlerContext`) cannot be added
+ *   until `withContextTransformer` is called to provide that context
  *
  * @example
  * ```typescript
+ * import { Effect } from "effect"
  * import { EffectGrpcServer } from "@dr_nikson/effect-grpc"
  *
- * // Create a new server builder
- * const builder = EffectGrpcServer.GrpcServerBuilder()
+ * // Services with specific context require transformation first
+ * const server = EffectGrpcServer.GrpcServerBuilder()
+ *   .withContextTransformer((handlerCtx, _) => Effect.succeed(handlerCtx))
+ *   .withService(myHandlerContextService)
+ *   .build()
  *
- * // Chain methods to configure the server
- * const server = builder
- *   .withService(myService)
+ * // Services with `any` context can be added directly
+ * const simpleServer = EffectGrpcServer.GrpcServerBuilder()
+ *   .withService(anyContextService)
  *   .build()
  * ```
  */
 export const GrpcServerBuilder: {
-  (): GrpcServerBuilder<any, never>;
+  (): GrpcServerBuilder<unknown, never>;
 } = () => internal.ConnectEsGprcServerBuilder.empty;
 
 export type GrpcServiceTypeId = typeof internal.grpcServiceTypeId;

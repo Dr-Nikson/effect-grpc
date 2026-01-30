@@ -218,8 +218,8 @@ export class ConnectEsGprcServerBuilder<Ctx, Services>
     public readonly services: Record<string, T.GrpcService<any, any, Ctx>>,
   ) {}
 
-  static get empty(): T.GrpcServerBuilder<any, never> {
-    return new ConnectEsGprcServerBuilder<any, never>(() => Effect.succeed(undefined), {});
+  static get empty(): T.GrpcServerBuilder<unknown, never> {
+    return new ConnectEsGprcServerBuilder<unknown, never>(() => Effect.succeed(undefined), {});
   }
 
   withContextTransformer<This extends T.GrpcServerBuilder<Ctx, Services>, Ctx1>(
