@@ -186,10 +186,6 @@ jobs:
             exit 1
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: true
 
       - name: Output to console
         if: github.event_name == 'workflow_dispatch'
