@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package com.example.v1;
+
+/**
+ * Test service that already ends with "Service" suffix.
+ * This tests that the code generator doesn't produce
+ * "NamingTestServiceService" when generating code.
+ * See: https://github.com/Dr-Nikson/effect-grpc/issues/30
+ */
+service NamingTestService {
+  rpc Echo(EchoRequest) returns (EchoResponse);
+}
+
+message EchoRequest {
+  string message = 1;
+}
+
+message EchoResponse {
+  string message = 1;
+}
