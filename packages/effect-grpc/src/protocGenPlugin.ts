@@ -89,6 +89,15 @@ interface EffectImports {
     Scope: string;
 }
 
+/**
+ * Appends a suffix to a name only if the name doesn't already end with that suffix.
+ * This prevents names like "HelloWorldServiceService" when the proto service
+ * is already named "HelloWorldService".
+ */
+function appendSuffixIfNeeded(name: string, suffix: string): string {
+    return name.endsWith(suffix) ? name : name + suffix;
+}
+
 function generateEffectService(
     f: GeneratedFile,
     service: DescService,
@@ -102,14 +111,18 @@ function generateEffectService(
 
     const importService = f.importSchema(service);
 
+    // Use appendSuffixIfNeeded to avoid duplicate suffixes (e.g., "HelloWorldServiceService")
+    const serviceName = appendSuffixIfNeeded(service.name, "Service");
+    const serviceNameLower = serviceName.charAt(0).toLowerCase() + serviceName.slice(1);
+
     const serviceId = service.typeName;
     const serviceIdSymbol = safeIdentifier(service.name + "ProtoId");
-    const serviceSymbol = safeIdentifier(service.name + "Service")
-    const grpcServiceSymbol = safeIdentifier(service.name + "GrpcService");
-    const serviceTagSymbol = safeIdentifier(service.name + "ServiceTag");
-    const serviceLiveLayerSymbol = safeIdentifier(service.name.charAt(0).toLowerCase() + service.name.slice(1) + "ServiceLiveLayer");
-    const makeTagSymbol = safeIdentifier("make" + service.name + "ServiceTag");
-    const makeLiveLayerSymbol = safeIdentifier("make" + service.name + "ServiceLiveLayer");
+    const serviceSymbol = safeIdentifier(serviceName);
+    const grpcServiceSymbol = safeIdentifier(serviceName.replace(/Service$/, "") + "GrpcService");
+    const serviceTagSymbol = safeIdentifier(serviceName + "Tag");
+    const serviceLiveLayerSymbol = safeIdentifier(serviceNameLower + "LiveLayer");
+    const makeTagSymbol = safeIdentifier("make" + serviceName + "Tag");
+    const makeLiveLayerSymbol = safeIdentifier("make" + serviceName + "LiveLayer");
 
     // Generate service ID constant with JSDoc
     f.print("/**");
@@ -313,13 +326,17 @@ function generateEffectService(
 
     f.print();
 
-    const clientSymbol = safeIdentifier(service.name + "Client");
+    // Use appendSuffixIfNeeded to avoid duplicate suffixes (e.g., "HelloWorldClientClient")
+    const clientName = appendSuffixIfNeeded(service.name, "Client");
+    const clientNameLower = clientName.charAt(0).toLowerCase() + clientName.slice(1);
+
+    const clientSymbol = safeIdentifier(clientName);
     const importEffectGrpcClient = f.import("EffectGrpcClient", packageJson.name);
-    const clientTagSymbol = safeIdentifier(service.name + "ClientTag");
-    const clientLiveLayerSymbol = safeIdentifier(service.name.charAt(0).toLowerCase() + service.name.slice(1) + "ClientLiveLayer");
+    const clientTagSymbol = safeIdentifier(clientName + "Tag");
+    const clientLiveLayerSymbol = safeIdentifier(clientNameLower + "LiveLayer");
     const configTagSymbol = safeIdentifier(service.name + "ConfigTag");
-    const makeClientTagSymbol = safeIdentifier("make" + service.name + "ClientTag");
-    const makeClientLiveLayerSymbol = safeIdentifier("make" + service.name + "ClientLiveLayer");
+    const makeClientTagSymbol = safeIdentifier("make" + clientName + "Tag");
+    const makeClientLiveLayerSymbol = safeIdentifier("make" + clientName + "LiveLayer");
 
     // Generate comprehensive JSDoc for client interface
     f.print("/**");

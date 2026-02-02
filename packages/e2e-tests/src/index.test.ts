@@ -8,6 +8,7 @@ import { describe, expect, it } from "@effect/vitest";
 
 import * as effectProto from "./generated/com/example/v1/hello_world_api_effect.js";
 import type * as proto from "./generated/com/example/v1/hello_world_api_pb.js";
+import * as namingTestProto from "./generated/com/example/v1/naming_test_service_effect.js";
 
 // Branded Port type
 type Port = number & Brand.Brand<"Port">;
@@ -159,4 +160,25 @@ describe("E2E gRPC Client-Server Tests", () => {
       ),
     ),
   );
+});
+
+/**
+ * Tests for service naming to ensure generated code doesn't have duplicate suffixes.
+ * See: https://github.com/Dr-Nikson/effect-grpc/issues/30
+ */
+describe("Service Naming - No Duplicate Suffixes (Issue #30)", () => {
+  /**
+   * This test verifies that when a proto service is named "NamingTestService"
+   * (already ending with "Service"), the generated code does NOT produce
+   * "NamingTestServiceService" or similar duplicated names.
+   */
+  it("should generate correct export names for services ending with 'Service'", () => {
+    // These would fail to import if naming were broken
+    expect(namingTestProto.NamingTestServiceTag).toBeDefined();
+    expect(namingTestProto.NamingTestServiceClientTag).toBeDefined();
+    expect(namingTestProto.namingTestServiceLiveLayer).toBeDefined();
+    expect(namingTestProto.namingTestServiceClientLiveLayer).toBeDefined();
+    expect(namingTestProto.NamingTestServiceConfigTag).toBeDefined();
+    expect(namingTestProto.NamingTestServiceProtoId).toBe("com.example.v1.NamingTestService");
+  });
 });
