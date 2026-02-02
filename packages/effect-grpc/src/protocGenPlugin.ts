@@ -15,9 +15,22 @@ function generateTs(schema: Schema<object>): void {
         const f = schema.generateFile(file.name + "_effect.ts");
         f.preamble(file);
 
+        // Add Effect imports (namespace imports from submodules)
+        const effectImports = {
+            Context: safeIdentifier("Context"),
+            Effect: safeIdentifier("Effect"),
+            Layer: safeIdentifier("Layer"),
+            Scope: safeIdentifier("Scope"),
+        };
+        f.print('import * as ', effectImports.Context, ' from "effect/Context";');
+        f.print('import * as ', effectImports.Effect, ' from "effect/Effect";');
+        f.print('import * as ', effectImports.Layer, ' from "effect/Layer";');
+        f.print('import * as ', effectImports.Scope, ' from "effect/Scope";');
+        f.print();
+
         // Extract basename from file path for import examples
         const fileBasename = file.name.split('/').pop() || file.name;
-        file.services.forEach(service => generateEffectService(f, service, fileBasename));
+        file.services.forEach(service => generateEffectService(f, service, fileBasename, effectImports));
         /*
                 for (const service of file.services) {
                     f.print(f.jsDoc(service));
@@ -69,15 +82,21 @@ function generateTs(schema: Schema<object>): void {
     }
 }
 
+interface EffectImports {
+    Context: string;
+    Effect: string;
+    Layer: string;
+    Scope: string;
+}
+
 function generateEffectService(
     f: GeneratedFile,
     service: DescService,
     fileBasename: string,
+    effectImports: EffectImports,
 ): void {
-    const importEffect = f.import("Effect", "effect");
-    const importContext = f.import("Context", "effect");
-    const importLayer = f.import("Layer", "effect");
-    const importScope = f.import("Scope", "effect");
+    // Effect imports are added manually as namespace imports in generateTs()
+    const { Context: importContext, Effect: importEffect, Layer: importLayer, Scope: importScope } = effectImports;
     const importEffectGrpcService = f.import("EffectGrpcServer", packageJson.name);
     const importGrpcException = f.import("GrpcException", packageJson.name);
 
@@ -114,7 +133,7 @@ function generateEffectService(
     f.print(" *");
     f.print(" * @example");
     f.print(" * ```typescript");
-    f.print(" * import { Effect } from \"effect\";");
+    f.print(" * import * as Effect from \"effect/Effect\";");
     f.print(" * import * as effectProto from \"./" + fileBasename + "_effect.js\";");
     f.print(" *");
     f.print(" * // Simple implementation with default context");
@@ -152,7 +171,8 @@ function generateEffectService(
     f.print(" *");
     f.print(" * @example");
     f.print(" * ```typescript");
-    f.print(" * import { Effect, Layer } from \"effect\";");
+    f.print(" * import * as Effect from \"effect/Effect\";");
+    f.print(" * import * as Layer from \"effect/Layer\";");
     f.print(" * import * as effectProto from \"./" + fileBasename + "_effect.js\";");
     f.print(" *");
     f.print(" * // Define your service implementation");
@@ -222,7 +242,7 @@ function generateEffectService(
     f.print(" *");
     f.print(" * @example");
     f.print(" * ```typescript");
-    f.print(" * import { Effect } from \"effect\";");
+    f.print(" * import * as Effect from \"effect/Effect\";");
     f.print(" * import * as effectProto from \"./" + fileBasename + "_effect.js\";");
     f.print(" *");
     f.print(" * // Use default context tag");
@@ -237,7 +257,7 @@ function generateEffectService(
     f.print(" *");
     f.print(" * @example");
     f.print(" * ```typescript");
-    f.print(" * import { Effect } from \"effect\";");
+    f.print(" * import * as Effect from \"effect/Effect\";");
     f.print(" * import * as effectProto from \"./" + fileBasename + "_effect.js\";");
     f.print(" *");
     f.print(" * // Create a typed context tag");
@@ -314,7 +334,7 @@ function generateEffectService(
     f.print(" *");
     f.print(" * @example");
     f.print(" * ```typescript");
-    f.print(" * import { Effect } from \"effect\";");
+    f.print(" * import * as Effect from \"effect/Effect\";");
     f.print(" * import * as effectProto from \"./" + fileBasename + "_effect.js\";");
     f.print(" *");
     f.print(" * // Use the client in an Effect");
@@ -363,7 +383,8 @@ function generateEffectService(
     f.print(" *");
     f.print(" * @example");
     f.print(" * ```typescript");
-    f.print(" * import { Effect, Layer } from \"effect\";");
+    f.print(" * import * as Effect from \"effect/Effect\";");
+    f.print(" * import * as Layer from \"effect/Layer\";");
     f.print(" * import * as effectProto from \"./" + fileBasename + "_effect.js\";");
     f.print(" * import { EffectGrpcClient } from \"@dr_nikson/effect-grpc\";");
     f.print(" *");
@@ -382,7 +403,8 @@ function generateEffectService(
     f.print(" *");
     f.print(" * @example");
     f.print(" * ```typescript");
-    f.print(" * import { Effect, Layer } from \"effect\";");
+    f.print(" * import * as Effect from \"effect/Effect\";");
+    f.print(" * import * as Layer from \"effect/Layer\";");
     f.print(" * import * as effectProto from \"./" + fileBasename + "_effect.js\";");
     f.print(" *");
     f.print(" * // Create a typed metadata tag");
@@ -418,7 +440,8 @@ function generateEffectService(
     f.print(" *");
     f.print(" * @example");
     f.print(" * ```typescript");
-    f.print(" * import { Effect, Layer } from \"effect\";");
+    f.print(" * import * as Effect from \"effect/Effect\";");
+    f.print(" * import * as Layer from \"effect/Layer\";");
     f.print(" * import * as effectProto from \"./" + fileBasename + "_effect.js\";");
     f.print(" * import { EffectGrpcClient } from \"@dr_nikson/effect-grpc\";");
     f.print(" *");
@@ -434,7 +457,7 @@ function generateEffectService(
     f.print(" *");
     f.print(" * @example");
     f.print(" * ```typescript");
-    f.print(" * import { Effect } from \"effect\";");
+    f.print(" * import * as Effect from \"effect/Effect\";");
     f.print(" * import * as effectProto from \"./" + fileBasename + "_effect.js\";");
     f.print(" *");
     f.print(" * // Advanced usage with metadata transformation");
@@ -507,7 +530,7 @@ function generateEffectService(
     f.print(" *");
     f.print(" * @example");
     f.print(" * ```typescript");
-    f.print(" * import { Layer } from \"effect\";");
+    f.print(" * import * as Layer from \"effect/Layer\";");
     f.print(" * import * as effectProto from \"./" + fileBasename + "_effect.js\";");
     f.print(" *");
     f.print(" * // Simple configuration with just the base URL");
