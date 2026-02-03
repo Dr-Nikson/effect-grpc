@@ -17,61 +17,13 @@ permissions:
   pull-requests: write
 
 jobs:
-  detect-phase:
-    name: Detect Release Phase
-    if: github.event.workflow_run.conclusion == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      has_changesets: ${{ steps.detect.outputs.has_changesets }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5.0.0
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-          fetch-depth: 0
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          run_install: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v5.0.0
-        with:
-          node-version: '24.x'
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Detect changesets
-        id: detect
-        run: |
-          # Use changeset CLI to get status as JSON
-          pnpm changeset status --verbose --output=changeset-status.json
-
-          # Parse the releases array length using jq
-          release_count=$(jq '.releases | length' changeset-status.json)
-          echo "Found $release_count package(s) to be released"
-
-          # Debug: show the releases
-          jq '.releases[] | "\(.name): \(.oldVersion) -> \(.newVersion) (\(.type))"' changeset-status.json || true
-
-          if [ "$release_count" -gt "0" ]; then
-            echo "has_changesets=true" >> $GITHUB_OUTPUT
-            echo "📝 Pending releases detected - will create/update version PR"
-          else
-            echo "has_changesets=false" >> $GITHUB_OUTPUT
-            echo "📦 No pending releases - will publish to npm"
-          fi
-
   version-pr:
     name: Create Version PR
-    needs: detect-phase
-    if: needs.detect-phase.outputs.has_changesets == 'true'
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      has_changesets: ${{ steps.changesets.outputs.hasChangesets }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5.0.0
@@ -100,6 +52,7 @@ jobs:
           echo "✅ Executable bits removed"
 
       - name: Create Release Pull Request
+        id: changesets
         uses: changesets/action@v1
         with:
           version: pnpm changeset:version
@@ -109,10 +62,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Log changesets status
+        run: |
+          echo "Has changesets: ${{ steps.changesets.outputs.hasChangesets }}"
+          echo "Published: ${{ steps.changesets.outputs.published }}"
+          echo "PR Number: ${{ steps.changesets.outputs.pullRequestNumber }}"
+
   publish:
     name: Publish to npm
-    needs: detect-phase
-    if: needs.detect-phase.outputs.has_changesets == 'false'
+    needs: version-pr
+    if: needs.version-pr.outputs.has_changesets == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment:
