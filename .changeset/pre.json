@@ -8,6 +8,7 @@
   },
   "changesets": [
     "fix-naming-suffix",
+    "layer-scoped-client",
     "opentelemetry-tracing",
     "plain-eagles-pump",
     "public-cows-refuse",

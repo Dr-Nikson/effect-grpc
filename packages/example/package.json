@@ -38,7 +38,7 @@
     "effect": "catalog:",
     "@bufbuild/protobuf": "catalog:",
     "@connectrpc/connect": "catalog:",
-    "@dr_nikson/effect-grpc": "workspace:3.0.0-alpha.3"
+    "@dr_nikson/effect-grpc": "workspace:3.0.0-alpha.4"
   },
   "devDependencies": {
     "@bufbuild/buf": "catalog:",
