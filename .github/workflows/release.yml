@@ -93,6 +93,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Remove executable bit from bin files
+        run: |
+          echo "Removing executable bit from bin files for github-api commit mode..."
+          find packages/*/bin -type f -exec chmod -x {} \; 2>/dev/null || true
+          echo "✅ Executable bits removed"
+
       - name: Create Release Pull Request
         uses: changesets/action@v1
         with:
