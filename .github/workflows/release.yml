@@ -49,7 +49,7 @@ jobs:
         id: detect
         run: |
           # Use changeset CLI to get status as JSON
-          pnpm changeset status --since origin/master --verbose --output=changeset-status.json
+          pnpm changeset status --verbose --output=changeset-status.json
 
           # Parse the releases array length using jq
           release_count=$(jq '.releases | length' changeset-status.json)
@@ -111,8 +111,8 @@ jobs:
 
   publish:
     name: Publish to npm
-#    needs: detect-phase
-#    if: needs.detect-phase.outputs.has_changesets == 'false'
+    needs: detect-phase
+    if: needs.detect-phase.outputs.has_changesets == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment:
