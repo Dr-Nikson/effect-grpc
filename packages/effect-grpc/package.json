@@ -1,6 +1,6 @@
 {
   "name": "@dr_nikson/effect-grpc",
-  "version": "3.0.0-alpha.4",
+  "version": "3.0.0-alpha.5",
   "description": "gRPC and Protobuf capabilities for the Effect ecosystem",
   "private": false,
   "type": "module",
