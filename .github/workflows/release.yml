@@ -24,6 +24,7 @@ jobs:
     timeout-minutes: 15
     outputs:
       has_changesets: ${{ steps.changesets.outputs.hasChangesets }}
+      has_unpublished: ${{ steps.changesets.outputs.published }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5.0.0
@@ -51,11 +52,12 @@ jobs:
           find packages/*/bin -type f -exec chmod -x {} \; 2>/dev/null || true
           echo "✅ Executable bits removed"
 
-      - name: Create Release Pull Request
+      - name: Create Release Pull Request or Check Publish Status
         id: changesets
         uses: changesets/action@v1
         with:
           version: pnpm changeset:version
+          publish: echo "has_unpublished=true" >> $GITHUB_OUTPUT
           title: 'chore: version packages'
           commit: 'chore: version packages'
           commitMode: github-api
@@ -65,13 +67,20 @@ jobs:
       - name: Log changesets status
         run: |
           echo "Has changesets: ${{ steps.changesets.outputs.hasChangesets }}"
-          echo "Published: ${{ steps.changesets.outputs.published }}"
+          echo "Has unpublished packages: ${{ steps.changesets.outputs.published }}"
           echo "PR Number: ${{ steps.changesets.outputs.pullRequestNumber }}"
+          if [[ "${{ steps.changesets.outputs.hasChangesets }}" == "true" ]]; then
+            echo "📝 Version PR created/updated"
+          elif [[ "${{ steps.changesets.outputs.published }}" == "true" ]]; then
+            echo "📦 Unpublished packages detected - publish job will run after approval"
+          else
+            echo "✅ All packages already published - nothing to do"
+          fi
 
   publish:
     name: Publish to npm
     needs: version-pr
-    if: needs.version-pr.outputs.has_changesets == 'false'
+    if: needs.version-pr.outputs.has_changesets == 'false' && needs.version-pr.outputs.has_unpublished == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment:
