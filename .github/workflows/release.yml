@@ -1,3 +1,4 @@
+# .github/workflows/release.yml
 name: Release
 
 on:
@@ -16,10 +17,75 @@ permissions:
   pull-requests: write
 
 jobs:
-  release:
-    name: Release
-    # Only run if CI succeeded
+  detect-phase:
+    name: Detect Release Phase
     if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      has_changesets: ${{ steps.detect.outputs.has_changesets }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5.0.0
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Detect changesets
+        id: detect
+        run: |
+          # Count .changeset/*.md files excluding README.md
+          changeset_count=$(find .changeset -maxdepth 1 -name "*.md" ! -name "README.md" | wc -l | tr -d ' ')
+          echo "Found $changeset_count changeset file(s)"
+
+          if [ "$changeset_count" -gt "0" ]; then
+            echo "has_changesets=true" >> $GITHUB_OUTPUT
+            echo "📝 Changesets detected - will create/update version PR"
+          else
+            echo "has_changesets=false" >> $GITHUB_OUTPUT
+            echo "📦 No changesets - will publish to npm"
+          fi
+
+  version-pr:
+    name: Create Version PR
+    needs: detect-phase
+    if: needs.detect-phase.outputs.has_changesets == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5.0.0
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5.0.0
+        with:
+          node-version: '24.x'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create Release Pull Request
+        uses: changesets/action@v1
+        with:
+          version: pnpm changeset:version
+          title: 'chore: version packages'
+          commit: 'chore: version packages'
+          commitMode: github-api
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish:
+    name: Publish to npm
+    needs: detect-phase
+    if: needs.detect-phase.outputs.has_changesets == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment:
@@ -63,18 +129,13 @@ jobs:
 
       - name: Remove executable bit from bin files
         run: |
-          echo "Removing executable bit from bin files for github-api commit mode..."
+          echo "Removing executable bit from bin files for consistency..."
           find packages/*/bin -type f -exec chmod -x {} \; 2>/dev/null || true
           echo "✅ Executable bits removed"
 
-      - name: Create Release Pull Request or Publish
-        id: changesets
+      - name: Publish to npm
         uses: changesets/action@v1
         with:
-          version: pnpm changeset:version
           publish: pnpm changeset:publish
-          title: 'chore: version packages'
-          commit: 'chore: version packages'
-          commitMode: github-api
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
