@@ -20,10 +20,12 @@ function generateTs(schema: Schema<object>): void {
             Context: safeIdentifier("Context"),
             Effect: safeIdentifier("Effect"),
             Layer: safeIdentifier("Layer"),
+            Scope: safeIdentifier("Scope"),
         };
         f.print('import * as ', effectImports.Context, ' from "effect/Context";');
         f.print('import * as ', effectImports.Effect, ' from "effect/Effect";');
         f.print('import * as ', effectImports.Layer, ' from "effect/Layer";');
+        f.print('import * as ', effectImports.Scope, ' from "effect/Scope";');
         f.print();
 
         // Extract basename from file path for import examples
@@ -84,6 +86,7 @@ interface EffectImports {
     Context: string;
     Effect: string;
     Layer: string;
+    Scope: string;
 }
 
 /**
@@ -102,7 +105,7 @@ function generateEffectService(
     effectImports: EffectImports,
 ): void {
     // Effect imports are added manually as namespace imports in generateTs()
-    const { Context: importContext, Effect: importEffect, Layer: importLayer } = effectImports;
+    const { Context: importContext, Effect: importEffect, Layer: importLayer, Scope: importScope } = effectImports;
     const importEffectGrpcService = f.import("EffectGrpcServer", packageJson.name);
     const importGrpcException = f.import("GrpcException", packageJson.name);
 
@@ -450,6 +453,7 @@ function generateEffectService(
     f.print(" * The client layer requires:");
     f.print(" * - ", configTagSymbol, ": Configuration with the server URL");
     f.print(" * - EffectGrpcClient.GrpcClientRuntime: The gRPC runtime");
+    f.print(" * - Scope.Scope: For resource management");
     f.print(" *");
     f.print(" * @example");
     f.print(" * ```typescript");
@@ -502,7 +506,7 @@ function generateEffectService(
     f.print("  ): ", importLayer, ".Layer<");
     f.print("    ", importContext, ".Tag.Identifier<Tag>,");
     f.print("    never,");
-    f.print("    ", configTagSymbol, "[\"Identifier\"] | ", importEffectGrpcClient, ".GrpcClientRuntime");
+    f.print("    ", configTagSymbol, "[\"Identifier\"] | ", importEffectGrpcClient, ".GrpcClientRuntime | ", importScope, ".Scope");
     f.print("  >;");
     f.print();
     f.print("  <Tag extends ", clientTagSymbol, ">(");
@@ -510,7 +514,7 @@ function generateEffectService(
     f.print("  ): ", importLayer, ".Layer<");
     f.print("    ", importContext, ".Tag.Identifier<Tag>,");
     f.print("    never,");
-    f.print("    ", configTagSymbol, "[\"Identifier\"] | ", importEffectGrpcClient, ".GrpcClientRuntime");
+    f.print("    ", configTagSymbol, "[\"Identifier\"] | ", importEffectGrpcClient, ".GrpcClientRuntime | ", importScope, ".Scope");
     f.print("  >;");
     f.print("} = ", makeClientLiveLayerSymbol, ";");
     f.print();
@@ -603,7 +607,7 @@ function generateEffectService(
     f.print("    } as ", clientSymbol, "<Meta>;");
     f.print("  });");
     f.print();
-    f.print("  return ", importLayer, ".scoped(tag, prog);");
+    f.print("  return ", importLayer, ".effect(tag, prog);");
     f.print();
     f.print("  function isDefaultMetaArguments(args: unknown): args is readonly [Tag] {");
     f.print("    return Array.isArray(args) && args.length === 1;");

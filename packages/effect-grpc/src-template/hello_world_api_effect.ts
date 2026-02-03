@@ -4,6 +4,7 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
 import type { MessageInitShape } from "@bufbuild/protobuf";
 
 import { EffectGrpcClient, EffectGrpcServer, GrpcException } from "../src";
@@ -369,6 +370,7 @@ export const HelloWorldAPIClientTag: HelloWorldAPIClientTag & {
  * The client layer requires:
  * - HelloWorldAPIConfigTag: Configuration with the server URL
  * - EffectGrpcClient.GrpcClientRuntime: The gRPC runtime
+ * - Scope.Scope: For resource management
  *
  * @example
  * ```typescript
@@ -447,7 +449,7 @@ export const helloWorldAPIClientLiveLayer: {
   ): Layer.Layer<
     Context.Tag.Identifier<Tag>,
     never,
-    HelloWorldAPIConfigTag["Identifier"] | EffectGrpcClient.GrpcClientRuntime
+    HelloWorldAPIConfigTag["Identifier"] | EffectGrpcClient.GrpcClientRuntime | Scope.Scope
   >;
 
   <Tag extends HelloWorldAPIClientTag>(
@@ -455,7 +457,7 @@ export const helloWorldAPIClientLiveLayer: {
   ): Layer.Layer<
     Context.Tag.Identifier<Tag>,
     never,
-    HelloWorldAPIConfigTag["Identifier"] | EffectGrpcClient.GrpcClientRuntime
+    HelloWorldAPIConfigTag["Identifier"] | EffectGrpcClient.GrpcClientRuntime | Scope.Scope
   >;
 } = makeHelloWorldAPIClientLiveLayer;
 
@@ -575,7 +577,7 @@ function makeHelloWorldAPIClientLiveLayer<Tag extends HelloWorldAPIClientTag<Met
     } as HelloWorldAPIClient<Meta>;
   });
 
-  return Layer.scoped(tag, prog);
+  return Layer.effect(tag, prog);
 
   function isDefaultMetaArguments(args: unknown): args is readonly [Tag] {
     return Array.isArray(args) && args.length === 1;
