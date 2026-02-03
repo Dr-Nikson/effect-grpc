@@ -21,7 +21,7 @@ jobs:
     name: Detect Release Phase
     if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     outputs:
       has_changesets: ${{ steps.detect.outputs.has_changesets }}
     steps:
@@ -30,19 +30,39 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5.0.0
+        with:
+          node-version: '24.x'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Detect changesets
         id: detect
         run: |
-          # Count .changeset/*.md files excluding README.md
-          changeset_count=$(find .changeset -maxdepth 1 -name "*.md" ! -name "README.md" | wc -l | tr -d ' ')
-          echo "Found $changeset_count changeset file(s)"
+          # Use changeset CLI to get status as JSON
+          pnpm changeset status --output=changeset-status.json
 
-          if [ "$changeset_count" -gt "0" ]; then
+          # Parse the releases array length using jq
+          release_count=$(jq '.releases | length' changeset-status.json)
+          echo "Found $release_count package(s) to be released"
+
+          # Debug: show the releases
+          jq '.releases[] | "\(.name): \(.oldVersion) -> \(.newVersion) (\(.type))"' changeset-status.json || true
+
+          if [ "$release_count" -gt "0" ]; then
             echo "has_changesets=true" >> $GITHUB_OUTPUT
-            echo "📝 Changesets detected - will create/update version PR"
+            echo "📝 Pending releases detected - will create/update version PR"
           else
             echo "has_changesets=false" >> $GITHUB_OUTPUT
-            echo "📦 No changesets - will publish to npm"
+            echo "📦 No pending releases - will publish to npm"
           fi
 
   version-pr:
