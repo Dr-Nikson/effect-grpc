@@ -7,9 +7,13 @@
     "@dr_nikson/effect-grpc-e2e-tests": "0.1.0"
   },
   "changesets": [
+    "fix-naming-suffix",
+    "opentelemetry-tracing",
     "plain-eagles-pump",
     "public-cows-refuse",
     "sharp-pots-ring",
-    "spicy-rivers-chew"
+    "spicy-rivers-chew",
+    "thin-papers-lick",
+    "use-effect-submodules"
   ]
 }
