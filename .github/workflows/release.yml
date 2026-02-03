@@ -111,8 +111,8 @@ jobs:
 
   publish:
     name: Publish to npm
-    needs: detect-phase
-    if: needs.detect-phase.outputs.has_changesets == 'false'
+#    needs: detect-phase
+#    if: needs.detect-phase.outputs.has_changesets == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment:
