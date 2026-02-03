@@ -24,7 +24,7 @@ jobs:
     timeout-minutes: 15
     outputs:
       has_changesets: ${{ steps.changesets.outputs.hasChangesets }}
-      has_unpublished: ${{ steps.changesets.outputs.published }}
+      has_unpublished: ${{ steps.check-unpublished.outputs.has_unpublished }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5.0.0
@@ -52,26 +52,58 @@ jobs:
           find packages/*/bin -type f -exec chmod -x {} \; 2>/dev/null || true
           echo "✅ Executable bits removed"
 
-      - name: Create Release Pull Request or Check Publish Status
+      - name: Create Release Pull Request
         id: changesets
         uses: changesets/action@v1
         with:
           version: pnpm changeset:version
-          publish: echo "has_unpublished=true" >> $GITHUB_OUTPUT
           title: 'chore: version packages'
           commit: 'chore: version packages'
           commitMode: github-api
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Log changesets status
+      - name: Check for unpublished packages
+        id: check-unpublished
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        run: |
+          echo "Checking for unpublished packages tracked by changesets..."
+          HAS_UNPUBLISHED=false
+
+          # Get ignore list from changeset config
+          IGNORE_LIST=$(jq -r '.ignore // [] | .[]' .changeset/config.json)
+
+          # Get all workspace packages via pnpm (use process substitution to avoid subshell)
+          while read -r pkg; do
+            PKG_NAME=$(echo "$pkg" | jq -r '.name')
+            PKG_VERSION=$(echo "$pkg" | jq -r '.version')
+            PKG_PRIVATE=$(echo "$pkg" | jq -r '.private // false')
+
+            # Skip packages in changeset ignore list
+            echo "$IGNORE_LIST" | grep -qx "$PKG_NAME" && continue
+
+            # Skip private packages
+            [[ "$PKG_PRIVATE" == "true" ]] && continue
+
+            echo "Checking $PKG_NAME@$PKG_VERSION..."
+            if npm view "$PKG_NAME@$PKG_VERSION" version 2>/dev/null; then
+              echo "✅ $PKG_NAME@$PKG_VERSION already published"
+            else
+              echo "📦 $PKG_NAME@$PKG_VERSION needs publishing"
+              HAS_UNPUBLISHED=true
+            fi
+          done < <(pnpm list -r --json --depth -1 | jq -c '.[]')
+
+          echo "has_unpublished=$HAS_UNPUBLISHED" >> $GITHUB_OUTPUT
+
+      - name: Log status
         run: |
           echo "Has changesets: ${{ steps.changesets.outputs.hasChangesets }}"
-          echo "Has unpublished packages: ${{ steps.changesets.outputs.published }}"
+          echo "Has unpublished packages: ${{ steps.check-unpublished.outputs.has_unpublished }}"
           echo "PR Number: ${{ steps.changesets.outputs.pullRequestNumber }}"
           if [[ "${{ steps.changesets.outputs.hasChangesets }}" == "true" ]]; then
             echo "📝 Version PR created/updated"
-          elif [[ "${{ steps.changesets.outputs.published }}" == "true" ]]; then
+          elif [[ "${{ steps.check-unpublished.outputs.has_unpublished }}" == "true" ]]; then
             echo "📦 Unpublished packages detected - publish job will run after approval"
           else
             echo "✅ All packages already published - nothing to do"
