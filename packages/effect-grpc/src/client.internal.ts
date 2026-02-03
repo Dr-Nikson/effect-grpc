@@ -1,13 +1,27 @@
-import { Context, Effect, Layer } from "effect";
+// packages/effect-grpc/src/client.internal.ts
+import { Context, Effect, Either, Layer } from "effect";
+import type { Span } from "effect/Tracer";
 
 import type { DescMessage, MessageInitShape, MessageShape } from "@bufbuild/protobuf";
 import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
 import type { CallOptions, Client, Transport } from "@connectrpc/connect";
 import { createClient, createContextValues } from "@connectrpc/connect";
 import { Http2SessionManager, createGrpcTransport } from "@connectrpc/connect-node";
+import { ROOT_CONTEXT, type TextMapSetter, TraceFlags, trace } from "@opentelemetry/api";
+import { W3CTraceContextPropagator } from "@opentelemetry/core";
 
 import type * as T from "./client.js";
 import * as protoRuntime from "./protoRuntime.js";
+
+/**
+ * TextMapSetter implementation for injecting trace context into request headers.
+ * This adapter allows OpenTelemetry's propagation API to write to the Headers object.
+ */
+const headerSetter: TextMapSetter<Headers> = {
+  set(carrier: Headers, key: string, value: string): void {
+    carrier.set(key, value);
+  },
+};
 
 export const grpcClientRuntimeTypeId = Symbol("@dr_nikson/effect-grpc/GrpcClientRuntime");
 
@@ -92,30 +106,83 @@ type UnaryFn<I extends DescMessage, O extends DescMessage> = (
   options: CallOptions,
 ) => Promise<MessageShape<O>>;
 
+/**
+ * @internal
+ * Inject trace context into request headers (pure function).
+ *
+ * Uses OpenTelemetry's W3CTraceContextPropagator to properly format and inject the
+ * `traceparent` and `tracestate` headers according to the W3C Trace Context specification.
+ *
+ * @param span - The current Effect span to extract trace context from
+ * @param headers - The original headers to copy and augment
+ * @returns New Headers object with trace context injected, preserving original headers
+ */
+function injectTraceContext(span: Span, headers: Headers): Headers {
+  return Either.try(() => {
+    // Copy existing headers to preserve user-provided headers (auth tokens, etc.)
+    // new Headers(headers) copies all entries from the source Headers object
+    const newHeaders = new Headers(headers);
+
+    // Create an OTel SpanContext from the Effect span
+    const spanContext = {
+      traceId: span.traceId,
+      spanId: span.spanId,
+      traceFlags: span.sampled ? TraceFlags.SAMPLED : TraceFlags.NONE,
+      // isRemote indicates whether the span context was received from a remote service.
+      // Here it's false because this span was created locally in the client process.
+      // (Server-side extraction from incoming headers would set isRemote: true)
+      isRemote: false,
+    };
+
+    // Inject trace context headers (traceparent, tracestate) into the copied headers
+    const propagator = new W3CTraceContextPropagator();
+    const otelContext = trace.setSpanContext(ROOT_CONTEXT, spanContext);
+    propagator.inject(otelContext, newHeaders, headerSetter);
+
+    return newHeaders;
+  }).pipe(Either.getOrElse(() => headers));
+}
+
 function makeExecutorMethod<Shape extends GenServiceMethods>(
   client: Client<GenService<Shape>>,
   methodName: keyof GenService<Shape>["method"],
   serviceDefinition: GenService<Shape>,
 ) {
   const method = serviceDefinition.method[methodName];
+  // Build span name following gRPC convention: {service}/{method}
+  const fullMethodName = `${serviceDefinition.typeName}/${method.name}`;
 
   switch (method.methodKind) {
     case "unary":
-      return (req: any, opts: T.RequestMeta): Effect.Effect<any> => {
-        return Effect.promise((signal) => {
-          const method = client[methodName].bind(client) as UnaryFn<any, any>;
+      // Use Effect.fn to create a client-side span for each RPC call.
+      // This provides visibility into client-side latency separate from server processing time.
+      return Effect.fn(`GrpcClient.makeUnaryRequest(${fullMethodName})`, {
+        attributes: {
+          "rpc.system": "grpc",
+          "rpc.service": serviceDefinition.typeName,
+          "rpc.method": method.name,
+        },
+      })(function* (req: any, opts: T.RequestMeta) {
+        const baseHeaders = opts.headers ?? new Headers();
+        const headers = yield* Effect.currentSpan.pipe(
+          Effect.map((span) => injectTraceContext(span, baseHeaders)),
+          Effect.catchAll(() => Effect.succeed(baseHeaders)),
+        );
 
-          return method(req, {
+        return yield* Effect.promise((signal) => {
+          const clientMethod = client[methodName].bind(client) as UnaryFn<any, any>;
+
+          return clientMethod(req, {
             // timeoutMs: null,
-            // TODO: tracing
-            headers: opts.headers,
+            headers,
             signal,
             // onHeader: null,
             // onTrailer: null,
             contextValues: createContextValues(),
           } as CallOptions);
         });
-      };
+      });
+
     default:
       return null;
   }

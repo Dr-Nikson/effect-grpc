@@ -315,7 +315,7 @@ function generateEffectService(
     service.methods.forEach((method) => {
         if (method.methodKind === "unary") {
             f.print("    ", method.localName, ": (req, ctx) =>");
-            f.print("      executor.unary(req, ctx, (req, ctx) => service.", method.localName, "(req, ctx)),");
+            f.print("      executor.unary(`${", serviceIdSymbol, "}/", method.name, "`, req, ctx, (req, ctx) => service.", method.localName, "(req, ctx)),");
         }
     });
 
