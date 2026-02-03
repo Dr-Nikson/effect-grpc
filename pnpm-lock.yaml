@@ -215,7 +215,7 @@ importers:
         specifier: 'catalog:'
         version: 2.1.0(@bufbuild/protobuf@2.8.0)
       '@dr_nikson/effect-grpc':
-        specifier: workspace:3.0.0-alpha.4
+        specifier: workspace:3.0.0-alpha.5
         version: link:../effect-grpc
       effect:
         specifier: 'catalog:'
