@@ -1,5 +1,13 @@
 # @dr_nikson/effect-grpc
 
+## 3.0.0-alpha.4
+
+### Patch Changes
+
+- [#47](https://github.com/Dr-Nikson/effect-grpc/pull/47) [`65622fa`](https://github.com/Dr-Nikson/effect-grpc/commit/65622fa148f4d2e8a10b931e684e6867f24c886e) Thanks [@Dr-Nikson](https://github.com/Dr-Nikson)! - Use `Layer.scoped` instead of `Layer.effect` for client layers (#45)
+
+  Generated client layers now use `Layer.scoped` instead of `Layer.effect` for proper resource lifecycle management. This removes the `Scope.Scope` requirement from the layer's dependencies, as the scope is now automatically provided and tied to the layer's lifetime. This also fixes Effect LSP warning TS13.
+
 ## 3.0.0-alpha.3
 
 ### Minor Changes
