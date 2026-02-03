@@ -79,7 +79,17 @@ type UnaryClientExecutorFn<I extends DescMessage, O extends DescMessage> = (
  * ```
  */
 export interface ServerExecutor<Ctx> {
+  /**
+   * Execute a unary gRPC method with automatic tracing and logging.
+   *
+   * @param method - Fully qualified method name (e.g., "com.example.v1.HelloWorldAPI/GetGreeting")
+   * @param req - The incoming request message
+   * @param ctx - The gRPC handler context
+   * @param prog - The Effect program implementing the method logic
+   * @returns Promise resolving to the response message
+   */
   unary<In, Out>(
+    method: string,
     req: In,
     ctx: HandlerContext,
     prog: (req: In, ctx: Ctx) => Effect.Effect<Out, GrpcException.GrpcException>,

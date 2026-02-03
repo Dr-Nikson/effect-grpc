@@ -12,6 +12,7 @@ Type-safe gRPC and Protocol Buffer support for the Effect ecosystem
 
 - **Full Type Safety** - Generated TypeScript code from Protocol Buffers with complete type inference
 - **Effect Integration** - Native support for Effect's error handling, tracing, and dependency injection
+- **🔭 Distributed Tracing** - Automatic OpenTelemetry support with W3C Trace Context propagation
 - **Code Generation** - Automatic client and server code generation via `protoc-gen-effect` plugin
 - **Connect-RPC** - Built on Connect-RPC for maximum compatibility with gRPC and gRPC-Web
 - **Modular Architecture** - Clean separation between service definitions and implementations
@@ -790,6 +791,106 @@ const response = yield* client.sayHello(
 );
 ```
 
+### Distributed Tracing with OpenTelemetry
+
+effect-grpc provides **automatic distributed tracing** with OpenTelemetry, enabling you to trace requests across your entire distributed system with zero manual instrumentation.
+
+#### How It Works
+
+When you make a gRPC call, trace context automatically flows from client to server using the [W3C Trace Context](https://www.w3.org/TR/trace-context/) standard:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         Distributed Trace Flow                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   Client Process                           Server Process                    │
+│   ─────────────────                        ─────────────────                 │
+│                                                                              │
+│   ┌─────────────────────┐                  ┌─────────────────────┐          │
+│   │  Application Span   │                  │                     │          │
+│   │  "my-operation"     │                  │                     │          │
+│   └──────────┬──────────┘                  │                     │          │
+│              │                             │                     │          │
+│              ▼                             │                     │          │
+│   ┌─────────────────────┐    traceparent   │                     │          │
+│   │  Client RPC Span    │ ═══════════════► │  Server RPC Span    │          │
+│   │  "GrpcClient..."    │    tracestate    │  "service/Method"   │          │
+│   └─────────────────────┘                  └─────────────────────┘          │
+│                                                                              │
+│   All spans share the same traceId for end-to-end visibility                │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Setting Up Tracing
+
+**1. Add OpenTelemetry dependencies:**
+
+```bash
+npm install @effect/opentelemetry @opentelemetry/api @opentelemetry/sdk-trace-node
+# Plus your preferred exporter
+npm install @opentelemetry/exporter-trace-otlp-http
+```
+
+**2. Configure the OpenTelemetry SDK:**
+
+```typescript
+import { Effect, Layer } from "effect";
+import { NodeSdk } from "@effect/opentelemetry";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
+
+// Create the tracing layer
+const TracingLive = NodeSdk.layer(() => ({
+  resource: { serviceName: "my-grpc-service" },
+  spanProcessor: new BatchSpanProcessor(
+    new OTLPTraceExporter({ url: "http://localhost:4318/v1/traces" })
+  ),
+}));
+
+// Provide it to your application
+const program = myGrpcProgram.pipe(
+  Effect.provide(TracingLive)
+);
+```
+
+**3. That's it!** Your gRPC calls will automatically:
+- Create spans with semantic attributes (`rpc.system`, `rpc.service`, `rpc.method`)
+- Propagate trace context via W3C `traceparent`/`tracestate` headers
+- Link client and server spans in the same trace
+
+#### Generated Span Names
+
+| Location | Span Name Format | Example |
+|----------|------------------|---------|
+| Client | `GrpcClient.makeUnaryRequest({service}/{method})` | `GrpcClient.makeUnaryRequest(example.v1.HelloService/SayHello)` |
+| Server | `{service}/{method}` | `example.v1.HelloService/SayHello` |
+
+#### Full Trace Hierarchy
+
+When you wrap your client call in a span, the complete trace hierarchy looks like:
+
+```typescript
+// Your code
+const program = Effect.gen(function* () {
+  const client = yield* HelloServiceClientTag;
+  return yield* client.sayHello({ name: "World" }, {});
+}).pipe(Effect.withSpan("my-business-operation"));
+```
+
+```
+Trace: abc123...
+│
+├── my-business-operation                              [Client Process]
+│   │
+│   └── GrpcClient.makeUnaryRequest(example.v1.HelloService/SayHello)
+│       │
+│       └── example.v1.HelloService/SayHello           [Server Process]
+│           │
+│           └── (your business logic spans...)
+```
+
 
 ## Development
 
@@ -834,6 +935,7 @@ effect-grpc/
 
 ## Roadmap
 
+- [x] **OpenTelemetry distributed tracing** - Automatic trace context propagation
 - [ ] Support for streaming RPCs (server-streaming, client-streaming, bidirectional)
 - [ ] Interceptor/middleware support
 - [ ] Built-in retry policies with Effect

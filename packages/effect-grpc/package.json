@@ -55,21 +55,23 @@
     "prepublishOnly": "cp ../../README.md ."
   },
   "dependencies": {
-    "@bufbuild/protobuf": "catalog:",
     "@bufbuild/protoplugin": "catalog:",
-    "@connectrpc/connect": "catalog:",
-    "@connectrpc/connect-node": "catalog:"
+    "@connectrpc/connect-node": "catalog:",
+    "@opentelemetry/api": "catalog:",
+    "@opentelemetry/core": "catalog:"
   },
   "peerDependencies": {
     "@bufbuild/protobuf": "catalog:peer",
     "@connectrpc/connect": "catalog:peer",
+    "@effect/opentelemetry": "catalog:peer",
     "effect": "catalog:peer"
   },
   "devDependencies": {
     "@bufbuild/buf": "catalog:",
+    "@bufbuild/protobuf": "catalog:",
     "@bufbuild/protoc-gen-es": "catalog:",
-    "@effect/platform": "catalog:",
-    "@effect/platform-node": "catalog:",
+    "@connectrpc/connect": "catalog:",
+    "@effect/opentelemetry": "catalog:",
     "effect": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

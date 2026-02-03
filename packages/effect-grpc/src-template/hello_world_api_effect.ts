@@ -541,7 +541,7 @@ function makeHelloWorldAPIServiceLiveLayer<Tag extends HelloWorldAPIServiceTag<C
     HelloWorldAPI,
   )((executor) => ({
     getGreeting: (req, ctx) =>
-      executor.unary(req, ctx, (req, ctx) => service.getGreeting(req, ctx)),
+      executor.unary(`${HelloWorldAPIProtoId}/GetGreeting`, req, ctx, (req, ctx) => service.getGreeting(req, ctx)),
   }));
 
   return Layer.succeed(tag, instance);
