@@ -1,0 +1,536 @@
+#!/usr/bin/env bash
+# .claude/skills/verify/scripts/control-example
+#
+# Drives packages/example, the effect-grpc example gRPC server, for verification runs.
+# The example hardcodes localhost:8000 in both server.ts and client.ts, so one instance at a time.
+#
+# Usage: control-example <command> [args]
+#   build                                      pnpm install --frozen-lockfile, then pnpm -r run build
+#   launch [--ipv4first]                       start `node dist/server.js` detached; wait until it serves an RPC
+#   doctor                                     read-only check of the instance this run started
+#   call <connect|grpc|http1> <Method> [json]  one unary call; records the response and the server log lines
+#   client                                     run the README example client (`node dist/client.js`)
+#   probe <getGreeting|faceTheError> [name] [url]  call through the generated Effect client
+#   codegen                                    rebuild everything (codegen included) and record generated exports
+#   hostile-authority                          send one request with `Host: ::1:8000`; passes if the server survives
+#   stop                                       SIGTERM the instance this run started; record the shutdown
+#   cleanup                                    stop if running, drop instance state, keep evidence
+#   evidence                                   print the current run's evidence directory
+#
+# Runs live under ${EGV_ROOT:-${XDG_STATE_HOME:-~/.local/state}/effect-grpc-verify}/runs/<run-id>/{state,evidence}.
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+REPO=$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)
+LIB=$REPO/packages/effect-grpc
+EXAMPLE=$REPO/packages/example
+E2E=$REPO/packages/e2e-tests
+PORT=8000
+SVC=com.example.v1.HelloWorldAPI
+BASE_URL=http://localhost:$PORT
+READY_LINE="gRPC server listening on http://localhost:$PORT"
+EGV_ROOT=${EGV_ROOT:-${XDG_STATE_HOME:-$HOME/.local/state}/effect-grpc-verify}
+CURRENT=$EGV_ROOT/current
+# Per-connection chatter from server.internal.ts; kept in evidence, hidden on the terminal.
+NOISE='^(New TCP connection|TCP connection closed|New HTTP/2 session created|HTTP/2 session closed|New stream on session|Stream closed|HTTP/2 session GOAWAY)'
+
+die() { echo "control-example: $*" >&2; exit 2; }
+
+# ---------- runs and evidence ----------
+
+run_dir() { if [ -f "$CURRENT" ]; then cat "$CURRENT"; fi; }
+
+ensure_run() {
+  local r
+  r=$(run_dir)
+  if [ -n "$r" ] && [ -d "$r" ]; then echo "$r"; return; fi
+  r=$EGV_ROOT/runs/$(date -u +%Y%m%dT%H%M%SZ)-$$
+  mkdir -p "$r/state" "$r/evidence"
+  {
+    echo "run_id=$(basename "$r")"
+    echo "started_at=$(date -u +%FT%TZ)"
+    echo "git_head=$(git -C "$REPO" rev-parse --short HEAD)"
+    echo "git_dirty_files=$(git -C "$REPO" status --porcelain | wc -l | tr -d ' ')"
+  } >"$r/evidence/run.txt"
+  echo "$r" >"$CURRENT"
+  echo "$r"
+}
+
+next_evidence() { # next_evidence <run> <slug> -> path of the next numbered evidence file
+  local n
+  n=$(find "$1/evidence" -maxdepth 1 -name '[0-9][0-9]-*' | wc -l)
+  printf '%s/evidence/%02d-%s.txt' "$1" $((n + 1)) "$2"
+}
+
+log_size() { if [ -f "$1" ]; then wc -c <"$1" | tr -d ' '; else echo 0; fi; }
+
+show() { # print an evidence file without the per-connection chatter
+  grep -vE "$NOISE" "$1" || true
+  echo "evidence: $1"
+}
+
+# ---------- process identity and port ownership ----------
+
+proc_start() { # start time (clock ticks since boot) of pid $1; empty when the pid is gone
+  local s
+  s=$(cat "/proc/$1/stat" 2>/dev/null) || return 0
+  s=${s##*) }
+  # shellcheck disable=SC2086
+  set -- $s
+  echo "${20}"
+}
+
+instance_alive() { # instance_alive <run>: the recorded pid is alive and is still the process we started
+  local st=$1/state pid start
+  [ -s "$st/server.pid" ] && [ -s "$st/server.start" ] || return 1
+  pid=$(cat "$st/server.pid")
+  start=$(cat "$st/server.start")
+  [ "$(proc_start "$pid")" = "$start" ]
+}
+
+require_instance() {
+  local r
+  r=$(run_dir)
+  [ -n "$r" ] && instance_alive "$r" || die "no live instance from this skill; run: control-example launch"
+  echo "$r"
+}
+
+decode_addr() {
+  case $1 in
+    0100007F) echo 127.0.0.1 ;;
+    00000000) echo 0.0.0.0 ;;
+    00000000000000000000000001000000) echo ::1 ;;
+    00000000000000000000000000000000) echo :: ;;
+    *) echo "hex:$1" ;;
+  esac
+}
+
+port_listeners() { # one "<pid|?> <address>" line per LISTEN socket on $PORT; status 2 when it cannot tell
+  local hex inode addr owner
+  local files=(/proc/net/tcp)
+  [ -r /proc/net/tcp ] || { echo "cannot read /proc/net/tcp" >&2; return 2; }
+  [ -r /proc/net/tcp6 ] && files+=(/proc/net/tcp6)
+  hex=$(printf '%04X' "$PORT")
+  awk -v p=":$hex" 'FNR > 1 && $4 == "0A" { n = length($2); if (substr($2, n - 4) == p) print $10, substr($2, 1, n - 5) }' "${files[@]}" |
+    while read -r inode addr; do
+      # find exits non-zero on unreadable /proc entries and when head closes the pipe; neither means "free".
+      owner=$(find /proc/[0-9]*/fd -maxdepth 1 -lname "socket:\[$inode\]" 2>/dev/null | head -n 1 | cut -d/ -f3 || true)
+      echo "${owner:-?} $(decode_addr "$addr")"
+    done
+}
+
+# ---------- build freshness ----------
+
+stale_report() { # prints one STALE line per out-of-date artifact; status 1 when any
+  local bad=0 f out gen=$EXAMPLE/src/generated/com/example/v1/hello_world_api_effect.ts
+  while IFS= read -r f; do
+    out=$LIB/dist/${f#"$LIB/src/"}
+    out=${out%.ts}.js
+    if [ ! -f "$out" ] || [ "$f" -nt "$out" ]; then echo "STALE lib: ${out#"$REPO/"} is older than ${f#"$REPO/"}"; bad=1; fi
+  done < <(find "$LIB/src" -name '*.ts' ! -name '*.d.ts' ! -name '*.test-d.ts')
+  for f in server client; do
+    if [ ! -f "$EXAMPLE/dist/$f.js" ] || [ "$EXAMPLE/src/$f.ts" -nt "$EXAMPLE/dist/$f.js" ]; then echo "STALE example: packages/example/dist/$f.js"; bad=1; fi
+  done
+  if [ ! -f "$gen" ]; then
+    echo "STALE codegen: ${gen#"$REPO/"} is missing"
+    bad=1
+  else
+    if [ "$EXAMPLE/proto/com/example/v1/hello_world_api.proto" -nt "$gen" ]; then echo "STALE codegen: the proto is newer than the generated code"; bad=1; fi
+    if [ "$LIB/src/protocGenPlugin.ts" -nt "$gen" ]; then echo "STALE codegen: protocGenPlugin.ts is newer than the generated code"; bad=1; fi
+    if [ "$gen" -nt "$EXAMPLE/dist/generated/com/example/v1/hello_world_api_effect.js" ]; then echo "STALE example: generated .ts is newer than its compiled .js"; bad=1; fi
+  fi
+  return $bad
+}
+
+# ---------- drivers ----------
+
+do_call() { # do_call <run> <connect|grpc|http1> <Method> <json> [slug] -> returns the client's exit code
+  local r=$1 proto=$2 method=$3 json=$4 slug=${5:-$2-$3}
+  local log=$r/evidence/server.log f off rc=0 status="" out err
+  local cmd=()
+  case $proto in
+    connect) cmd=(curl -sS --http2-prior-knowledge -H 'content-type: application/json' --data "$json" -o OUT -w '%{http_code}' "$BASE_URL/$SVC/$method") ;;
+    http1) cmd=(curl -sS -H 'content-type: application/json' --data "$json" -o OUT -w '%{http_code}' "$BASE_URL/$SVC/$method") ;;
+    grpc) cmd=("$EXAMPLE/node_modules/.bin/buf" curl --http2-prior-knowledge --protocol grpc --schema "$EXAMPLE/proto" -d "$json" "$BASE_URL/$SVC/$method") ;;
+    *) die "call: protocol must be connect, grpc or http1" ;;
+  esac
+  f=$(next_evidence "$r" "$slug")
+  off=$(log_size "$log")
+  out=$(mktemp)
+  err=$(mktemp)
+  local run=("${cmd[@]/#OUT/$out}")
+  local shown=("${cmd[@]/#OUT/<body below>}")
+  if [ "$proto" = grpc ]; then
+    timeout 30 "${run[@]}" >"$out" 2>"$err" || rc=$?
+  else
+    status=$(timeout 30 "${run[@]}" 2>"$err") || rc=$?
+  fi
+  sleep 0.3 # the server writes its log lines for this call synchronously; give the stream close a moment
+  {
+    echo "# call $proto $method at $(date -u +%FT%TZ) launch_mode=$(cat "$r/state/mode" 2>/dev/null || echo none)"
+    printf '$'
+    printf ' %q' "${shown[@]}"
+    echo
+    echo "exit_code=$rc"
+    if [ -n "$status" ]; then echo "http_status=$status"; fi
+    if [ "$proto" = grpc ] && [ "$rc" -ne 0 ] && [ $((rc % 8)) -eq 0 ]; then echo "grpc_status_code=$((rc / 8))"; fi
+    echo "--- response (stdout / body)"
+    cat "$out"
+    echo
+    echo "--- stderr"
+    cat "$err"
+    echo "--- server log lines written during this call"
+    tail -c +"$((off + 1))" "$log"
+  } >"$f"
+  rm -f "$out" "$err"
+  show "$f"
+  return "$rc"
+}
+
+run_node_driver() { # run_node_driver <run> <slug> <label> <command...>: run a node client in packages/example
+  local r=$1 slug=$2 label=$3
+  shift 3
+  local log=$r/evidence/server.log f off rc=0 out err
+  f=$(next_evidence "$r" "$slug")
+  off=$(log_size "$log")
+  out=$(mktemp)
+  err=$(mktemp)
+  (cd "$EXAMPLE" && timeout 30 "$@") >"$out" 2>"$err" || rc=$?
+  sleep 0.3
+  {
+    echo "# $label at $(date -u +%FT%TZ) launch_mode=$(cat "$r/state/mode" 2>/dev/null || echo none)"
+    if [ "$(cat "$r/state/mode" 2>/dev/null)" = ipv4first ]; then
+      echo "# NOTE: server launched with --ipv4first; a pass here does not prove the README localhost pairing"
+    fi
+    echo "exit_code=$rc"
+    echo "--- stdout"
+    cat "$out"
+    echo "--- stderr"
+    cat "$err"
+    echo "--- server log lines written during this run"
+    tail -c +"$((off + 1))" "$log"
+  } >"$f"
+  rm -f "$out" "$err"
+  show "$f"
+  return "$rc"
+}
+
+# ---------- commands ----------
+
+cmd_build() {
+  cd "$REPO"
+  pnpm install --frozen-lockfile
+  pnpm -r run build
+}
+
+cmd_launch() {
+  local mode=documented
+  case ${1:-} in
+    --ipv4first) mode=ipv4first ;;
+    "") ;;
+    *) die "launch: unknown option $1" ;;
+  esac
+  mkdir -p "$EGV_ROOT"
+  local r listeners rc=0
+  r=$(run_dir)
+  if [ -n "$r" ] && instance_alive "$r"; then die "run $(basename "$r") already has a live instance (pid $(cat "$r/state/server.pid")); run: control-example stop"; fi
+  listeners=$(port_listeners) || rc=$?
+  [ "$rc" -eq 0 ] || die "cannot inspect port $PORT; refusing to launch blind"
+  [ -z "$listeners" ] || die "port $PORT is already in use (pid address: $listeners). It is not ours; do not stop it to make room."
+  if ! stale_report; then die "build output is stale; run: control-example build"; fi
+
+  r=$(ensure_run)
+  local st=$r/state log=$r/evidence/server.log
+  mkdir -p "$st"
+  rm -f "$st/server.pid" "$st/server.start" "$st/exit_code"
+  echo "=== launch mode=$mode at $(date -u +%FT%TZ) git=$(git -C "$REPO" rev-parse --short HEAD)" >>"$log"
+  log_size "$log" >"$st/log_offset"
+  echo "$mode" >"$st/mode"
+  local node_opts=${NODE_OPTIONS:-}
+  if [ "$mode" = ipv4first ]; then node_opts="${node_opts:+$node_opts }--dns-result-order=ipv4first"; fi
+  # setsid detaches the server from this shell; the wrapper sh records node's pid and exit code.
+  (
+    cd "$EXAMPLE"
+    NODE_OPTIONS=$node_opts setsid sh -c 'node dist/server.js </dev/null >>"$1" 2>&1 &
+echo $! >"$2"
+wait $!
+echo $? >"$3"' sh "$log" "$st/server.pid" "$st/exit_code" </dev/null >/dev/null 2>&1 &
+  )
+  local i pid=""
+  for i in $(seq 1 50); do
+    if [ -s "$st/server.pid" ]; then break; fi
+    sleep 0.1
+  done
+  pid=$(cat "$st/server.pid" 2>/dev/null || true)
+  [ -n "$pid" ] || die "the server did not start (no pid recorded)"
+  proc_start "$pid" >"$st/server.start"
+
+  local off ready=0
+  off=$(cat "$st/log_offset")
+  for i in $(seq 1 150); do
+    if ! instance_alive "$r"; then
+      echo "control-example: the server exited during startup (exit code $(cat "$st/exit_code" 2>/dev/null || echo unknown)). Log:" >&2
+      tail -c +"$((off + 1))" "$log" | tail -n 25 >&2
+      exit 1
+    fi
+    if tail -c +"$((off + 1))" "$log" | grep -qF "$READY_LINE" && port_listeners | grep -q "^$pid "; then
+      ready=1
+      break
+    fi
+    sleep 0.2
+  done
+  if [ "$ready" -ne 1 ]; then
+    echo "control-example: not ready after 30s; stopping it" >&2
+    cmd_stop >&2 || true
+    exit 1
+  fi
+
+  # Ready means usable: one real RPC must succeed before anyone drives this instance.
+  local probe_rc=0 rf
+  do_call "$r" connect GetGreeting '{"name":"readiness-probe"}' readiness >/dev/null || probe_rc=$?
+  rf=$(find "$r/evidence" -maxdepth 1 -name '*-readiness.txt' | sort | tail -n 1)
+  if [ "$probe_rc" -ne 0 ] || ! grep -q '^http_status=200$' "$rf" || ! grep -q 'readiness-probe' "$rf"; then
+    echo "control-example: readiness RPC failed; see $rf" >&2
+    cmd_stop >&2 || true
+    exit 1
+  fi
+
+  echo "launched: pid=$pid mode=$mode listening on: $(port_listeners | awk '{print $2}' | sort -u | paste -sd, -)"
+  echo "run:      $r"
+  echo "evidence: $r/evidence"
+}
+
+cmd_doctor() {
+  local r ok=1 pid st log off
+  r=$(run_dir)
+  [ -n "$r" ] && [ -d "$r" ] || { echo "FAIL no current run; run: control-example launch"; return 1; }
+  st=$r/state
+  log=$r/evidence/server.log
+  echo "run: $r"
+  if instance_alive "$r"; then
+    pid=$(cat "$st/server.pid")
+    echo "OK   instance alive: pid $pid, start time matches the launch record"
+  else
+    echo "FAIL no live instance from this run (recorded exit code: $(cat "$st/exit_code" 2>/dev/null || echo none))"
+    return 1
+  fi
+  local cmdline cwd
+  cmdline=$(tr '\0' ' ' <"/proc/$pid/cmdline" | sed 's/ $//')
+  cwd=$(readlink "/proc/$pid/cwd" || true)
+  if [ "$cmdline" = "node dist/server.js" ] && [ "$cwd" = "$EXAMPLE" ]; then
+    echo "OK   process is \`$cmdline\` in packages/example"
+  else
+    echo "FAIL process is \`$cmdline\` in $cwd"
+    ok=0
+  fi
+  off=$(cat "$st/log_offset" 2>/dev/null || echo 0)
+  if tail -c +"$((off + 1))" "$log" | grep -qF "$READY_LINE"; then echo "OK   log has: $READY_LINE"; else
+    echo "FAIL log lacks the ready line"
+    ok=0
+  fi
+  local listeners rc=0
+  listeners=$(port_listeners) || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    echo "FAIL cannot inspect port $PORT"
+    ok=0
+  elif [ -z "$listeners" ]; then
+    echo "FAIL nothing listens on port $PORT"
+    ok=0
+  elif echo "$listeners" | awk -v p="$pid" '$1 != p { bad = 1 } END { exit bad }'; then
+    echo "OK   port $PORT is ours, listening on: $(echo "$listeners" | awk '{print $2}' | sort -u | paste -sd, -)"
+  else
+    echo "FAIL port $PORT has listeners we did not start: $listeners"
+    ok=0
+  fi
+  echo "INFO launch mode: $(cat "$st/mode")"
+  local stale
+  stale=$(stale_report || true)
+  if [ -z "$stale" ]; then echo "OK   build output is current"; else
+    echo "$stale" | sed 's/^/FAIL /'
+    ok=0
+  fi
+  local head_now dirty_now last_launch
+  head_now=$(git -C "$REPO" rev-parse --short HEAD)
+  dirty_now=$(git -C "$REPO" status --porcelain | wc -l | tr -d ' ')
+  last_launch=$(grep '^=== launch' "$log" | tail -n 1 || true)
+  case $last_launch in
+    *"git=$head_now"*) ;;
+    *) echo "WARN HEAD moved since launch (now $head_now); rebuild and relaunch" ;;
+  esac
+  echo "INFO working tree: $dirty_now changed paths (run.txt recorded $(sed -n 's/^git_dirty_files=//p' "$r/evidence/run.txt") at run start)"
+  local crashes
+  crashes=$(tail -c +"$((off + 1))" "$log" | grep -cE 'TypeError|Error \[ERR_|Uncaught' || true)
+  if [ "$crashes" -gt 0 ]; then echo "WARN $crashes error lines in this instance's log since launch"; fi
+  [ "$ok" -eq 1 ]
+}
+
+cmd_call() {
+  local r proto=${1:-} method=${2:-} json=${3:-'{"name":"verify"}'}
+  [ -n "$proto" ] && [ -n "$method" ] || die "usage: control-example call <connect|grpc|http1> <Method> [json]"
+  r=$(require_instance)
+  do_call "$r" "$proto" "$method" "$json"
+}
+
+cmd_client() {
+  local r
+  r=$(require_instance)
+  run_node_driver "$r" example-client "example client: node dist/client.js" node dist/client.js
+}
+
+cmd_probe() {
+  local r method=${1:-} name=${2:-verify} url=${3:-$BASE_URL}
+  case $method in getGreeting | faceTheError) ;; *) die "usage: control-example probe <getGreeting|faceTheError> [name] [url]" ;; esac
+  r=$(require_instance)
+  export PROBE_URL=$url PROBE_METHOD=$method PROBE_NAME=$name
+  run_node_driver "$r" "probe-$method" "effect client probe: $method name=$name url=$url" \
+    sh -c 'node --input-type=module <"$1"' sh "$SCRIPT_DIR/effect-client-probe.mjs"
+}
+
+cmd_codegen() {
+  local r f g pkg rc=0
+  r=$(ensure_run)
+  f=$(next_evidence "$r" codegen)
+  {
+    echo "# codegen at $(date -u +%FT%TZ): pnpm -r run build (each package build regenerates its bindings)"
+    (cd "$REPO" && pnpm -r run build) 2>&1 || rc=$?
+    echo "build_exit_code=$rc"
+    for pkg in "$EXAMPLE" "$E2E"; do
+      echo "## generated files in ${pkg#"$REPO/"}"
+      (cd "$pkg" && find src/generated -type f | sort) || echo "(none: src/generated is missing)"
+      while IFS= read -r g; do
+        echo "## exports of ${g#"$REPO/"}"
+        grep -oE '^export (const|function|type|interface) [A-Za-z0-9_]+' "$g" | awk '{print $3}' | sort -u || true
+      done < <(find "$pkg/src/generated" -name '*_effect.ts' 2>/dev/null | sort)
+    done
+    echo "## runtime type of the typed-tag factories (packages/example/dist)"
+    (cd "$EXAMPLE" && node --input-type=module -e 'const m = await import("./dist/generated/com/example/v1/hello_world_api_effect.js"); console.log("typeof HelloWorldAPIClientTag =", typeof m.HelloWorldAPIClientTag); console.log("typeof HelloWorldAPIServiceTag =", typeof m.HelloWorldAPIServiceTag)') 2>&1 || echo "(could not import the generated module)"
+  } >"$f"
+  show "$f"
+  return "$rc"
+}
+
+cmd_hostile_authority() {
+  local r log f off rc=0 status="" out err i alive=no
+  r=$(require_instance)
+  log=$r/evidence/server.log
+  f=$(next_evidence "$r" hostile-authority)
+  off=$(log_size "$log")
+  out=$(mktemp)
+  err=$(mktemp)
+  status=$(timeout 15 curl -sS --http2-prior-knowledge -H "Host: ::1:$PORT" -H 'content-type: application/json' \
+    --data '{"name":"hostile"}' -o "$out" -w '%{http_code}' "$BASE_URL/$SVC/GetGreeting" 2>"$err") || rc=$?
+  for i in $(seq 1 10); do
+    instance_alive "$r" || break
+    sleep 0.3
+  done
+  if instance_alive "$r"; then alive=yes; fi
+  {
+    echo "# hostile-authority at $(date -u +%FT%TZ): one request whose :authority is the unbracketed IPv6 literal ::1:$PORT"
+    echo "\$ curl -sS --http2-prior-knowledge -H 'Host: ::1:$PORT' -H 'content-type: application/json' --data '{\"name\":\"hostile\"}' $BASE_URL/$SVC/GetGreeting"
+    echo "curl_exit_code=$rc"
+    echo "http_status=$status"
+    echo "server_alive_after=$alive"
+    if [ "$alive" = no ]; then echo "server_exit_code=$(cat "$r/state/exit_code" 2>/dev/null || echo unknown)"; fi
+    echo "verdict=$([ "$alive" = yes ] && echo PASS || echo FAIL)"
+    echo "--- response body"
+    cat "$out"
+    echo
+    echo "--- curl stderr"
+    cat "$err"
+    echo "--- server log lines written during this request"
+    tail -c +"$((off + 1))" "$log"
+  } >"$f"
+  rm -f "$out" "$err"
+  show "$f"
+  [ "$alive" = yes ]
+}
+
+cmd_stop() {
+  local r st log pid f off i graceful=yes code
+  r=$(run_dir)
+  [ -n "$r" ] || { echo "no current run"; return 0; }
+  st=$r/state
+  log=$r/evidence/server.log
+  if ! instance_alive "$r"; then
+    echo "no live instance in run $(basename "$r") (already stopped or crashed; recorded exit code: $(cat "$st/exit_code" 2>/dev/null || echo none))"
+    rm -f "$st/server.pid" "$st/server.start"
+    return 0
+  fi
+  pid=$(cat "$st/server.pid")
+  f=$(next_evidence "$r" stop)
+  off=$(log_size "$log")
+  kill -TERM "$pid"
+  for i in $(seq 1 50); do
+    instance_alive "$r" || break
+    sleep 0.2
+  done
+  if instance_alive "$r"; then
+    graceful=no
+    kill -KILL "$pid"
+  fi
+  for i in $(seq 1 25); do
+    if [ -s "$st/exit_code" ]; then break; fi
+    sleep 0.2
+  done
+  code=$(cat "$st/exit_code" 2>/dev/null || echo unknown)
+  {
+    echo "# stop at $(date -u +%FT%TZ): SIGTERM to pid $pid (identity checked by start time)"
+    echo "graceful=$graceful"
+    echo "exit_code=$code"
+    echo "port_${PORT}_listeners_after=$(port_listeners | paste -sd, - || echo unknown)"
+    echo "--- server log lines written during shutdown"
+    tail -c +"$((off + 1))" "$log"
+  } >"$f"
+  rm -f "$st/server.pid" "$st/server.start"
+  show "$f"
+  [ "$graceful" = yes ]
+}
+
+cmd_cleanup() {
+  local r
+  r=$(run_dir)
+  if [ -z "$r" ]; then
+    echo "nothing to clean up"
+    return 0
+  fi
+  if instance_alive "$r"; then cmd_stop || true; fi
+  rm -rf "$r/state"
+  rm -f "$CURRENT"
+  echo "cleaned up run $(basename "$r"); evidence kept at $r/evidence:"
+  ls -1 "$r/evidence"
+}
+
+cmd_evidence() {
+  local r
+  r=$(run_dir)
+  [ -n "$r" ] || die "no current run"
+  echo "$r/evidence"
+  ls -1 "$r/evidence"
+}
+
+usage() { sed -n '4,20p' "$0" | sed 's/^# \{0,1\}//'; }
+
+main() {
+  local cmd=${1:-help}
+  shift || true
+  case $cmd in
+    build) cmd_build "$@" ;;
+    launch) cmd_launch "$@" ;;
+    doctor) cmd_doctor "$@" ;;
+    call) cmd_call "$@" ;;
+    client) cmd_client "$@" ;;
+    probe) cmd_probe "$@" ;;
+    codegen) cmd_codegen "$@" ;;
+    hostile-authority) cmd_hostile_authority "$@" ;;
+    stop) cmd_stop "$@" ;;
+    cleanup) cmd_cleanup "$@" ;;
+    evidence) cmd_evidence "$@" ;;
+    help | -h | --help) usage ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
+}
+
+main "$@"
