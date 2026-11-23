@@ -43,8 +43,13 @@
   "devDependencies": {
     "@bufbuild/buf": "catalog:",
     "@bufbuild/protoc-gen-es": "catalog:",
+    "@effect/cluster": "catalog:",
+    "@effect/experimental": "catalog:",
     "@effect/platform": "catalog:",
     "@effect/platform-node": "catalog:",
+    "@effect/rpc": "catalog:",
+    "@effect/sql": "catalog:",
+    "@effect/workflow": "catalog:",
     "effect": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
