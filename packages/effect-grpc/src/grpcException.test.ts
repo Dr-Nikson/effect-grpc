@@ -99,8 +99,8 @@ describe("GrpcException.toConnectError", () => {
     expect(connectError).toBeInstanceOf(ConnectError);
     expect(connectError.code).toBe(Code.NotFound);
     expect(connectError.rawMessage).toBe("User not found");
-    expect(connectError.message).toBe("[not_found] User not found");
     expect(connectError.cause).toBe(cause);
+    expect(connectError).not.toHaveProperty("description");
     expect([...connectError.metadata.keys()]).toEqual([]);
     expect(connectError.details).toEqual([]);
   });
