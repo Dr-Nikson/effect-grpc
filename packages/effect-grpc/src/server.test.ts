@@ -698,7 +698,7 @@ describe("GrpcServer at shutdown", () => {
       }).pipe(Effect.scoped, Effect.runPromise),
   );
 
-  it("lets the call in flight finish, refuses the next call once the client reads GOAWAY, and stops when the call ends", () =>
+  it("sends GOAWAY while a call runs, lets the call finish, refuses the next call, and stops when the call ends", () =>
     Effect.gen(function* () {
       const handlerStarted = yield* Deferred.make<void>();
       const goaway = yield* Deferred.make<void>();
@@ -720,7 +720,15 @@ describe("GrpcServer at shutdown", () => {
         createGrpcTransport({ baseUrl: address.url, sessionManager }),
       );
 
-      const inFlight = yield* Effect.forkChild(answerOf(() => client.ping({})));
+      const inFlight = yield* Effect.forkChild(
+        answerOf(() => client.ping({})).pipe(
+          Effect.flatMap((answer) =>
+            Deferred.isDone(goaway).pipe(
+              Effect.map((goawayCameFirst) => ({ answer, goawayCameFirst })),
+            ),
+          ),
+        ),
+      );
       yield* Deferred.await(handlerStarted);
       const stopping = yield* Effect.forkDetach(Scope.close(serverScope, Exit.void));
       const toldToStop = yield* Deferred.await(goaway).pipe(Effect.timeoutOption("1 second"));
@@ -730,7 +738,7 @@ describe("GrpcServer at shutdown", () => {
 
       expect(Option.isSome(toldToStop), "the client got GOAWAY within one second").toBe(true);
       expect({ callInFlight, callAfterGoaway }).toEqual({
-        callInFlight: "OK",
+        callInFlight: { answer: "OK", goawayCameFirst: true },
         callAfterGoaway: "Unavailable",
       });
       expect(
