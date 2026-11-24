@@ -3,7 +3,7 @@
 const TAG_GRAMMAR = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const TAG_MAX_LENGTH = 32;
 const RELEASE_DIST_TAGS = new Set(["latest", "alpha"]);
-const SEMVER_RANGE = /^v?(?:x|[0-9]+)$/;
+const SEMVER_RANGE = /^v*(?:x|[0-9]+)$/;
 const CI_WORKFLOW = "typescript-ci.yml";
 
 /** @typedef {"command" | "tag" | "fork" | "ci" | "artifact"} Refusal */
