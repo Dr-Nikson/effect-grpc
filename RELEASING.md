@@ -179,7 +179,7 @@ The next "Version Packages" PR will create the stable version (e.g., `0.2.0`).
 
 For testing changes in consuming projects before official release.
 
-A snapshot version has the form `0.0.0-<tag>-<commit sha>`. It sorts below every 3.x release, so a range such as `^3.0.0-alpha.5` never matches a snapshot from this workflow. Two older snapshots from before this workflow, `3.0.0-mvp-87283f517fd15c8199f5ba251bf74e2503cd0baf` and `3.0.0-mvp-e2b78b1c4be4bb339577d68dfce008ef1b56218c`, do match that range. Install a snapshot by its tag or by its exact version:
+A snapshot version has the form `0.0.0-<tag>-<commit sha>`. It sorts below every 3.x release, so a range such as `^3.0.0-alpha.5` never matches a snapshot from this workflow. Two older snapshots from an earlier version of this workflow, `3.0.0-mvp-87283f517fd15c8199f5ba251bf74e2503cd0baf` and `3.0.0-mvp-e2b78b1c4be4bb339577d68dfce008ef1b56218c`, do match that range. Install a snapshot by its tag or by its exact version:
 
 ```bash
 pnpm add @dr_nikson/effect-grpc@pr-123
