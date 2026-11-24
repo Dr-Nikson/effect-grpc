@@ -1,8 +1,10 @@
+// packages/example/src/client.ts
 import { Effect, Layer, LogLevel, Logger } from "effect";
 
 import { EffectGrpcClient } from "@dr_nikson/effect-grpc";
 import { NodeRuntime } from "@effect/platform-node";
 
+import * as address from "./address.js";
 import * as effectProto from "./generated/com/example/v1/hello_world_api_effect.js";
 
 const HelloWorldAPIClientTag = effectProto.HelloWorldAPIClientTag<object>("{}");
@@ -10,12 +12,14 @@ type HelloWorldAPIClientTag = typeof HelloWorldAPIClientTag;
 
 const debugApiClientLayer = effectProto.helloWorldAPIClientLiveLayer(HelloWorldAPIClientTag).pipe(
   Layer.provideMerge(
-    // We provide config for local deployment http://localhost:8000
-    Layer.succeed(
+    // We provide config for local deployment: the address the example server binds
+    Layer.effect(
       effectProto.HelloWorldAPIConfigTag,
-      EffectGrpcClient.GrpcClientConfig({
-        baseUrl: new URL("http://localhost:8000"),
-      }),
+      Effect.map(address.port, (port) =>
+        EffectGrpcClient.GrpcClientConfig({
+          baseUrl: new URL(`http://${address.host}:${port}`),
+        }),
+      ),
     ),
   ),
 );

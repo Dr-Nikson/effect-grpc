@@ -1,9 +1,11 @@
+// packages/example/src/server.ts
 import { Context, Effect, Layer, LogLevel, Logger } from "effect";
 
 import { Code } from "@connectrpc/connect";
 import { EffectGrpcServer, GrpcException } from "@dr_nikson/effect-grpc";
 import { NodeRuntime } from "@effect/platform-node";
 
+import * as address from "./address.js";
 import * as effectProto from "./generated/com/example/v1/hello_world_api_effect.js";
 import * as proto from "./generated/com/example/v1/hello_world_api_pb.js";
 
@@ -49,11 +51,9 @@ function gRpcServer(): Effect.Effect<
 
 const prog = Effect.gen(function* () {
   const server = yield* gRpcServer();
+  const port = yield* address.port;
 
-  return yield* server.run({
-    host: "localhost",
-    port: 8000,
-  });
+  return yield* server.run({ host: address.host, port });
 });
 
 const layer = Layer.empty.pipe(
