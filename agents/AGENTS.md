@@ -113,6 +113,7 @@ IMPORTANT: refer to the best practices and coding standards described in @agents
   pnpm run test:types # Uses vitest --typecheck.only
   ```
 - The library's runtime unit tests live in `packages/effect-grpc/src/**/*.test.ts`. The build leaves them out of `dist/`, and CI runs them through `pnpm -r run test`. From another directory, run them with `pnpm --dir <checkout>/packages/effect-grpc run test`.
+- The README check type-checks every TypeScript block in `README.md` against code generated from the README's own `.proto` blocks. Run it after `build:recur` with `pnpm --dir <checkout> run test:readme`. `pnpm -r run test:types` runs it too, as `packages/e2e-tests`'s `test:types`, so CI and every gate run it. Its rules are in the header of `packages/e2e-tests/readme/check-readme.mjs`: a block whose first line is a path comment becomes that file, a block whose path is under `src/generated/` must match the generated declarations, and every other TypeScript block is its own module that imports what it uses and declares what it does not build. Declare a package that README examples import but no workspace installs in `packages/e2e-tests/readme/modules.d.ts`.
 
 ### GitHub Workflows
 - After changing `.github/workflows` or `.github/scripts`, run both checks from the root. Each must pass:
