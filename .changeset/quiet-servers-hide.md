@@ -8,11 +8,11 @@ The server no longer prints a line for every request, connection, session and st
 
 An HTTP/2 CONNECT request now gets Node's 405 response. Before, a debug listener marked it as handled, so the request never got an answer and its stream stayed open.
 
-An error that the HTTP/2 server emits after it starts listening, for example EMFILE when it fails to accept a connection, is logged through the Effect logger as `gRPC server error`, and the process keeps running. A bind failure still fails `listen` with `GrpcServerBindError` and is not logged a second time.
+An error that the HTTP/2 server emits after it starts listening, such as a failed accept of an incoming connection, is logged through the Effect logger as `gRPC server error`, and the process keeps running. A bind failure still fails `listen` with `GrpcServerBindError` and is not logged a second time.
 
 **Breaking.** `GrpcServerBuilder` no longer lists its implementation fields `transformCtx` and `services`. The interface has only `withContextTransformer`, `withService` and `build`.
 
-**Breaking.** Public types no longer use `any`, which tightens two bounds. `GrpcService` takes a `Proto` that extends `GenService<GenServiceMethods>` instead of `GenService<any>`, and `withService` takes a `GrpcService<unknown, GenService<GenServiceMethods>, Ctx>`. A service that generated code produces still fits. `ConcatServiceTags` and `UniqueTag` take any type that has a `_Tag`, and `GrpcClientRuntime#makeExecutor` takes a `GrpcClientConfig<never>`, which every `GrpcClientConfig<Service>` fits.
+**Breaking.** `GrpcService`, `withService`, `ConcatServiceTags`, `UniqueTag` and `GrpcClientRuntime#makeExecutor` no longer use `any`, which tightens two bounds. `GrpcService` takes a `Proto` that extends `GenService<GenServiceMethods>` instead of `GenService<any>`, and `withService` takes a `GrpcService<unknown, GenService<GenServiceMethods>, Ctx>`. A service that generated code produces still fits. `ConcatServiceTags` and `UniqueTag` take any type that has a `_Tag`, and `GrpcClientRuntime#makeExecutor` takes a `GrpcClientConfig<never>`, which every `GrpcClientConfig<Service>` fits.
 
 `EffectGrpcServer.ServerExecutor` and `EffectGrpcClient.ClientExecutor` are now exported types. Before, the signatures of `GrpcService` and `GrpcClientRuntime#makeExecutor` named them, but nothing exported them, so a consumer could not write them down.
 
