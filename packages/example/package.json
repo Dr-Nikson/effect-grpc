@@ -8,9 +8,7 @@
     "compile": "tsc --build tsconfig.json",
     "clean": "rm -rf ./dist ./tsconfig.tsbuildinfo",
     "generate:proto": "pnpm buf generate",
-    "build": "pnpm run clean && pnpm run generate:proto && pnpm run compile",
-    "test": "echo \"No test specified\" && exit 0",
-    "test:types": "echo \"No test specified\" && exit 0"
+    "build": "pnpm run clean && pnpm run generate:proto && pnpm run compile"
   },
   "dependencies": {
     "effect": "catalog:",
