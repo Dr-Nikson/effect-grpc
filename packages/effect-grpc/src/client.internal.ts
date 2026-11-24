@@ -40,12 +40,7 @@ function createManagedSessionManager(config: T.GrpcClientConfig<any>) {
     Effect.sync(
       () => new Http2SessionManager(config.baseUrl, config.pingOptions, config.http2SessionOptions),
     ),
-    (sessionManager) =>
-      Effect.gen(function* () {
-        yield* Effect.logInfo("ManagedSessionManager is being released...");
-
-        return yield* Effect.sync(() => sessionManager.abort());
-      }),
+    (sessionManager) => Effect.sync(() => sessionManager.abort()),
   );
 }
 
@@ -164,10 +159,9 @@ function makeExecutorMethod<Shape extends GenServiceMethods>(
         },
       })(function* (req: any, opts: T.RequestMeta) {
         const baseHeaders = opts.headers ?? new Headers();
-        const headers = yield* Effect.currentSpan.pipe(
-          Effect.map((span) => injectTraceContext(span, baseHeaders)),
-          Effect.catchAll(() => Effect.succeed(baseHeaders)),
-        );
+        // Effect.fn runs this body inside the span it creates, so currentSpan cannot fail.
+        const span = yield* Effect.orDie(Effect.currentSpan);
+        const headers = injectTraceContext(span, baseHeaders);
 
         return yield* Effect.promise((signal) => {
           const clientMethod = client[methodName].bind(client) as UnaryFn<any, any>;
