@@ -1,5 +1,8 @@
 // packages/effect-grpc/src/server.ts
-import { Data, Effect, Scope, Types } from "effect";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Scope from "effect/Scope";
+import * as Types from "effect/Types";
 
 import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
 import type { HandlerContext, ServiceImpl } from "@connectrpc/connect";

@@ -1,6 +1,6 @@
 // packages/effect-grpc/src/index.test-d.ts
-import { Effect } from "effect";
-import type { Scope } from "effect";
+import * as Effect from "effect/Effect";
+import type * as Scope from "effect/Scope";
 import { expectTypeOf, test } from "vitest";
 
 import type { GenService } from "@bufbuild/protobuf/codegenv2";

@@ -1,5 +1,6 @@
 // packages/e2e-tests/src/typed-tags.test.ts
-import { Effect, Layer } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 
 import { EffectGrpcClient, EffectGrpcServer } from "@dr_nikson/effect-grpc";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";

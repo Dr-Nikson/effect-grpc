@@ -1,5 +1,6 @@
 // packages/effect-grpc/src/server.test-d.ts
-import { Effect, Scope } from "effect";
+import * as Effect from "effect/Effect";
+import * as Scope from "effect/Scope";
 import { assertType, expectTypeOf, test } from "vitest";
 
 import type { HandlerContext } from "@connectrpc/connect";

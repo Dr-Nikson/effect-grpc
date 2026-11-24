@@ -1,5 +1,8 @@
 // packages/e2e-tests/src/hostile-requests.test.ts
-import { Cause, Effect, Exit, Layer } from "effect";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
 import http2 from "node:http2";
 import net from "node:net";
 

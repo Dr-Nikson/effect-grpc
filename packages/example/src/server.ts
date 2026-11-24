@@ -1,9 +1,13 @@
 // packages/example/src/server.ts
-import { Context, Effect, Layer, LogLevel, Logger } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as LogLevel from "effect/LogLevel";
+import * as Logger from "effect/Logger";
 
+import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import { Code } from "@connectrpc/connect";
 import { EffectGrpcServer, GrpcException } from "@dr_nikson/effect-grpc";
-import { NodeRuntime } from "@effect/platform-node";
 
 import * as address from "./address.js";
 import * as effectProto from "./generated/com/example/v1/hello_world_api_effect.js";

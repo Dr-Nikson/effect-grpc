@@ -1,5 +1,6 @@
 // packages/e2e-tests/src/test-fixtures.ts
-import { Effect, Layer } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 
 import { Code } from "@connectrpc/connect";
 import { EffectGrpcClient, EffectGrpcServer, GrpcException } from "@dr_nikson/effect-grpc";

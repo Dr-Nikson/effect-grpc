@@ -1,5 +1,8 @@
 // packages/effect-grpc/src/client.test-d.ts
-import { Context, Effect, Layer, Scope } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
 import { expectTypeOf, test } from "vitest";
 
 import type { Message, MessageInitShape } from "@bufbuild/protobuf";

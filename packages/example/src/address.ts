@@ -1,5 +1,5 @@
 // packages/example/src/address.ts
-import { Config } from "effect";
+import * as Config from "effect/Config";
 
 /**
  * An IP address rather than `localhost`, because Node can bind `localhost` to `::1` alone while a

@@ -1,6 +1,11 @@
 // packages/effect-grpc/src/protoRuntime.test.ts
-import { Cause, Deferred, Effect, Exit, LogLevel, Logger } from "effect";
-import type { Scope } from "effect";
+import * as Cause from "effect/Cause";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as LogLevel from "effect/LogLevel";
+import * as Logger from "effect/Logger";
+import type * as Scope from "effect/Scope";
 import http2 from "node:http2";
 import net from "node:net";
 import { describe, expect, it } from "vitest";
