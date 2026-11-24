@@ -9,9 +9,13 @@ import type {
   HandlerContext,
   ServiceImpl,
 } from "@connectrpc/connect";
-import { Code, createContextValues } from "@connectrpc/connect";
-import type { ConnectNodeAdapterOptions } from "@connectrpc/connect-node";
-import { connectNodeAdapter } from "@connectrpc/connect-node";
+import { Code, createConnectRouter, createContextValues } from "@connectrpc/connect";
+import {
+  compressionBrotli,
+  compressionGzip,
+  universalRequestFromNodeRequest,
+  universalResponseToNodeResponse,
+} from "@connectrpc/connect-node";
 
 import * as GrpcException from "./grpcException.js";
 import * as ProtoRuntime from "./protoRuntime.js";
@@ -95,28 +99,71 @@ const refuseMalformedAuthority = (
 };
 
 /**
+ * Connect stops reading a request it refuses, and Node then stops granting the client window to
+ * send the rest. A Node client keeps those bytes queued, and Node never returns their memory, even
+ * when the stream is reset. Past the session's memory limit, the client rejects every response.
+ */
+const uploadEnded = (upload: http2.ServerHttp2Stream): Promise<void> => {
+  if (upload.readableEnded || upload.destroyed) return Promise.resolve();
+  // Node's compat layer would push each chunk into the request and pause the stream again.
+  upload.removeAllListeners("data");
+  upload.resume();
+  return new Promise((resolve) => upload.once("end", resolve));
+};
+
+/**
  * connect-node builds each request's URL from its authority synchronously inside the listener, and
  * Node turns a throw there into an uncaught exception that stops the process.
+ *
+ * The listener routes with the functions connectNodeAdapter is built from, so that it can hold an
+ * answer. A client of a unary or server-streaming method sends its one message without waiting, and
+ * Node's client rejects response headers while too much of its upload is still queued, so those
+ * answers leave only after the upload has ended. A streaming client may wait for the answer.
  */
-const makeRequestListener = (
-  options: Pick<ConnectNodeAdapterOptions, "routes" | "interceptors" | "contextValues">,
-): RequestListener => {
-  const handler = connectNodeAdapter({
-    ...options,
+const makeRequestListener = (options: {
+  readonly routes: (router: ConnectRouter) => ConnectRouter;
+  readonly contextValues: (req: http2.Http2ServerRequest) => ContextValues;
+}): RequestListener => {
+  const router = createConnectRouter({
+    acceptCompression: [compressionGzip, compressionBrotli],
     readMaxBytes: grpcDefaultMaxReceiveMessageBytes,
   });
+  options.routes(router);
+  const handlers = new Map(router.handlers.map((handler) => [handler.requestPath, handler]));
   return (req, res) => {
+    const resetStream = () => res.stream.close(http2.constants.NGHTTP2_INTERNAL_ERROR);
     try {
+      const handler = handlers.get(req.url.split("?", 1)[0] ?? "");
+      const sendsOneMessage =
+        handler?.method.methodKind === "unary" || handler?.method.methodKind === "server_streaming";
+      const answer = (send: () => unknown): void => {
+        void (sendsOneMessage ? uploadEnded(req.stream) : Promise.resolve())
+          .then(send)
+          .catch(resetStream);
+      };
       const authority = readAuthority(req.authority);
       if (authority === undefined) {
-        refuseMalformedAuthority(req, res);
+        answer(() => refuseMalformedAuthority(req, res));
         return;
       }
       // Connect reads req.authority, and Node's getter returns this header first.
       if (authority !== req.authority) req.headers[":authority"] = authority;
-      handler(req, res);
+      if (handler === undefined) {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
+      const request = universalRequestFromNodeRequest(
+        req,
+        res,
+        undefined,
+        options.contextValues(req),
+      );
+      void handler(request)
+        .then((response) => answer(() => universalResponseToNodeResponse(response, res)))
+        .catch(resetStream);
     } catch {
-      res.stream.close(http2.constants.NGHTTP2_INTERNAL_ERROR);
+      resetStream();
     }
   };
 };
@@ -145,7 +192,6 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
       const handler = yield* Effect.sync(() =>
         makeRequestListener({
           routes: routes(executor),
-          interceptors: [],
           contextValues(req): ContextValues {
             // TODO: implement proper request transformations
             console.log("Creating context values for request", req.url);
