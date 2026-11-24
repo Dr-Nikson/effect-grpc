@@ -26,7 +26,7 @@ Preconditions:
 - **Names.** Read the `## exports of …hello_world_api_effect.ts` section of the same file. It lists exactly the eleven `gen-names` exports.
 - **No duplicate suffix.** Read the `## exports of …naming_test_service_effect.ts` section. It lists the `gen-suffix` names, and no line contains `ServiceService`.
 - **Compiles.** The build in the same file compiled `packages/example` and `packages/e2e-tests` against the new bindings, so `build_exit_code=0` covers it.
-- **Typed tags work.** Read the `## typed tags in packages/example/dist` section. Pass: three `PASS` lines, `keys: service=com.example.v1.HelloWorldAPI/Service client=com.example.v1.HelloWorldAPI/Client`, `verdict=PASS` and `typed_tags_exit_code=0`. The command exits non-zero when the build or this check fails.
+- **Typed tags work.** Read the `## typed tags in packages/example/dist` section. Pass: four `PASS` lines, `keys: service=com.example.v1.HelloWorldAPI/Service client=com.example.v1.HelloWorldAPI/Client`, `verdict=PASS` and `typed_tags_exit_code=0`. The command exits non-zero when the build or this check fails.
 
 ## Gotchas
 
