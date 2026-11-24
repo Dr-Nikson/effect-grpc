@@ -391,8 +391,7 @@ export class ConnectEsGprcServerBuilder<Ctx, Services>
     return new ConnectEsGprcServerBuilder<unknown, never>(() => Effect.succeed(undefined), {});
   }
 
-  withContextTransformer<This extends T.GrpcServerBuilder<Ctx, Services>, Ctx1>(
-    this: This,
+  withContextTransformer<Ctx1>(
     f: (originalCtx: HandlerContext, ctx: Ctx) => Effect.Effect<Ctx1, GrpcException.GrpcException>,
   ): T.GrpcServerBuilder<Ctx1, never> {
     return new ConnectEsGprcServerBuilder<Ctx1, never>(
@@ -411,7 +410,7 @@ export class ConnectEsGprcServerBuilder<Ctx, Services>
     });
   }
 
-  build<This extends T.GrpcServerBuilder<Ctx, Services>>(this: This): T.GrpcServer<Services> {
+  build(): T.GrpcServer<Services> {
     const executorTransformation = ProtoRuntime.ServerExecutorTransformer().transformContext<Ctx>(
       this.transformCtx,
     );
