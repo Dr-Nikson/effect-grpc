@@ -69,6 +69,7 @@ jobs:
       actions: read
       contents: read
       id-token: write # npm trusted publishing with provenance
+      pull-requests: read # changelog-github looks up pull requests
     outputs:
       version: ${{ steps.publish.outputs.version }}
     env:
