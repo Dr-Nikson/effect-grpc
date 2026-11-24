@@ -2,8 +2,6 @@ syntax = "proto3";
 
 package com.example.v1;
 
-// One method of each kind. The tests implement it by hand, because protoc-gen-effect generates
-// unary methods only.
 service StreamingTestService {
   rpc Unary(Chunk) returns (Chunk);
   rpc ServerStream(Chunk) returns (stream Chunk);

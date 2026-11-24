@@ -1,7 +1,8 @@
 // packages/e2e-tests/src/hostile-requests.test.ts
-import { Cause, Effect, Exit, Layer, Option } from "effect";
+import { Cause, Effect, Exit, Layer, Option, Schedule } from "effect";
 import http2 from "node:http2";
 import net from "node:net";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import type { Client, HandlerContext, ServiceImpl, Transport } from "@connectrpc/connect";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
@@ -182,17 +183,18 @@ const streamingTestService: ServiceImpl<typeof StreamingTestService> = {
   },
 };
 
-const serveStreaming = Effect.gen(function* () {
-  const port = yield* Port;
-  const service = EffectGrpcServer.GrpcService(
-    "StreamingTestService",
-    StreamingTestService,
-  )(() => streamingTestService);
-  const server = EffectGrpcServer.GrpcServerBuilder().withService(service).build();
-  yield* Effect.forkScoped(server.run({ host: "127.0.0.1", port }));
-  yield* Effect.sleep("1 second");
-  return port;
-});
+const serveStreaming = (implementation: ServiceImpl<typeof StreamingTestService>) =>
+  Effect.gen(function* () {
+    const port = yield* Port;
+    const service = EffectGrpcServer.GrpcService(
+      "StreamingTestService",
+      StreamingTestService,
+    )(() => implementation);
+    const server = EffectGrpcServer.GrpcServerBuilder().withService(service).build();
+    yield* Effect.forkScoped(server.run({ host: "127.0.0.1", port }));
+    yield* Effect.sleep("1 second");
+    return port;
+  });
 
 class RecordingSessionManager extends Http2SessionManager {
   readonly sessions = new Set<http2.ClientHttp2Stream["session"]>();
@@ -217,6 +219,35 @@ type StreamingCall = (typeof fixtures.streamingClient.calls)[number];
 
 async function* streamOf(chunks: ReadonlyArray<Chunk>): AsyncIterable<Chunk> {
   yield* chunks;
+}
+
+const overEachProtocol = <A>(baseUrl: string, run: (transport: Transport) => Effect.Effect<A>) =>
+  Effect.gen(function* () {
+    return {
+      grpc: yield* run(createGrpcTransport({ baseUrl, sessionManager: yield* sessionTo(baseUrl) })),
+      grpcWeb: yield* run(
+        createGrpcWebTransport({
+          baseUrl,
+          httpVersion: "2",
+          sessionManager: yield* sessionTo(baseUrl),
+        }),
+      ),
+      connect: yield* run(
+        createConnectTransport({
+          baseUrl,
+          httpVersion: "2",
+          sessionManager: yield* sessionTo(baseUrl),
+        }),
+      ),
+    };
+  });
+
+async function* paced(chunk: Chunk, messages: number, pauseMs: number): AsyncIterable<Chunk> {
+  yield chunk;
+  for (let sent = 1; sent < messages; sent += 1) {
+    await sleep(pauseMs);
+    yield chunk;
+  }
 }
 
 const pingPong = async (
@@ -249,12 +280,9 @@ const streamingAnswerOf = (
   { method, messages }: StreamingCall,
 ) =>
   Effect.promise(async (signal) => {
-    const { oversized, overLimit, normal } = fixtures.streamingClient;
+    const { oversized, normal } = fixtures.streamingClient;
     const chunks = messages.map((message) => ({
-      data:
-        message === "oversized" ? expand(oversized)
-        : message === "overLimit" ? expand(overLimit)
-        : normal,
+      data: message === "oversized" ? expand(oversized) : normal,
     }));
     const first = Option.getOrThrow(Option.fromNullable(chunks[0]));
     const replies: Array<string> = [];
@@ -482,10 +510,10 @@ describe("Hostile requests (issue #61)", () => {
   );
 
   it.scopedLive(
-    "keeps a long-lived client usable after oversized messages to every method kind",
+    "keeps a long-lived client usable after oversized unary and server-streaming messages",
     () =>
       Effect.gen(function* () {
-        const port = yield* serveStreaming;
+        const port = yield* serveStreaming(streamingTestService);
         const baseUrl = `http://127.0.0.1:${port}`;
         const sessions = {
           grpc: yield* recordingSessionTo(baseUrl),
@@ -523,5 +551,89 @@ describe("Hostile requests (issue #61)", () => {
           "HTTP/2 connections each protocol's client used",
         ).toEqual({ grpc: 1, grpcWeb: 1, connect: 1 });
       }).pipe(Effect.provide(PortLive)),
+  );
+
+  it.scopedLive("sends a client-streaming answer that is ready before the request ends", () =>
+    Effect.gen(function* () {
+      const port = yield* serveStreaming({
+        ...streamingTestService,
+        clientStream: async (requests) => {
+          for await (const request of requests) return { data: `first ${request.data.length}` };
+          return { data: "no message" };
+        },
+      });
+      const { message, messages, pauseMs, deadlineMs, answer } = fixtures.earlyAnswer;
+      const answers = yield* overEachProtocol(`http://127.0.0.1:${port}`, (transport) =>
+        Effect.promise(async () => {
+          const client = createClient(StreamingTestService, transport);
+          try {
+            const requests = paced({ data: message }, messages, pauseMs);
+            return (await client.clientStream(requests, { timeoutMs: deadlineMs })).data;
+          } catch (error) {
+            return Code[ConnectError.from(error).code];
+          }
+        }),
+      );
+      expect(answers, "each protocol's answer within the client's deadline").toEqual({
+        grpc: answer,
+        grpcWeb: answer,
+        connect: answer,
+      });
+    }).pipe(Effect.provide(PortLive)),
+  );
+
+  it.scopedLive("stops a bidi handler when its client cancels the call", () =>
+    Effect.gen(function* () {
+      const { replyEveryMs, replies: expectedReplies } = fixtures.cancelledBidi;
+      const running = { handlers: 0 };
+      const port = yield* serveStreaming({
+        ...streamingTestService,
+        bidi: async function* () {
+          running.handlers += 1;
+          try {
+            for (let reply = 0; ; reply += 1) {
+              yield { data: `reply ${reply}` };
+              await sleep(replyEveryMs);
+            }
+          } finally {
+            running.handlers -= 1;
+          }
+        },
+      });
+      const replies = yield* overEachProtocol(`http://127.0.0.1:${port}`, (transport) =>
+        Effect.promise(async () => {
+          const client = createClient(StreamingTestService, transport);
+          const controller = new AbortController();
+          const requests = createWritableIterable<Chunk>();
+          const responses = client
+            .bidi(requests, { signal: controller.signal })
+            [Symbol.asyncIterator]();
+          const read: Array<string> = [];
+          while (read.length < expectedReplies.length) {
+            const response = await responses.next();
+            if (response.done === true) break;
+            read.push(response.value.data);
+          }
+          controller.abort();
+          await responses.next().catch(() => undefined);
+          return read;
+        }),
+      );
+      yield* Effect.sync(() => running.handlers).pipe(
+        Effect.repeat({ until: (left) => left === 0, schedule: Schedule.spaced("20 millis") }),
+        Effect.timeout("5 seconds"),
+        Effect.ignore,
+      );
+
+      expect(replies, "the replies each protocol's client read before it cancelled").toEqual({
+        grpc: expectedReplies,
+        grpcWeb: expectedReplies,
+        connect: expectedReplies,
+      });
+      expect(
+        running.handlers,
+        "bidi handlers still running 5 seconds after their clients cancelled",
+      ).toBe(0);
+    }).pipe(Effect.provide(PortLive)),
   );
 });

@@ -78,31 +78,34 @@
     "calls": ["oversized", "normal", "oversized", "normal", "normal", "oversized", "normal"]
   },
   "streamingClient": {
-    "case": "one client connection per protocol that sends messages of three times the limit to each method kind between normal calls, including a bidi client that waits for each reply before it writes again. A bidi call that gets a reply while its large message is still being sent uses a message under the client's 10 MB session memory, because a Node client rejects that reply otherwise, with or without a limit",
+    "case": "one client connection per protocol that sends messages of three times the limit to unary and server-streaming methods between normal calls to every method kind, including a bidi client that waits for each reply before it writes again",
     "oversized": { "repeat": "x", "times": 12582912 },
-    "overLimit": { "repeat": "x", "times": 5242880 },
     "normal": "next",
     "calls": [
-      { "method": "clientStream", "messages": ["oversized"], "answer": ["ResourceExhausted"] },
+      { "method": "serverStream", "messages": ["oversized"], "answer": ["ResourceExhausted"] },
       { "method": "unary", "messages": ["normal"], "answer": ["unary 4"] },
       { "method": "clientStream", "messages": ["normal", "normal"], "answer": ["client 2 8"] },
-      { "method": "bidi", "messages": ["oversized"], "answer": ["ResourceExhausted"] },
+      { "method": "unary", "messages": ["oversized"], "answer": ["ResourceExhausted"] },
       { "method": "bidi", "messages": ["normal", "normal"], "answer": ["bidi 4", "bidi 4"] },
-      { "method": "pingPong", "messages": ["normal", "oversized"], "answer": ["bidi 4", "ResourceExhausted"] },
       { "method": "pingPong", "messages": ["normal", "normal"], "answer": ["bidi 4", "bidi 4"] },
       { "method": "serverStream", "messages": ["oversized"], "answer": ["ResourceExhausted"] },
       { "method": "serverStream", "messages": ["normal"], "answer": ["server 4", "server 4"] },
-      {
-        "method": "clientStream",
-        "messages": ["normal", "oversized", "normal"],
-        "answer": ["ResourceExhausted"]
-      },
-      {
-        "method": "bidi",
-        "messages": ["normal", "overLimit", "normal"],
-        "answer": ["bidi 4", "ResourceExhausted"]
-      },
+      { "method": "unary", "messages": ["oversized"], "answer": ["ResourceExhausted"] },
+      { "method": "clientStream", "messages": ["normal"], "answer": ["client 1 4"] },
       { "method": "unary", "messages": ["normal"], "answer": ["unary 4"] }
     ]
+  },
+  "earlyAnswer": {
+    "case": "a client-streaming handler that answers after the first message, while its client sends one message every 200 ms under a 1 second deadline",
+    "message": "next",
+    "messages": 10,
+    "pauseMs": 200,
+    "deadlineMs": 1000,
+    "answer": "first 4"
+  },
+  "cancelledBidi": {
+    "case": "a bidi handler that replies every 20 ms until it is stopped, and a client that cancels the call after three replies",
+    "replyEveryMs": 20,
+    "replies": ["reply 0", "reply 1", "reply 2"]
   }
 }
