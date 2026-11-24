@@ -43,5 +43,5 @@ Preconditions:
 - Each checkout runs one instance. `launch` lets the OS pick a free port. With `--port`, it refuses when anything listens on that port. Never stop someone else's process to make room. Launch without `--port` instead.
 - On a base without the fix for issue #57, the second server in `taken-port` never gives up on the taken port. It logs `Server error Error: listen EADDRINUSE` and keeps running until `timeout` stops it, so the evidence shows `second_exit_code=124` or `137` and `verdict=FAIL`.
 - The example binds `127.0.0.1` unless it was launched with `--host ::1`. Direct clients dial the address that the instance reports.
-- The server writes no line for a connection, an HTTP/2 session, a stream or a request. A server-log section that holds only the handler's lines is the expected result, and any other line there is a regression.
+- The server writes no line for a connection, an HTTP/2 session, a stream or a request, so any such line in a server-log section is a regression. The handler's lines, the two stop lines and the DEBUG line `Fiber terminated with an unhandled error` of a typed failure (see [error-mapping.md](./error-mapping.md)) are expected there.
 - If launch fails at once with `ERR_PACKAGE_PATH_NOT_EXPORTED … './RunnerStorage'`, the stale-peer problem in SKILL.md (Launch) is back.
