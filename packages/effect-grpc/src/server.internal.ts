@@ -214,7 +214,7 @@ const boundAddress = (server: http2.Http2Server): Effect.Effect<T.GrpcServerAddr
  * The `'error'` listener stays for the life of the server. Node turns an `'error'` event that nobody
  * listens to into an uncaught exception, and `close()` cannot withdraw a bind failure Node already
  * queued. Node reports a bind failure while the server is not listening and an accept failure while
- * it is, so `server.listening` decides where an error goes. `resume` ignores a late bind failure.
+ * it is. `resume` ignores a late bind failure.
  */
 const awaitListening = (
   server: http2.Http2Server,
