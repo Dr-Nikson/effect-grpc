@@ -4,34 +4,34 @@ A user builds a server with `EffectGrpcServer.GrpcServerBuilder().withService(â€
 
 ## Sub-features
 
-- `srv-ready` logs `gRPC server listening on http://localhost:8000` and then answers RPCs.
+- `srv-ready` logs `gRPC server listening on http://127.0.0.1:<port>` and then answers RPCs.
 - `srv-h2c` accepts only HTTP/2 with prior knowledge, and rejects HTTP/1.1 clients.
 - `srv-unknown` answers an unknown method with HTTP 404 over Connect.
-- `srv-shutdown` responds to SIGTERM: it logs `gRPC server is stopping...` and then `gRPC server stopped`, exits with code 0, and frees port 8000.
+- `srv-shutdown` responds to SIGTERM: it logs `gRPC server is stopping...` and then `gRPC server stopped`, exits with code 0, and frees its port.
 - `srv-hostile-authority` answers a request whose `:authority` is an unbracketed IPv6 literal with an error response, and keeps running.
 
 ## How to get to it (user POV)
 
-- Run `cd packages/example && node dist/server.js`, as in the README's "Complete Example".
+- Run `node dist/server.js` from `packages/example`, as in the README's "Complete Example". It listens on `127.0.0.1:8000`, or on the port in `EFFECT_GRPC_EXAMPLE_PORT`.
 - Stop the server with Ctrl+C or SIGTERM.
 
 ## Driving it with control-example
 
 Preconditions:
 
-- `$C build` succeeded, and nothing listens on port 8000.
+- `.claude/skills/verify/scripts/control-example build` succeeded, and nothing listens on the port you launch on.
 
-- **Launch.** Run `$C launch`. It prints `launched: pid=<pid> mode=documented listening on: ::1`. The evidence `server.log` has the ready line, and `01-readiness.txt` shows `http_status=200` with the greeting for `readiness-probe`.
-- **Doctor.** Run `$C doctor`. Every line is OK, and port 8000 is reported as ours, listening on `::1`.
-- **HTTP/1.1 rejected.** Run `$C call http1 GetGreeting`. The result is `exit_code=1`, `http_status=000` and `curl: (1) Received HTTP/0.9 when not allowed`. The log section shows `Received bad client magic byte string`. A second `$C doctor` still reports the instance alive, with one WARN for those error lines.
-- **Unknown method.** Run `$C call connect Nope '{}'`. The result is `http_status=404` with an empty body.
-- **Shutdown.** Run `$C stop`. The evidence shows `graceful=yes`, `exit_code=0`, an empty `port_8000_listeners_after=`, and both shutdown log lines.
-- **Hostile authority.** Run this journey last, on its own instance: `$C launch`, then `$C hostile-authority`, then `$C cleanup`. Pass: `verdict=PASS` with a 4xx `http_status` and `server_alive_after=yes`.
+- **Launch.** Run `.claude/skills/verify/scripts/control-example launch`. It prints `launched: pid=<pid> port=8000 listening on: 127.0.0.1`. The evidence `server.log` has the ready line, and `01-readiness.txt` shows `http_status=200`, the greeting for `readiness-probe`, and its `getGreeting called` handler line.
+- **Doctor.** Run `.claude/skills/verify/scripts/control-example doctor`. Every line is OK, and the port is reported as ours, listening on `127.0.0.1`.
+- **HTTP/1.1 rejected.** Run `.claude/skills/verify/scripts/control-example call http1 GetGreeting`. The result is `exit_code=1`, `http_status=000` and `curl: (1) Received HTTP/0.9 when not allowed`. The log section shows `Received bad client magic byte string`. A second doctor still reports the instance alive, with one WARN for those error lines.
+- **Unknown method.** Run `.claude/skills/verify/scripts/control-example call connect Nope '{}'`. The result is `http_status=404` with an empty body.
+- **Shutdown.** Run `.claude/skills/verify/scripts/control-example stop`. The evidence shows `graceful=yes`, `exit_code=0`, `port=<port>`, an empty `port_listeners_after=`, and both shutdown log lines.
+- **Hostile authority.** Run this journey last, on its own instance: `.claude/skills/verify/scripts/control-example launch`, then `.claude/skills/verify/scripts/control-example hostile-authority`, then `.claude/skills/verify/scripts/control-example cleanup`. Pass: `verdict=PASS` with a 4xx `http_status` and `server_alive_after=yes`.
 
 ## Gotchas
 
-- `srv-hostile-authority` fails on the base recorded in SKILL.md, and the failure stops the server. The evidence shows `curl_exit_code=56`, `server_alive_after=no`, `server_exit_code=1` and `TypeError: Invalid URL` with base `http://::1:8000`. The throw starts in `@connectrpc/connect-node`'s `universalRequestFromNodeRequest`. The server passes that handler to `http2.createServer` without a guard, so one request from any client stops the process. Node's own HTTP/2 client sends this authority for `http://[::1]:<port>` URLs (see [effect-client.md](./effect-client.md)).
-- Only one instance can run. `$C launch` refuses when anything listens on port 8000. Never stop someone else's process to make room.
-- With the documented launch, the server binds only `::1` in this devcontainer, because `localhost` resolves to `::1` first. `curl` and `buf curl` still connect over `localhost`.
+- `srv-hostile-authority` fails on the base recorded in SKILL.md, and the failure stops the server. The evidence shows `curl_exit_code=56`, `server_alive_after=no`, `server_exit_code=1` and `TypeError: Invalid URL` with base `http://::1:<port>`. The throw starts in `@connectrpc/connect-node`'s `universalRequestFromNodeRequest`. The server passes that handler to `http2.createServer` without a guard, so one request from any client stops the process. Node's own HTTP/2 client sends this authority for `http://[::1]:<port>` URLs (see [effect-client.md](./effect-client.md)).
+- Each checkout runs one instance. `launch` refuses when anything listens on its port. Never stop someone else's process to make room. Launch on another port with `--port` instead.
+- The example server binds `127.0.0.1` only. Dial that address in direct clients, never `[::1]`.
 - The server logs every TCP connection, HTTP/2 session and stream. The helper hides those lines on the terminal and keeps them in evidence. They are not errors.
 - If launch fails at once with `ERR_PACKAGE_PATH_NOT_EXPORTED â€¦ './RunnerStorage'`, the stale-peer problem in SKILL.md (Launch) is back.

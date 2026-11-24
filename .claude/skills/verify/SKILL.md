@@ -8,35 +8,64 @@ description: Prove an effect-grpc change works by driving the example gRPC serve
 effect-grpc is a library, so "the app" is what a user builds with it. `packages/example` is that app:
 
 - `buf generate` runs `protoc-gen-effect` over `proto/com/example/v1/hello_world_api.proto`.
-- `src/server.ts` serves `com.example.v1.HelloWorldAPI` (`GetGreeting`, `FaceTheError`) on `localhost:8000`.
-- `src/client.ts` calls the server through the generated Effect client.
+- `src/server.ts` serves `com.example.v1.HelloWorldAPI` (`GetGreeting`, `FaceTheError`) on `127.0.0.1:8000`, or on the port in `EFFECT_GRPC_EXAMPLE_PORT`.
+- `src/client.ts` calls the server through the generated Effect client, on the same address.
 
 This skill drives all three surfaces with `scripts/control-example` and records proof.
 
 Read [features/README.md](features/README.md) before you drive anything. It lists the journeys, their pass conditions, and the journeys that fail on the current base.
 
-Run every command from the repo root:
+## Run each step as one command
+
+Each step is one call to `.claude/skills/verify/scripts/control-example` in the checkout you verify, written as run from that checkout's root. If your shell starts somewhere else, put the checkout's absolute path in front of `.claude` and pass the same path as `--root`. A call that lands in another checkout's copy of the script then refuses and names the script to run. With no flags, the script drives its own checkout on port 8000.
+
+To see every command and option, run:
 
 ```sh
-C=.claude/skills/verify/scripts/control-example
+.claude/skills/verify/scripts/control-example help
 ```
+
+## Run beside other instances
+
+Each checkout runs at most one instance, and each instance has its own run state and evidence. Instances in different checkouts run at the same time on different ports. Give `launch` a free port with `--port`:
+
+```sh
+.claude/skills/verify/scripts/control-example launch --port 8001 --root .
+```
+
+Later commands read the port from the checkout's run, so they need no flag. On any later command, `--port` and `--root` are checks. The command refuses, exits 2 and changes nothing when `--port` differs from the instance's port or `--root` names another checkout. `cleanup` in one checkout stops only that checkout's server.
+
+A lane whose shell starts outside its worktree writes the worktree's absolute path in both places, as in `/dr_nikson/effect-grpc/.worktrees/p02-live2/.claude/skills/verify/scripts/control-example launch --port 8122 --root /dr_nikson/effect-grpc/.worktrees/p02-live2`.
 
 ## Launch
 
-1. Build from whatever the tree holds now: `$C build`. It runs `pnpm install --frozen-lockfile`, then `pnpm -r run build`, which takes about 5 s warm. The build compiles the library, regenerates both packages' bindings, and compiles the example.
-2. Start the server: `$C launch`. Launch refuses to start in three cases:
-   - something already listens on port 8000;
+1. Build from whatever the tree holds now:
+
+   ```sh
+   .claude/skills/verify/scripts/control-example build
+   ```
+
+   It runs `pnpm install --frozen-lockfile`, then `pnpm -r run build`, which takes about 5 s warm. The build compiles the library, regenerates both packages' bindings, and compiles the example.
+2. Start the server:
+
+   ```sh
+   .claude/skills/verify/scripts/control-example launch
+   ```
+
+   Launch refuses to start in three cases:
+   - something already listens on its port;
    - a compiled output is older than its source;
-   - this skill's previous instance is still alive.
+   - this checkout's previous instance is still alive.
 3. Launch returns only once the server is usable. It waits for three things:
-   - the log line `gRPC server listening on http://localhost:8000`;
-   - port 8000 owned by the server pid;
-   - one Connect `GetGreeting` call (name `readiness-probe`) that returns HTTP 200.
+   - the log line `gRPC server listening on http://127.0.0.1:<port>`;
+   - the port owned by the server pid;
+   - one Connect `GetGreeting` call (name `readiness-probe`) that returns HTTP 200 with the greeting, answered by this instance's handler.
 
-   Then it prints the pid, the bound address, and the run directory.
-4. `$C launch --ipv4first` starts the same server with `NODE_OPTIONS=--dns-result-order=ipv4first`, so `localhost` binds `127.0.0.1`. Use it only for Effect-client journeys (see [effect-client.md](features/effect-client.md)). A pass under this mode never proves the README pairing.
+   Then it prints the pid, the port, the bound address, the checkout and the run directory.
 
-Tear down with `$C stop` or `$C cleanup`:
+At port 8000 the script starts the example with no `EFFECT_GRPC_EXAMPLE_PORT`, as a user does. At any other port it sets the variable.
+
+Tear down with `stop` or `cleanup`:
 
 - `stop` sends SIGTERM and records the shutdown.
 - `cleanup` stops the instance if it is still running, drops the instance state, and keeps the evidence.
@@ -47,13 +76,17 @@ If the server exits during startup with `ERR_PACKAGE_PATH_NOT_EXPORTED … './Ru
 
 ## Doctor
 
-`$C doctor` checks whether this instance is worth driving. It sends no RPC. It checks that:
+```sh
+.claude/skills/verify/scripts/control-example doctor
+```
+
+Doctor checks whether this checkout's instance is worth driving. It sends no RPC. It checks that:
 
 - the recorded pid is alive and still has the start time recorded at launch, so the pid was not recycled;
-- the process runs `node dist/server.js` with cwd `packages/example`;
-- this instance's log has the ready line;
-- every listener on port 8000 belongs to that pid. Doctor also reports the bound address, which is `::1` with the documented launch in this devcontainer;
-- no compiled output is older than its source. It compares the library's `src/**/*.ts`, `src/server.ts` and `src/client.ts` with their outputs, and the proto and `protocGenPlugin.ts` with the generated code.
+- the process runs `node dist/server.js` with cwd `packages/example` in this checkout;
+- this instance's log has the ready line for `http://127.0.0.1:<port>`;
+- every listener on the port belongs to that pid. Doctor also reports the bound address, `127.0.0.1`;
+- no compiled output is older than its source. It compares the library's `src/**/*.ts`, the example's `src/server.ts`, `src/client.ts` and `src/address.ts` with their outputs, and the proto and `protocGenPlugin.ts` with the generated code.
 
 It prints WARN when HEAD moved since launch or when the log has error lines.
 
@@ -63,25 +96,31 @@ Run doctor first whenever anything looks off. If doctor reports FAIL on a stale 
 
 | Command | What it runs | Stable handle |
 | --- | --- | --- |
-| `$C call grpc <Method> [json]` | `buf curl --protocol grpc --http2-prior-knowledge --schema packages/example/proto` | exit 0, or 8 × the gRPC status code (72 means `failed_precondition`) |
-| `$C call connect <Method> [json]` | `curl --http2-prior-knowledge` with Connect JSON | `http_status=` 200, 400 or 404, plus the JSON body |
-| `$C call http1 <Method> [json]` | the same curl request without HTTP/2 | rejected: `Received HTTP/0.9 when not allowed` |
-| `$C client` | the README client, `node dist/client.js` | stdout, stderr and exit code |
-| `$C probe <getGreeting\|faceTheError> [name] [url]` | the generated Effect client on its default tag ([effect-client-probe.mjs](scripts/effect-client-probe.mjs)) | last stdout line: `{"ok":…,"response":…}` or `{"ok":false,"kind":…,"error":…}` |
-| `$C codegen` | `pnpm -r run build`, then lists the generated files, their exports, and the `typeof` of the tag factories | export names; `typeof … = function` |
-| `$C hostile-authority` | one Connect request with `Host: ::1:8000` | `verdict=PASS` when the server survives |
+| `.claude/skills/verify/scripts/control-example call grpc GetGreeting '{"name":"Ada"}'` | `buf curl --protocol grpc --http2-prior-knowledge --schema packages/example/proto` | exit 0, or 8 × the gRPC status code (72 means `failed_precondition`) |
+| `.claude/skills/verify/scripts/control-example call connect GetGreeting '{"name":"Ada"}'` | `curl --http2-prior-knowledge` with Connect JSON | `http_status=` 200, 400 or 404, plus the JSON body |
+| `.claude/skills/verify/scripts/control-example call http1 GetGreeting` | the same curl request without HTTP/2 | rejected: `Received HTTP/0.9 when not allowed` |
+| `.claude/skills/verify/scripts/control-example client` | the README client, `node dist/client.js` | stdout, stderr and exit code |
+| `.claude/skills/verify/scripts/control-example probe getGreeting Ada` | the generated Effect client on its default tag ([effect-client-probe.mjs](scripts/effect-client-probe.mjs)), against the instance's URL | last stdout line: `{"ok":…,"response":…}` or `{"ok":false,"kind":…,"error":…}` |
+| `.claude/skills/verify/scripts/control-example codegen` | `pnpm -r run build`, then lists the generated files, their exports, and the `typeof` of the tag factories | export names; `typeof … = function` |
+| `.claude/skills/verify/scripts/control-example hostile-authority` | one Connect request with `Host: ::1:<port>` | `verdict=PASS` when the server survives |
 
-`<Method>` is a proto method name on the route `/com.example.v1.HelloWorldAPI/<Method>`. `[json]` defaults to `{"name":"verify"}`.
+`call` takes a protocol (`grpc`, `connect` or `http1`), a proto method name on the route `/com.example.v1.HelloWorldAPI/<Method>`, and an optional JSON request that defaults to `{"name":"verify"}`. `probe` takes `getGreeting` or `faceTheError` and an optional name.
 
 The handler's log line is the server-side proof. For example, a `GetGreeting` call logs `getGreeting called, this is really cool!` with `method: com.example.v1.HelloWorldAPI/GetGreeting`.
 
 ## Evidence
 
-Each run writes to `${EGV_ROOT:-${XDG_STATE_HOME:-~/.local/state}/effect-grpc-verify}/runs/<run-id>/evidence/`. `$C evidence` prints that path. Runs accumulate there until you delete them. The directory holds:
+Each run writes to `${EGV_ROOT:-${XDG_STATE_HOME:-~/.local/state}/effect-grpc-verify}/runs/<run-id>/evidence/`. To print that path, run:
 
-- `run.txt`: run id, start time, git HEAD, and the number of changed paths.
-- `server.log`: all server output, with one `=== launch mode=… git=…` banner per instance.
-- `NN-<slug>.txt`, one file per action. Each file has the exact command, the exit code, the HTTP or gRPC status, the response, stderr, and the server log lines written during that action. The action and its server-side effect stay together in one file.
+```sh
+.claude/skills/verify/scripts/control-example evidence
+```
+
+`cleanup` prints the same path. Runs accumulate there until you delete them, so the evidence outlives the checkout. The checkout's pointer to its current run lives in its git dir, at `<git dir>/effect-grpc-verify/current`. The evidence directory holds:
+
+- `run.txt`: run id, start time, the checkout, the path of the script that ran, the full git HEAD, and the number of changed paths.
+- `server.log`: all server output, with one `=== launch port=… root=… git=…` banner per instance.
+- `NN-<slug>.txt`, one file per action. Each file has the exact command, the port, the exit code, the HTTP or gRPC status, the response, stderr, and the server log lines written during that action. The action and its server-side effect stay together in one file.
 
 Proof standards:
 
@@ -91,31 +130,33 @@ Proof standards:
   - For codegen: the generated files and exports on disk, and the compiled output.
   - For shutdown: the exit code and the freed port.
 - **No mocks.** The only boundary here is the network, and both sides of it are real.
-- **Record the launch mode** with any client proof.
 
 ## Cleanup
 
-`$C cleanup` does three things:
+```sh
+.claude/skills/verify/scripts/control-example cleanup
+```
 
-- stops the instance this run started;
+Cleanup does three things:
+
+- stops the instance this checkout started;
 - removes `runs/<run-id>/state/`;
-- clears the current-run pointer.
+- clears this checkout's run pointer.
 
 The evidence stays where it was.
 
-- Cleanup signals only the pid it launched, after it checks that pid's start time. Never `pkill node` and never kill by port, because another agent or the user may own port 8000.
-- After a failed attempt, run `$C cleanup` before you retry, so no instance holds the port.
+- Cleanup signals only the pid it launched, after it checks that pid's start time. Never `pkill node` and never kill by port, because another agent, another checkout or the user may own the port.
+- After a failed attempt, run cleanup before you retry, so no instance holds the port.
 - A crashed instance needs no signal. `stop` and `cleanup` detect that it is gone and still clear the state.
 
 ## Known failures on this base
 
-These failures were recorded on 2026-11-23 at 61c6828 plus the `@effect/platform-node` peer pins in `pnpm-workspace.yaml`, in this devcontainer (Node 24, where `localhost` resolves to `::1` first). Without those pins, the example does not start at all. Their journeys keep the correct expected result. Do not edit a journey to match a bug.
+These failures were recorded on 2026-11-24 on branch `v4/p01-e2e-verify-isolation` (PR #83, on top of 448c926), in this devcontainer (Node 24, where `localhost` resolves to `::1` first). Their journeys keep the correct expected result. Do not edit a journey to match a bug.
 
-- **Generated typed-tag factories are not callable** (`typeof … = object`). Because of this, the README client exits with `TypeError: effectProto.HelloWorldAPIClientTag is not a function`. See [codegen.md](features/codegen.md) and [effect-client.md](features/effect-client.md).
-- **With the documented launch, the Effect client cannot reach the server.** The client fails with `ECONNREFUSED 127.0.0.1:8000` while the server listens on `::1`. The same symptom fails 6 of 7 `packages/e2e-tests` tests here on an untouched HEAD. See [effect-client.md](features/effect-client.md).
+- **Generated typed-tag factories are not callable** (`typeof … = object`). Because of this, the README client exits with `TypeError: effectProto.HelloWorldAPIClientTag is not a function` before it dials the server. See [codegen.md](features/codegen.md) and [effect-client.md](features/effect-client.md).
 - **One request with an unbracketed IPv6 `:authority` stops the server** with `TypeError: Invalid URL`. See [server-lifecycle.md](features/server-lifecycle.md).
 
 ## Helpers
 
-- `scripts/control-example` runs every command above. `$C help` prints its usage. Set `EGV_ROOT` to move runs somewhere else.
-- `scripts/effect-client-probe.mjs` runs through `$C probe`. `$C probe` feeds the file to `node --input-type=module` from `packages/example`, so its imports resolve there. It reads the env vars `PROBE_URL`, `PROBE_METHOD` and `PROBE_NAME`.
+- `scripts/control-example` runs every command above. Its `help` command prints the usage.
+- `scripts/effect-client-probe.mjs` runs through `probe`. `probe` feeds the file to `node --input-type=module` from `packages/example`, so its imports resolve there. It reads the env vars `PROBE_URL`, `PROBE_METHOD` and `PROBE_NAME`, and refuses to run without `PROBE_URL`.
