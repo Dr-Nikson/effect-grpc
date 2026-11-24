@@ -24,6 +24,13 @@ const requireInternalTag = {
   },
 };
 
+const effectPackageRoots = [
+  "effect",
+  "@effect/opentelemetry",
+  "@effect/platform",
+  "@effect/platform-node",
+];
+
 export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -55,6 +62,15 @@ export default tseslint.config(
       "@typescript-eslint/explicit-function-return-type": "error",
       "@typescript-eslint/no-explicit-any": "off",
       "no-console": "error",
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: effectPackageRoots.map((name) => ({
+            name,
+            message: `Import ${name} modules by submodule path, as in \`import * as Effect from "effect/Effect"\`.`,
+          })),
+        },
+      ],
     },
   },
   {

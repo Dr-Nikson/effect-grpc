@@ -19,7 +19,7 @@ This file defines the core project structure and coding standards for the Effect
 - Key configuration files at the root include:
   - `package.json`: Defines workspaces and root dependencies. It uses pnpm as a package manager.
   - `tsconfig.base.json`: Base TypeScript configuration inherited by packages. Its `@effect/language-service` plugin entry sets the severity of each Effect check.
-  - `eslint.config.js`: ESLint configuration (typescript-eslint, Prettier compatibility, and `no-console`, so library code logs through the Effect logger).
+  - `eslint.config.js`: ESLint configuration (typescript-eslint, Prettier compatibility, `no-console`, so library code logs through the Effect logger, and `no-restricted-imports` for the roots of the Effect packages).
   - `.prettierrc.cjs`: Prettier code formatting rules.
   - `README.md`: Project overview for gRPC Protobuf capabilities for Effect ecosystem.
 
@@ -106,6 +106,7 @@ IMPORTANT: refer to the best practices and coding standards described in @agents
 - Document all public exports with JSDoc comments: add comprehensive examples of usage when needed 
 - Add file name (with path from the repo-root) at the beginning of each file 
 - Follow Effect library patterns and conventions
+- Import Effect modules by submodule path, as in `import * as Effect from "effect/Effect"`. Never import from the root of `effect`, `@effect/opentelemetry`, `@effect/platform` or `@effect/platform-node`. `pnpm run lint` fails on it for every file under `packages/*/src`, and JSDoc examples are not imports.
 - Use immutable data structures
 - Prefer pure functions
 - Use Effect's error handling mechanisms
