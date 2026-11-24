@@ -12,7 +12,7 @@ A user calls the server through the generated client. They provide `helloWorldAP
 
 ## How to get to it (user POV)
 
-- Start the server, then run `node dist/client.js` from `packages/example` in a second terminal, as the README does. Both sides use `127.0.0.1:8000`, or the port in `EFFECT_GRPC_EXAMPLE_PORT`.
+- Start the server, then run `node dist/client.js` from `packages/example` in a second terminal, as the README does. Both sides use `127.0.0.1:8000`, or the port in `EFFECT_GRPC_EXAMPLE_PORT`. A server started with `EFFECT_GRPC_EXAMPLE_PORT=0` binds a port the OS picks, so give the client the port from the server's ready line. `control-example client` passes the bound port.
 - Write a client from the generated JSDoc's first example: `helloWorldAPIClientLiveLayer(HelloWorldAPIClientTag)`.
 - For IPv6, start the server with `EFFECT_GRPC_EXAMPLE_HOST=::1` and give the client `http://[::1]:<port>`.
 
