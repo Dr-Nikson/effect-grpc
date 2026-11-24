@@ -197,8 +197,7 @@ const holdNextLookup = Effect.gen(function* () {
 });
 
 /**
- * Node turns an `'error'` event that nobody listens to into an uncaught exception, which ends a real
- * process. Vitest keeps its workers alive through one, so a test records them instead.
+ * Vitest keeps its workers alive through an uncaught exception.
  */
 const recordUncaughtExceptions = Effect.acquireRelease(
   Effect.sync(() => {
