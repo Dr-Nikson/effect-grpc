@@ -1,7 +1,9 @@
 # Fixture: a service with one rpc of each kind
 
 The generator supports unary rpcs only. This fixture checks that the code it generates for a service
-with one rpc of each kind compiles, and that its service and its client list the unary rpc.
+with one rpc of each kind compiles, and that its service and its client list the unary rpc. A server
+built from that code answers each streaming rpc with UNIMPLEMENTED, which `src/mixed-service.test.ts`
+checks at runtime.
 
 ```protobuf
 // proto/example/v1/chat.proto
