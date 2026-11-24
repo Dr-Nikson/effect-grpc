@@ -142,6 +142,7 @@ const program = Effect.gen(function* () {
 // Provide dependencies and run
 const layer = Layer.empty.pipe(
   Layer.provideMerge(helloServiceLayer),
+  Layer.provideMerge(Layer.scope),
   Layer.provideMerge(Logger.minimumLogLevel(LogLevel.Info))
 );
 
