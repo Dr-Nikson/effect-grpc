@@ -260,6 +260,9 @@ export interface GrpcServerOptions {
  * - Services with specific context requirements (e.g., `HandlerContext`) cannot be added
  *   until `withContextTransformer` is called to provide that context
  *
+ * With no transformer, each handler receives the call's Connect `HandlerContext`, and so does the
+ * first transformer as its current context.
+ *
  * @example
  * ```typescript
  * import { Effect } from "effect"
