@@ -7,6 +7,7 @@ A user runs `pnpm run generate:proto` (`buf generate`) in a package whose `buf.g
 - `gen-emit` writes `<file>_pb.ts` and `<file>_effect.ts` for each proto file into `src/generated/<package path>/`.
 - `gen-names` exports these names for a service whose name does not end in `Service` (`HelloWorldAPI`): `HelloWorldAPIProtoId`, `HelloWorldAPIService`, `HelloWorldAPIServiceTag`, `makeHelloWorldAPIServiceTag`, `helloWorldAPIServiceLiveLayer`, `HelloWorldAPIGrpcService`, `HelloWorldAPIClient`, `HelloWorldAPIClientTag`, `makeHelloWorldAPIClientTag`, `helloWorldAPIClientLiveLayer`, `HelloWorldAPIConfigTag`.
 - `gen-suffix` does not repeat the suffix for a service whose name ends in `Service` (`NamingTestService`, issue #30). It exports `NamingTestService`, `NamingTestServiceTag`, `makeNamingTestServiceTag`, `namingTestServiceLiveLayer`, `NamingTestGrpcService`, `NamingTestServiceClient`, `NamingTestServiceClientTag`, `makeNamingTestServiceClientTag`, `namingTestServiceClientLiveLayer`, `NamingTestServiceConfigTag`, `NamingTestServiceProtoId`, and nothing containing `ServiceService`.
+- `gen-mixed` generates a service that mixes unary and streaming rpcs (`StreamingTestService`, issue #100). Its interface and its client list the unary rpc only, its names follow `gen-suffix`, and the generated code compiles.
 - `gen-compiles` makes the generated code compile in a consumer package.
 - `gen-typed-tags` makes the tags the docs show work at runtime. One Context holds the default service tag and the default client tag, each under its own key, and `makeXServiceTag<Ctx>("key")` and `makeXClientTag<Meta>("key")` return tags that a layer provides and that resolve to that layer's value next to the default tag.
 
@@ -22,10 +23,11 @@ Preconditions:
 - `pnpm install` has run. No server is needed.
 - `.claude/skills/verify/scripts/control-example codegen` rebuilds `packages/effect-grpc` first, because the plugin runs the built `dist/protocGenPlugin.js`.
 
-- **Regenerate.** Run `.claude/skills/verify/scripts/control-example codegen`. The evidence file shows `build_exit_code=0` and the generated files: `hello_world_api_pb.ts` and `hello_world_api_effect.ts` under `packages/example/src/generated/com/example/v1/`, plus the same pair and the two `naming_test_service_*` files under `packages/e2e-tests/src/generated/com/example/v1/`.
+- **Regenerate.** Run `.claude/skills/verify/scripts/control-example codegen`. The evidence file shows `build_exit_code=0` and the generated files: `hello_world_api_pb.ts` and `hello_world_api_effect.ts` under `packages/example/src/generated/com/example/v1/`, plus the same pair, the two `naming_test_service_*` files and the two `streaming_test_service_*` files under `packages/e2e-tests/src/generated/com/example/v1/`.
 - **Names.** Read the `## exports of …hello_world_api_effect.ts` section of the same file. It lists exactly the eleven `gen-names` exports.
 - **No duplicate suffix.** Read the `## exports of …naming_test_service_effect.ts` section. It lists the `gen-suffix` names, and no line contains `ServiceService`.
-- **Compiles.** The build in the same file compiled `packages/example` and `packages/e2e-tests` against the new bindings, so `build_exit_code=0` covers it.
+- **Mixed service.** Read the `## exports of …streaming_test_service_effect.ts` section. It lists the `gen-suffix` names with `StreamingTest` where `NamingTest` stood, such as `StreamingTestService` and `StreamingTestGrpcService`, and no line contains `ServiceService`. In the generated file, `StreamingTestService` and `StreamingTestServiceClient` each declare `unary` and carry one `// Method[<name>] wasn't generated` comment for each of `serverStream`, `clientStream` and `bidi`.
+- **Compiles.** The build in the same file compiled `packages/example` and `packages/e2e-tests` against the new bindings, so `build_exit_code=0` covers it, the mixed service included.
 - **Typed tags work.** Read the `## typed tags in packages/example/dist` section. Pass: four `PASS` lines, `keys: service=com.example.v1.HelloWorldAPI/Service client=com.example.v1.HelloWorldAPI/Client`, `verdict=PASS` and `typed_tags_exit_code=0`. The command exits non-zero when the build or this check fails.
 
 ## Gotchas

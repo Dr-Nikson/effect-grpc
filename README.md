@@ -551,6 +551,8 @@ message ListUsersResponse {
 
 The generated names follow the proto service name. The server names append `Service` unless the name already ends in it, and the client names append `Client` the same way. For `service UserService` the generator exports `UserServiceProtoId`, `UserService`, `UserServiceTag`, `makeUserServiceTag`, `userServiceLiveLayer`, `UserGrpcService`, `UserServiceClient`, `UserServiceClientTag`, `makeUserServiceClientTag`, `userServiceClientLiveLayer` and `UserServiceConfigTag`. For `service HelloWorldAPI` it exports `HelloWorldAPIService`, `HelloWorldAPIServiceTag`, `HelloWorldAPIClient`, `HelloWorldAPIClientTag` and so on.
 
+`protoc-gen-effect` generates unary rpcs. A service that also has streaming rpcs still generates code that compiles. Its service interface and its client list the unary rpcs only, and the server answers a call to a streaming rpc with the gRPC status `UNIMPLEMENTED` on gRPC, gRPC-web and Connect.
+
 #### Service Implementation (Server-side)
 
 For each service in your `.proto` file, the generator creates:

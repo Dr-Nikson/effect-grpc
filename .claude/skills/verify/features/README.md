@@ -40,7 +40,7 @@ Keep implementation details out of the map. Name only user paths, stable handles
 
 ## Features
 
-- [Code generation](./codegen.md) covers `protoc-gen-effect` output: files, export names, the no-duplicate-suffix rule, compilation, and the default and typed tags.
+- [Code generation](./codegen.md) covers `protoc-gen-effect` output: files, export names, the no-duplicate-suffix rule, a service that mixes unary and streaming rpcs, compilation, and the default and typed tags.
 - [Server lifecycle](./server-lifecycle.md) covers startup, readiness, HTTP/2-only transport, unknown methods, CONNECT requests, graceful shutdown, hostile `:authority` values, and the 4 MiB message limit.
 - [Unary RPC](./unary-rpc.md) covers `GetGreeting` over gRPC and Connect, with the handler's server-side effect.
 - [Error mapping](./error-mapping.md) covers `GrpcException` to gRPC status and Connect HTTP status, and keeping the server up afterwards.
@@ -50,3 +50,4 @@ Keep implementation details out of the map. Name only user paths, stable handles
 
 - Distributed tracing (W3C `traceparent` to a server span). The example configures no OpenTelemetry exporter, so a user sees nothing to check. Only `packages/e2e-tests/src/tracing.test.ts` covers it.
 - Context transformers (`withContextTransformer`), request headers and metadata transformers, compression, and timeouts. The example does not use them.
+- Calls to streaming rpcs. The example has none, so no journey calls one. `packages/e2e-tests/src/mixed-service.test.ts` serves a service that mixes unary and streaming rpcs and checks that each streaming rpc gets `UNIMPLEMENTED` over gRPC, gRPC-web and Connect.
