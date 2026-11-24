@@ -496,7 +496,7 @@ cmd_probe() {
 }
 
 cmd_codegen() {
-  local r f g pkg rc=0
+  local r f g pkg rc=0 tags_rc=0
   r=$(ensure_run)
   f=$(next_evidence "$r" codegen)
   {
@@ -511,11 +511,12 @@ cmd_codegen() {
         grep -oE '^export (const|function|type|interface) [A-Za-z0-9_]+' "$g" | awk '{print $3}' | sort -u || true
       done < <(find "$pkg/src/generated" -name '*_effect.ts' 2>/dev/null | sort)
     done
-    echo "## runtime type of the typed-tag factories (packages/example/dist)"
-    (cd "$EXAMPLE" && node --input-type=module -e 'const m = await import("./dist/generated/com/example/v1/hello_world_api_effect.js"); console.log("typeof HelloWorldAPIClientTag =", typeof m.HelloWorldAPIClientTag); console.log("typeof HelloWorldAPIServiceTag =", typeof m.HelloWorldAPIServiceTag)') 2>&1 || echo "(could not import the generated module)"
+    echo "## typed tags in packages/example/dist (typed-tags-probe.mjs)"
+    (cd "$EXAMPLE" && node --input-type=module <"$SCRIPT_DIR/typed-tags-probe.mjs") 2>&1 || tags_rc=$?
+    echo "typed_tags_exit_code=$tags_rc"
   } >"$f"
   show "$f"
-  return "$rc"
+  [ "$rc" -eq 0 ] && [ "$tags_rc" -eq 0 ]
 }
 
 run_hostile_driver() {
@@ -676,7 +677,7 @@ Usage: control-example <command> [arguments] [--port <n>] [--host <address>] [--
   call <connect|grpc|http1> <Method> [json]  one unary call; records the response and the server log lines
   client                                     run the README example client (`node dist/client.js`) against the instance
   probe <getGreeting|faceTheError> [name]    call the instance through the generated Effect client
-  codegen                                    rebuild everything (codegen included) and record generated exports
+  codegen                                    rebuild everything (codegen included), record generated exports, check the typed tags
   hostile-authority                          send the fixture's authority cases over gRPC and Connect; check each reply
   message-limit                              send messages at and over the 4 MiB limit; check each reply
   connect-method                             send an HTTP/2 CONNECT request; check that it gets 405 and the next calls work
