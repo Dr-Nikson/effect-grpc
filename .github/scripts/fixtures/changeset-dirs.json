@@ -1,0 +1,55 @@
+[
+  {
+    "name": "master on 448c926: the one pending empty changeset is dropped, consumed ones stay",
+    "files": {
+      "README.md": "# Changesets\n",
+      "config.json": "{}\n",
+      "pre.json": "{\"mode\":\"pre\",\"tag\":\"alpha\",\"initialVersions\":{},\"changesets\":[\"sharp-pots-ring\",\"spicy-rivers-chew\"]}\n",
+      "calm-ports-wake.md": "---\n---\n",
+      "sharp-pots-ring.md": "---\n---\n",
+      "spicy-rivers-chew.md": "---\n\"@dr_nikson/effect-grpc\": major\n---\n\ngRPC Library with effect 3.0 supported\n"
+    },
+    "dropped": ["calm-ports-wake"]
+  },
+  {
+    "name": "an empty changeset with a summary is still empty",
+    "files": { "internal-ci.md": "---\n---\n\nHarden the release workflows\n" },
+    "dropped": ["internal-ci"]
+  },
+  {
+    "name": "an empty changeset with CRLF line endings is empty",
+    "files": { "windows.md": "---\r\n---\r\n" },
+    "dropped": ["windows"]
+  },
+  {
+    "name": "outside pre mode every changeset file counts as pending",
+    "files": {
+      "pre.json": "{\"mode\":\"exit\",\"tag\":\"alpha\",\"initialVersions\":{},\"changesets\":[\"listed\"]}\n",
+      "listed.md": "---\n---\n"
+    },
+    "dropped": ["listed"]
+  },
+  {
+    "name": "README.md in any case and dotfiles are not changesets",
+    "files": { "readme.md": "notes\n", ".draft.md": "---\n---\n", "config.json": "{}\n" },
+    "dropped": []
+  },
+  {
+    "name": "a pending changeset that lists a package stops the drop, and nothing is deleted",
+    "files": {
+      "calm-ports-wake.md": "---\n---\n",
+      "loopback-pairs-connect.md": "---\n\"@dr_nikson/effect-grpc\": patch\n---\n\nBind and dial 127.0.0.1\n"
+    },
+    "refused": ["loopback-pairs-connect"]
+  },
+  {
+    "name": "a frontmatter that holds only a YAML comment counts as a release",
+    "files": { "commented.md": "---\n# no packages\n---\n" },
+    "refused": ["commented"]
+  },
+  {
+    "name": "a file without frontmatter counts as a release",
+    "files": { "plain.md": "Just some notes\n" },
+    "refused": ["plain"]
+  }
+]
