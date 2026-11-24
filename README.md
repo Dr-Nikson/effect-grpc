@@ -1120,11 +1120,11 @@ pnpm -r run build
 # Run type tests
 pnpm -r run test:types
 
-# Type-check this README's code against the generated code
-pnpm run test:readme
+# Type-check the code in this README and in docs/adr against the generated code
+pnpm run test:docs
 ```
 
-`test:readme` writes code blocks from the README into a scratch project, generates code from the README's own `.proto` blocks, and compiles every block fenced `ts` or `typescript` except the excerpts of generated code. A block whose first line is a path comment, such as `// src/server.ts`, becomes that file. A block whose path is under `src/generated/` must match the generated declarations. Every other TypeScript block is its own module, so it imports what it uses and declares what it does not build. A block fenced as `js` or `tsx` fails, so fence code as `typescript`. Errors name the README line. `pnpm -r run test:types` runs the same check.
+`test:docs` checks this README and each decision record in `docs/adr/`, one document at a time. It writes the document's code blocks into a scratch project, generates code from the document's own `.proto` blocks, and compiles every block fenced `ts` or `typescript` except the excerpts of generated code. A block whose first line is a path comment, such as `// src/server.ts`, becomes that file. A block whose path is under `src/generated/` must match the generated declarations. Every other TypeScript block is its own module, so it imports what it uses and declares what it does not build. A block fenced as `js` or `tsx` fails, so fence code as `typescript`. Errors name the document and its line. `pnpm -r run test:types` runs the same check.
 
 ### Project Structure
 

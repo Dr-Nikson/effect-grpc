@@ -10,7 +10,7 @@
     "generate:proto": "pnpm buf generate",
     "build": "pnpm run clean && pnpm run generate:proto && pnpm run compile",
     "test": "vitest run",
-    "test:types": "vitest --typecheck.only --watch=false --config vitest.config.ts && node readme/check-readme.mjs"
+    "test:types": "vitest --typecheck.only --watch=false --config vitest.config.ts && node readme/check-docs.mjs"
   },
   "dependencies": {
     "@bufbuild/protobuf": "catalog:",
