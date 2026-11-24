@@ -1,5 +1,5 @@
 // packages/effect-grpc/src/server.internal.ts
-import { Cause, Effect, Option, Scope, Types } from "effect";
+import { Cause, Effect, Option, Predicate, Scope, Types } from "effect";
 import http2 from "node:http2";
 
 import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
@@ -156,8 +156,12 @@ const bindReasons: Partial<Record<string, T.GrpcServerBindError["reason"]>> = {
   ERR_SOCKET_BAD_PORT: { _tag: "InvalidPort" },
 };
 
+/**
+ * `instanceof Error` is false for Node's own errors when the library runs in another realm, as under
+ * Jest or Vitest's VM pools, so this and `bindErrorMessage` read the cause's fields as properties.
+ */
 const bindError = (options: ListenOptions, cause: unknown): T.GrpcServerBindError => {
-  const code = cause instanceof Error && "code" in cause ? cause.code : undefined;
+  const code = Predicate.hasProperty(cause, "code") ? cause.code : undefined;
   return new T.GrpcServerBindError({
     host: options.host,
     port: options.port,
@@ -170,7 +174,10 @@ const bindError = (options: ListenOptions, cause: unknown): T.GrpcServerBindErro
  * @internal
  */
 export const bindErrorMessage = (error: T.GrpcServerBindError): string => {
-  const detail = error.cause instanceof Error ? error.cause.message : String(error.cause);
+  const detail =
+    Predicate.hasProperty(error.cause, "message") && typeof error.cause.message === "string" ?
+      error.cause.message
+    : String(error.cause);
   return `gRPC server could not listen on ${authorityOf(error.host, error.port)} (${error.reason._tag}): ${detail}`;
 };
 

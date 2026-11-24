@@ -3,6 +3,7 @@ import { Deferred, Effect, Exit, Fiber, Logger, Scope } from "effect";
 import dns from "node:dns";
 import { readFileSync } from "node:fs";
 import net from "node:net";
+import vm from "node:vm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { create, createFileRegistry } from "@bufbuild/protobuf";
@@ -220,6 +221,26 @@ describe("GrpcServer.listen", () => {
       expect(error.message).toContain("EACCES");
     }).pipe(Effect.scoped, Effect.runPromise));
 
+  it("reads the code of an error from another realm, as Jest and Vitest's VM pools report it", () =>
+    Effect.gen(function* () {
+      const inUse = Object.assign(
+        vm.runInNewContext(`new Error("listen EADDRINUSE: address already in use 127.0.0.1:8000")`),
+        { code: "EADDRINUSE", errno: -98, syscall: "listen", address: "127.0.0.1", port: 8000 },
+      );
+      vi.spyOn(net.Server.prototype, "listen").mockImplementationOnce(function (this: net.Server) {
+        process.nextTick(() => this.emit("error", inUse));
+        return this;
+      });
+
+      const error = yield* Effect.flip(server.listen({ host: "127.0.0.1", port: 8000 }));
+
+      expect(inUse).not.toBeInstanceOf(Error);
+      expect(error.reason).toEqual({ _tag: "AddressInUse" });
+      expect(error.message).toBe(
+        "gRPC server could not listen on 127.0.0.1:8000 (AddressInUse): listen EADDRINUSE: address already in use 127.0.0.1:8000",
+      );
+    }).pipe(Effect.scoped, Effect.runPromise));
+
   it.skipIf(!lowPortsArePrivileged)(
     "fails with PermissionDenied when the kernel refuses a privileged port",
     () =>
@@ -236,7 +257,7 @@ describe("GrpcServer.listen", () => {
       const error = yield* Effect.flip(server.listen({ host: "127.0.0.1", port: 65536 }));
 
       expect(error).toMatchObject({ reason: { _tag: "InvalidPort" }, port: 65536 });
-      expect(error.cause).toBeInstanceOf(RangeError);
+      expect(error.cause).toMatchObject({ name: "RangeError", code: "ERR_SOCKET_BAD_PORT" });
     }).pipe(Effect.scoped, Effect.runPromise));
 
   it("ends startup when interrupted during a host lookup that never returns, and binds nothing later", () =>
