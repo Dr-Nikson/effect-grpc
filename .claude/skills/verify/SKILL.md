@@ -8,7 +8,7 @@ description: Prove an effect-grpc change works by driving the example gRPC serve
 effect-grpc is a library, so "the app" is what a user builds with it. `packages/example` is that app:
 
 - `buf generate` runs `protoc-gen-effect` over `proto/com/example/v1/hello_world_api.proto`.
-- `src/server.ts` serves `com.example.v1.HelloWorldAPI` (`GetGreeting`, `FaceTheError`) on `127.0.0.1:8000`. `EFFECT_GRPC_EXAMPLE_HOST` and `EFFECT_GRPC_EXAMPLE_PORT` change the address and the port.
+- `src/server.ts` serves `com.example.v1.HelloWorldAPI` (`GetGreeting`, `FaceTheError`) on `127.0.0.1:8000`. `EFFECT_GRPC_EXAMPLE_HOST` and `EFFECT_GRPC_EXAMPLE_PORT` change the address and the port. Port 0 asks the OS for a free port, and the ready line names the port the server bound.
 - `src/client.ts` calls the server through the generated Effect client, on the same address.
 
 This skill drives all three surfaces with `scripts/control-example` and records proof.
@@ -17,7 +17,7 @@ Read [features/README.md](features/README.md) before you drive anything. It list
 
 ## Run each step as one command
 
-Each step is one call to `.claude/skills/verify/scripts/control-example` in the checkout you verify, written as run from that checkout's root. If your shell starts somewhere else, put the checkout's absolute path in front of `.claude` and pass the same path as `--root`. A call that lands in another checkout's copy of the script then refuses and names the script to run. With no flags, the script drives its own checkout on port 8000.
+Each step is one call to `.claude/skills/verify/scripts/control-example` in the checkout you verify, written as run from that checkout's root. If your shell starts somewhere else, put the checkout's absolute path in front of `.claude` and pass the same path as `--root`. A call that lands in another checkout's copy of the script then refuses and names the script to run. With no flags, the script drives its own checkout, and `launch` lets the OS pick the port.
 
 To see every command and option, run:
 
@@ -27,17 +27,19 @@ To see every command and option, run:
 
 ## Run beside other instances
 
-Each checkout runs at most one instance, and each instance has its own run state and evidence. Instances in different checkouts run at the same time on different ports. Give `launch` a free port with `--port`:
+Each checkout runs at most one instance, and each instance has its own run state and evidence. `launch` asks the example for port 0, so the OS picks a free port, and instances in different checkouts never collide:
 
 ```sh
-.claude/skills/verify/scripts/control-example launch --port 8001 --root .
+.claude/skills/verify/scripts/control-example launch --root .
 ```
 
-To serve IPv6, give `launch` the `::1` address as well, as in `.claude/skills/verify/scripts/control-example launch --port 8001 --host ::1 --root .`. The instance then binds `::1`, and every client command dials `http://[::1]:8001`.
+To serve IPv6, give `launch` the `::1` address, as in `.claude/skills/verify/scripts/control-example launch --host ::1 --root .`. The instance then binds `::1`, and every client command dials `http://[::1]:<port>`.
 
-Later commands read the port and the address from the checkout's run, so they need no flag. On any later command, `--port`, `--host` and `--root` are checks. The command refuses, exits 2 and changes nothing when `--port` differs from the instance's port, `--host` differs from its address, or `--root` names another checkout. `cleanup` in one checkout stops only that checkout's server.
+To pin a port, pass it, as in `.claude/skills/verify/scripts/control-example launch --port 8001 --root .`. Launch then refuses when something already listens on that port.
 
-A lane whose shell starts outside its worktree writes the worktree's absolute path in both places, as in `/dr_nikson/effect-grpc/.worktrees/p02-live2/.claude/skills/verify/scripts/control-example launch --port 8122 --root /dr_nikson/effect-grpc/.worktrees/p02-live2`.
+Later commands read the port the server bound and the address from the checkout's run, so they need no flag. On any later command, `--port`, `--host` and `--root` are checks. The command refuses, exits 2 and changes nothing when `--port` differs from the instance's port, `--host` differs from its address, or `--root` names another checkout. `cleanup` in one checkout stops only that checkout's server.
+
+A lane whose shell starts outside its worktree writes the worktree's absolute path in both places, as in `/dr_nikson/effect-grpc/.worktrees/p04-live2/.claude/skills/verify/scripts/control-example launch --root /dr_nikson/effect-grpc/.worktrees/p04-live2`.
 
 ## Launch
 
@@ -55,17 +57,17 @@ A lane whose shell starts outside its worktree writes the worktree's absolute pa
    ```
 
    Launch refuses to start in three cases:
-   - something already listens on its port;
+   - a port given with `--port` already has a listener;
    - a compiled output is older than its source;
    - this checkout's previous instance is still alive.
 3. Launch returns only once the server is usable. It waits for three things:
-   - the log line `gRPC server listening on http://<address>:<port>`, where the address is `127.0.0.1`, or `::1` for an IPv6 launch;
-   - the port owned by the server pid;
-   - one Connect `GetGreeting` call (name `readiness-probe`) that returns HTTP 200 with the greeting, answered by this instance's handler.
+   - the log line `gRPC server listening on http://127.0.0.1:<port>`, or `http://[::1]:<port>` for an IPv6 launch. Launch takes the instance's port from this line. With `--port`, the line must name that port;
+   - a listener on that port owned by the server pid;
+   - one Connect `GetGreeting` call (name `readiness-probe`) on that port that returns HTTP 200 with the greeting, answered by this instance's handler.
 
    Then it prints the pid, the port, the bound address, the checkout and the run directory.
 
-At port 8000 and address `127.0.0.1`, the script starts the example with neither `EFFECT_GRPC_EXAMPLE_PORT` nor `EFFECT_GRPC_EXAMPLE_HOST`, as a user does. For any other value, it sets that variable.
+Without `--port`, the script starts the example with `EFFECT_GRPC_EXAMPLE_PORT=0`. With `--port 8000` and address `127.0.0.1`, it sets neither `EFFECT_GRPC_EXAMPLE_PORT` nor `EFFECT_GRPC_EXAMPLE_HOST`, as a user does. For any other value, it sets that variable. Client commands get the port the server bound.
 
 Tear down with `stop` or `cleanup`:
 
@@ -106,6 +108,7 @@ Run doctor first whenever anything looks off. If doctor reports FAIL on a stale 
 | `.claude/skills/verify/scripts/control-example codegen` | `pnpm -r run build`, then lists the generated files, their exports, and the `typeof` of the tag factories | export names; `typeof … = function` |
 | `.claude/skills/verify/scripts/control-example hostile-authority` | the authority cases in `packages/e2e-tests/src/fixtures/hostile-requests.json`, over gRPC and Connect, through [hostile-requests.mjs](scripts/hostile-requests.mjs) | `verdict=PASS` when every check passes and the server survives |
 | `.claude/skills/verify/scripts/control-example message-limit` | messages of 4 MiB, 4 MiB + 1 byte and 5 MiB from the same fixture, each oversized message on a connection of its own, two of them from a client that keeps sending | `verdict=PASS` when every check passes and the server survives |
+| `.claude/skills/verify/scripts/control-example taken-port` | a second `node dist/server.js` on the instance's host and port, stopped by `timeout` after 10 s | `verdict=PASS` when it exits on its own with a failure code within 5 s, its output names `EADDRINUSE` and `AddressInUse`, and the instance still answers a `GetGreeting` call |
 
 `call` takes a protocol (`grpc`, `connect` or `http1`), a proto method name on the route `/com.example.v1.HelloWorldAPI/<Method>`, and an optional JSON request that defaults to `{"name":"verify"}`. `probe` takes `getGreeting` or `faceTheError` and an optional name.
 
