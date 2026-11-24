@@ -1,10 +1,12 @@
 // packages/effect-grpc/src/protoRuntime.internal.ts
-import { Cause, Effect, Exit, Option, Runtime } from "effect";
+import { Array as Arr, Cause, Context, Effect, Exit, Option } from "effect";
 import type { ExternalSpan } from "effect/Tracer";
 
+// The package's root also loads its logging, metrics and resource modules, which import
+// OpenTelemetry packages that are optional peers. This module needs @opentelemetry/api only.
+import * as OtelTracer from "@effect/opentelemetry/OtelTracer";
 import { Code, ConnectError } from "@connectrpc/connect";
 import type { HandlerContext } from "@connectrpc/connect";
-import { Tracer } from "@effect/opentelemetry";
 import { ROOT_CONTEXT, type TextMapGetter, trace } from "@opentelemetry/api";
 import { W3CTraceContextPropagator } from "@opentelemetry/core";
 
@@ -24,16 +26,48 @@ const headerGetter: TextMapGetter<Headers> = {
   },
 };
 
+const reasonToConnectError = (reason: Cause.Reason<GrpcException.GrpcException>): ConnectError => {
+  switch (reason._tag) {
+    case "Fail":
+      return GrpcException.toConnectError(reason.error);
+    case "Die":
+      return new ConnectError(
+        "Internal server error",
+        Code.Internal,
+        undefined,
+        undefined,
+        reason.defect,
+      );
+    case "Interrupt":
+      return new ConnectError("Request was canceled", Code.Aborted);
+  }
+};
+
+/**
+ * A cause is a flat list of reasons, with no record of whether they happened in sequence or in
+ * parallel, so one separator joins their messages. It is "; " because that is what clients have
+ * always received for the usual cause with several reasons, a failure followed by a finalizer's
+ * defect.
+ */
+const causeToConnectError = (cause: Cause.Cause<GrpcException.GrpcException>): ConnectError =>
+  Arr.match(cause.reasons.map(reasonToConnectError), {
+    onEmpty: () => new ConnectError("Unknown error", Code.Unknown),
+    onNonEmpty: (errors) =>
+      errors.length === 1 ?
+        Arr.headNonEmpty(errors)
+      : new ConnectError(errors.map((error) => error.rawMessage).join("; "), Code.Internal),
+  });
+
 /**
  * @internal
- * Live implementation of the Executor interface using Effect's ManagedRuntime.
- * Handles the execution of Effect programs within gRPC service handlers.
+ * Live implementation of the Executor interface. It runs each handler as its own fiber, with the
+ * Effect context that `listen` captured.
  */
 export class ServerExecutorLive implements T.ServerExecutor<any> {
-  constructor(public readonly runtime: Runtime.Runtime<never>) {}
+  constructor(public readonly context: Context.Context<never>) {}
 
-  static make(runtime: Runtime.Runtime<never>): T.ServerExecutor<any> {
-    return new ServerExecutorLive(runtime);
+  static make(context: Context.Context<never>): T.ServerExecutor<any> {
+    return new ServerExecutorLive(context);
   }
 
   unary<In, Out>(
@@ -53,26 +87,10 @@ export class ServerExecutorLive implements T.ServerExecutor<any> {
       }),
     );
 
-    return Runtime.runPromiseExit(this.runtime, traced, { signal: ctx.signal }).then(
+    return Effect.runPromiseExitWith(this.context)(traced, { signal: ctx.signal }).then(
       Exit.match({
         onFailure: (cause) => {
-          throw Cause.match(cause, {
-            onEmpty: new ConnectError("Unknown error", Code.Unknown),
-            onFail: (error) => GrpcException.toConnectError(error),
-            onDie: (defect) =>
-              new ConnectError(
-                "Internal server error",
-                Code.Internal,
-                undefined,
-                undefined,
-                defect,
-              ),
-            onInterrupt: () => new ConnectError("Request was canceled", Code.Aborted),
-            onSequential: (left, right) =>
-              new ConnectError(`${left.rawMessage}; ${right.rawMessage}`, Code.Internal),
-            onParallel: (left, right) =>
-              new ConnectError(`${left.rawMessage} | ${right.rawMessage}`, Code.Internal),
-          });
+          throw causeToConnectError(cause);
         },
         onSuccess: (value) => value,
       }),
@@ -110,9 +128,9 @@ export class ServerExecutorLive implements T.ServerExecutor<any> {
     const extractedContext = propagator.extract(ROOT_CONTEXT, ctx.requestHeader, headerGetter);
 
     // Get the span context from the extracted OTel context and convert to Effect's ExternalSpan
-    return Option.fromNullable(trace.getSpanContext(extractedContext)).pipe(
+    return Option.fromNullishOr(trace.getSpanContext(extractedContext)).pipe(
       Option.filter(trace.isSpanContextValid),
-      Option.map(Tracer.makeExternalSpan),
+      Option.map(OtelTracer.makeExternalSpan),
     );
   }
 }

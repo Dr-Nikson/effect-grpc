@@ -1,16 +1,5 @@
 // packages/effect-grpc/src/server.internal.ts
-import {
-  Cause,
-  Effect,
-  ExecutionStrategy,
-  Exit,
-  Option,
-  Predicate,
-  Record,
-  Runtime,
-  Scope,
-  Types,
-} from "effect";
+import { Cause, Effect, Exit, Option, Predicate, Record, Scope, Types } from "effect";
 import http2 from "node:http2";
 
 import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
@@ -79,7 +68,7 @@ const refuseMalformedAuthority = (
   res: http2.Http2ServerResponse,
 ): void => {
   const message = "malformed request authority";
-  const grpc = Option.fromNullable(req.headers["content-type"]).pipe(
+  const grpc = Option.fromNullishOr(req.headers["content-type"]).pipe(
     Option.filter((contentType) =>
       /^application\/grpc(?:-web(?:-text)?)?(?:\+(?:json(?:; ?charset=utf-?8)?|proto))?$/i.test(
         contentType,
@@ -192,11 +181,11 @@ export const bindErrorMessage = (error: T.GrpcServerBindError): string => {
 
 const boundAddress = (server: http2.Http2Server): Effect.Effect<T.GrpcServerAddress> => {
   const address = server.address();
-  return Option.fromNullable(address).pipe(
+  return Option.fromNullishOr(address).pipe(
     Option.filter((bound) => typeof bound === "object"),
     Option.match({
       onNone: () =>
-        Effect.dieMessage(`the gRPC server listens on ${String(address)}, not on a TCP port`),
+        Effect.die(new Error(`the gRPC server listens on ${String(address)}, not on a TCP port`)),
       onSome: (bound) =>
         Effect.succeed({
           host: bound.address,
@@ -221,7 +210,7 @@ const awaitListening = (
   options: ListenOptions,
   onServerError: (error: Error) => void,
 ): Effect.Effect<T.GrpcServerAddress, T.GrpcServerBindError> =>
-  Effect.async((resume) => {
+  Effect.callback((resume) => {
     function detach() {
       server.off("listening", onListening).off("close", onClosedBeforeListening);
     }
@@ -260,7 +249,7 @@ const stopServer = (server: http2.Http2Server): Effect.Effect<unknown> =>
     Effect.gen(function* () {
       yield* Effect.logInfo("gRPC server is stopping...");
 
-      yield* Effect.async((resume) => {
+      yield* Effect.callback((resume) => {
         server.close(() => resume(Effect.logInfo("gRPC server stopped")));
       });
     })
@@ -268,13 +257,12 @@ const stopServer = (server: http2.Http2Server): Effect.Effect<unknown> =>
 
 /**
  * Closing a scope that `Scope.fork` made also removes it from its parent, so an `effect` that fails
- * or is interrupted leaves nothing in the current scope. Effect 3 does this in `ScopeImplProto.fork`
- * (`src/internal/fiberRuntime.ts`), and Effect 4 documents it on `Scope.fork`.
+ * or is interrupted leaves nothing in the current scope. Effect documents it on `Scope.fork`.
  */
 const releaseOnFailure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Effect.acquireUseRelease(
-    Effect.flatMap(Effect.scope, (scope) => Scope.fork(scope, ExecutionStrategy.sequential)),
-    (child) => Scope.extend(effect, child),
+    Effect.flatMap(Effect.scope, (scope) => Scope.fork(scope, "sequential")),
+    (child) => Scope.provide(effect, child),
     (child, exit) => (Exit.isFailure(exit) ? Scope.close(child, exit) : Effect.void),
   );
 
@@ -298,20 +286,17 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
     options: ListenOptions,
   ): Effect.Effect<T.GrpcServerAddress, T.GrpcServerBindError, Scope.Scope> {
     const routes = this.routes.bind(this);
-    const makeExecutor = this.makeExecutor.bind(this);
-    const { readMaxBytes } = this;
+    const { transformation, readMaxBytes } = this;
 
     return Effect.gen(function* () {
-      const runtime = yield* Effect.runtime<never>();
-      const executor = yield* makeExecutor();
+      const context = yield* Effect.context<never>();
+      const executor = transformation(ProtoRuntime.ServerExecutor(context));
       const handler = yield* Effect.sync(() =>
         makeRequestListener({ routes: routes(executor), interceptors: [], readMaxBytes }),
       );
 
       const reportServerError = (error: Error): void => {
-        Runtime.runFork(runtime)(Effect.logError("gRPC server error", Cause.die(error)), {
-          immediate: true,
-        });
+        Effect.runForkWith(context)(Effect.logError("gRPC server error", Cause.die(error)));
       };
 
       const startup = Effect.gen(function* () {
@@ -337,18 +322,6 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
         router.service(service.definition, service.implementation(executor));
       }
     };
-  }
-
-  private makeExecutor(): Effect.Effect<ProtoRuntime.ServerExecutor<Ctx>> {
-    const { transformation } = this;
-
-    return Effect.gen(function* () {
-      const runtime = yield* Effect.runtime();
-      const basicExecutor = ProtoRuntime.ServerExecutor(runtime);
-      const transformedExecutor = transformation(basicExecutor);
-
-      return transformedExecutor;
-    });
   }
 }
 
@@ -394,7 +367,7 @@ export class ConnectEsGprcServerBuilder<Ctx, Services>
     readMaxBytes = grpcDefaultMaxReceiveMessageBytes,
   }: T.GrpcServerOptions = {}): T.GrpcServer<Services> {
     if (!Number.isInteger(readMaxBytes) || readMaxBytes < 1 || readMaxBytes > largestReadMaxBytes) {
-      throw new Cause.IllegalArgumentException(
+      throw new Cause.IllegalArgumentError(
         `readMaxBytes must be an integer from 1 to ${largestReadMaxBytes}, got ${readMaxBytes}`,
       );
     }

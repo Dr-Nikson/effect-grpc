@@ -1,16 +1,5 @@
 // packages/effect-grpc/src/server.test.ts
-import {
-  Cause,
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  LogLevel,
-  Logger,
-  Scheduler,
-  Scope,
-} from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Logger, Scheduler, Scope } from "effect";
 import dns from "node:dns";
 import { readFileSync } from "node:fs";
 import http2 from "node:http2";
@@ -91,7 +80,7 @@ const ping = (address: Server.GrpcServerAddress) =>
   );
 
 const acceptsConnections = (port: number) =>
-  Effect.async<boolean>((resume) => {
+  Effect.callback<boolean>((resume) => {
     const socket = net.connect(port, "127.0.0.1");
     socket.once("connect", () => {
       socket.destroy();
@@ -100,7 +89,7 @@ const acceptsConnections = (port: number) =>
     socket.once("error", () => resume(Effect.succeed(false)));
   });
 
-const freePort = Effect.async<number>((resume) => {
+const freePort = Effect.callback<number>((resume) => {
   const probe = net.createServer();
   probe.listen(0, "127.0.0.1", () => {
     const address = probe.address();
@@ -115,9 +104,9 @@ const captureLogs = () => {
   const logger = Logger.make(({ message, logLevel, cause }) => {
     const text = (Array.isArray(message) ? message : [message]).map(String).join(" ");
     messages.push(text);
-    if (logLevel === LogLevel.Error) errors.push({ message: text, cause: Cause.pretty(cause) });
+    if (logLevel === "Error") errors.push({ message: text, cause: Cause.pretty(cause) });
   });
-  return { messages, errors, layer: Logger.replace(Logger.defaultLogger, logger) };
+  return { messages, errors, layer: Logger.layer([logger]) };
 };
 
 /**
@@ -127,7 +116,9 @@ const captureLogs = () => {
 const heapUsedAfterGc = Effect.gen(function* () {
   const { gc } = globalThis;
   if (gc === undefined) {
-    return yield* Effect.dieMessage("the tests need --expose-gc, which vitest.config.ts passes");
+    return yield* Effect.die(
+      new Error("the tests need --expose-gc, which vitest.config.ts passes"),
+    );
   }
   yield* Effect.sleep("20 millis");
   gc();
@@ -136,7 +127,7 @@ const heapUsedAfterGc = Effect.gen(function* () {
 });
 
 const connectStatus = (address: Server.GrpcServerAddress) =>
-  Effect.async<number>((resume) => {
+  Effect.callback<number>((resume) => {
     const session = http2.connect(address.url);
     session.on("error", () => {});
     const request = session.request({
@@ -153,7 +144,7 @@ const connectStatus = (address: Server.GrpcServerAddress) =>
   }).pipe(Effect.timeout("2 seconds"));
 
 const sendHttp1Request = (port: number) =>
-  Effect.async<void>((resume) => {
+  Effect.callback<void>((resume) => {
     const socket = net.connect(port, "127.0.0.1", () => {
       socket.write("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n");
     });
@@ -191,7 +182,7 @@ const holdNextLookup = Effect.gen(function* () {
       options.all === true ?
         callback(null, [{ address: "127.0.0.1", family: 4 }])
       : callback(null, "127.0.0.1", 4);
-    Deferred.unsafeDone(held, Effect.succeed(answer));
+    Deferred.doneUnsafe(held, Effect.succeed(answer));
   });
   return Deferred.await(held);
 });
@@ -289,7 +280,7 @@ describe("GrpcServer.listen", () => {
       const scope = yield* Scope.make();
 
       yield* Effect.flip(server.listen({ host: "127.0.0.1", port: taken.port })).pipe(
-        Scope.extend(scope),
+        Scope.provide(scope),
         Effect.replicateEffect(500, { discard: true }),
       );
       // A logged Node error keeps its server alive until its stack is read, and the spy keeps it.
@@ -370,11 +361,12 @@ describe("GrpcServer.listen", () => {
       const port = yield* freePort;
       const lookupHeld = yield* holdNextLookup;
 
-      const startup = yield* Effect.fork(server.listen({ host: "grpc-server.test", port }));
+      const startup = yield* Effect.forkChild(server.listen({ host: "grpc-server.test", port }));
       const answerLookup = yield* lookupHeld;
-      const exit = yield* Fiber.interrupt(startup);
+      yield* Fiber.interrupt(startup);
+      const exit = yield* Fiber.await(startup);
 
-      expect(Exit.isInterrupted(exit)).toBe(true);
+      expect(Exit.hasInterrupts(exit)).toBe(true);
       answerLookup();
       expect(yield* acceptsConnections(port)).toBe(false);
     }).pipe(Effect.scoped, Effect.runPromise));
@@ -386,16 +378,16 @@ describe("GrpcServer.listen", () => {
       const lookupHeld = yield* holdNextLookup;
       const scope = yield* Scope.make();
 
-      const startup = yield* Effect.forkDaemon(
+      const startup = yield* Effect.forkDetach(
         server
           .listen({ host: "grpc-server.test", port })
-          .pipe(Scope.extend(scope), Effect.provide(layer)),
+          .pipe(Scope.provide(scope), Effect.provide(layer)),
       );
       const answerLookup = yield* lookupHeld;
       yield* Scope.close(scope, Exit.void);
       const exit = yield* Fiber.await(startup);
 
-      expect(Exit.isInterrupted(exit)).toBe(true);
+      expect(Exit.hasInterrupts(exit)).toBe(true);
       answerLookup();
       expect(yield* acceptsConnections(port)).toBe(false);
       expect(messages.filter((message) => message.startsWith("gRPC server"))).toEqual([]);
@@ -410,7 +402,7 @@ describe("GrpcServer.listen", () => {
       const error = yield* Effect.flip(
         Layer.launch(
           Layer.mergeAll(
-            Layer.scopedDiscard(server.listen({ host: "", port: first.port })),
+            Layer.effectDiscard(server.listen({ host: "", port: first.port })),
             Layer.effectDiscard(Effect.fail("a sibling layer failed")),
           ),
         ),
@@ -426,15 +418,24 @@ describe("GrpcServer.listen", () => {
       const uncaught = yield* recordUncaughtExceptions;
       const first = yield* server.listen({ host: "127.0.0.1", port: 0 });
       // Fiber steps on Node's tick queue can run between a failed bind and Node's report of it.
-      const onNodeTicks = Scheduler.make((task) => process.nextTick(task));
+      const onNodeTicks = new Scheduler.MixedScheduler("async", (runTasks) => {
+        let cancelled = false;
+        process.nextTick(() => {
+          if (!cancelled) runTasks();
+        });
+        return () => {
+          cancelled = true;
+        };
+      });
       const interruptAfter = (steps: number) =>
         Effect.gen(function* () {
-          const startup = yield* Effect.fork(
+          const startup = yield* Effect.forkChild(
             Effect.flip(Effect.scoped(server.listen({ host: "127.0.0.1", port: first.port }))),
           );
-          for (let step = 0; step < steps; step++) yield* Effect.yieldNow();
-          return yield* Fiber.interrupt(startup);
-        }).pipe(Effect.withScheduler(onNodeTicks));
+          for (let step = 0; step < steps; step++) yield* Effect.yieldNow;
+          yield* Fiber.interrupt(startup);
+          return yield* Fiber.await(startup);
+        }).pipe(Effect.provideService(Scheduler.Scheduler, onNodeTicks));
 
       let steps = 0;
       let exit = yield* interruptAfter(steps);
@@ -455,7 +456,7 @@ describe("GrpcServer.listen", () => {
       yield* Scope.close(closed, Exit.void);
 
       yield* Effect.exit(
-        server.listen({ host: "127.0.0.1", port: first.port }).pipe(Scope.extend(closed)),
+        server.listen({ host: "127.0.0.1", port: first.port }).pipe(Scope.provide(closed)),
       );
       yield* afterQueuedNodeEvents;
 
