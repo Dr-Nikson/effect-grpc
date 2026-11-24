@@ -428,7 +428,7 @@ Metadata attached to individual gRPC requests.
 - `headers?: Headers` - HTTP headers to send with the request
 - `contextValues?: ContextValues` - Connect-RPC context values
 
-A client sends these only when its layer turns each call's metadata into a `RequestMeta`, as in [Request Metadata and Headers](#request-metadata-and-headers).
+Of these, a client sends only `headers`, and only when its layer turns each call's metadata into a `RequestMeta`, as in [Request Metadata and Headers](#request-metadata-and-headers). The client ignores `contextValues`.
 
 **Example:**
 ```typescript
@@ -950,7 +950,7 @@ const program = Effect.gen(function* () {
 
 ### Request Metadata and Headers
 
-Send custom headers with requests. Headers reach the server only through a client built with a metadata transformer, so make a tag whose metadata type is `RequestMeta` and pass each call's metadata through:
+Send custom headers with requests. Custom headers reach the server only through a client built with a metadata transformer, so make a tag whose metadata type is `RequestMeta` and pass each call's metadata through:
 
 ```typescript
 import { Effect } from "effect";
@@ -1108,7 +1108,7 @@ pnpm -r run test:types
 pnpm run test:readme
 ```
 
-`test:readme` writes the README's code blocks into a scratch project, generates code from the README's own `.proto` blocks, and compiles every TypeScript block. A block whose first line is a path comment, such as `// src/server.ts`, becomes that file. A block whose path is under `src/generated/` must match the generated declarations. Every other TypeScript block is its own module, so it imports what it uses and declares what it does not build. A block fenced as `js` or `tsx` fails, so fence code as `typescript`. Errors name the README line. `pnpm -r run test:types` runs the same check.
+`test:readme` writes code blocks from the README into a scratch project, generates code from the README's own `.proto` blocks, and compiles every block fenced `ts` or `typescript` except the excerpts of generated code. A block whose first line is a path comment, such as `// src/server.ts`, becomes that file. A block whose path is under `src/generated/` must match the generated declarations. Every other TypeScript block is its own module, so it imports what it uses and declares what it does not build. A block fenced as `js` or `tsx` fails, so fence code as `typescript`. Errors name the README line. `pnpm -r run test:types` runs the same check.
 
 ### Project Structure
 
