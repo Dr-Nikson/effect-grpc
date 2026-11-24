@@ -53,7 +53,8 @@ const prog = Effect.gen(function* () {
   const server = yield* gRpcServer();
   const port = yield* address.port;
 
-  return yield* server.run({ host: address.host, port });
+  yield* server.listen({ host: address.host, port });
+  return yield* Effect.never;
 });
 
 const layer = Layer.empty.pipe(

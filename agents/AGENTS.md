@@ -65,10 +65,12 @@ When developing new features or making changes, follow this iterative process:
 
 5. **Fix Compilation Errors:** If the build fails, address the TypeScript errors reported by the compiler. Repeat steps 1-3 until the package compiles successfully.
 
-6. **Run Type Tests:** Execute the type tests using Vitest for modules you have modified. Ensure you are using Node.js v22+ as specified in `engines`. Run the test command from the **root directory**:
+6. **Run Type Tests and Unit Tests:** Execute the type tests and the runtime unit tests using Vitest for modules you have modified. Ensure you are using Node.js v22+ as specified in `engines`. Run the test commands from the **root directory**:
     ```bash
     # Run type tests for specific package
     pnpm --filter ./packages/effect-grpc run test:types
+    # Run the library's runtime unit tests (src/**/*.test.ts)
+    pnpm --filter ./packages/effect-grpc run test
     ```
 
 7. **Fix Type Test Errors:** If any type tests fail, debug the issues in your code or types. Repeat the cycle (steps 1-5) until all relevant tests pass and the package builds without errors.
@@ -110,6 +112,7 @@ IMPORTANT: refer to the best practices and coding standards described in @agents
   ```bash
   pnpm run test:types # Uses vitest --typecheck.only
   ```
+- The library's runtime unit tests live in `packages/effect-grpc/src/**/*.test.ts`. The build leaves them out of `dist/`, and CI runs them through `pnpm -r run test`. From another directory, run them with `pnpm --dir <checkout>/packages/effect-grpc run test`.
 
 ### GitHub Workflows
 - After changing `.github/workflows` or `.github/scripts`, run both checks from the root. Each must pass:

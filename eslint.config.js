@@ -48,7 +48,7 @@ export default tseslint.config(
     ignores: ["**/src/generated/**"],
   },
   {
-    files: ["**/*.test-d.ts"],
+    files: ["**/*.test-d.ts", "packages/effect-grpc/src/**/*.test.ts"],
     languageOptions: {
       parserOptions: {
         project: "./packages/*/tsconfig.test-d.json",
