@@ -47,7 +47,6 @@ export function createServer(): Effect.Effect<
   });
 }
 
-// The generated client for the server listening at `address`
 export function clientLayer(
   address: EffectGrpcServer.GrpcServerAddress,
 ): Layer.Layer<effectProto.HelloWorldAPIClientTag["Identifier"]> {

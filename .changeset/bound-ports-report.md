@@ -13,7 +13,7 @@ return yield* Effect.never;
 
 A test that forked `run` and slept can call `listen` on port 0 and dial `address.url`.
 
-**Breaking.** `listen` fails with `GrpcServerBindError` when the server cannot listen. Its `reason._tag` is `"AddressInUse"` (EADDRINUSE), `"PermissionDenied"` (EACCES or EPERM), `"InvalidPort"` (a port outside 0-65535) or `"Other"`, and `cause` holds the error Node reported. `reason` is an object with a `_tag`, so Effect 4's `Effect.catchReason` can match it.
+**Breaking.** `listen` fails with `GrpcServerBindError` when the server cannot listen. Its `reason._tag` is `"AddressInUse"` (EADDRINUSE), `"PermissionDenied"` (EACCES or EPERM), `"InvalidPort"` (a port that is not a whole number from 0 to 65535) or `"Other"`, and `cause` holds the error Node reported. `reason` is an object with a `_tag`, so Effect 4's `Effect.catchReason` can match it.
 
 Port 0 works. The OS picks a free port, `listen` returns it, and the ready line names it, as in `gRPC server listening on http://127.0.0.1:41234`. The ready line puts brackets around an IPv6 address, as in `http://[::1]:41234`.
 
