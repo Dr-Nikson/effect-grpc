@@ -239,7 +239,11 @@ const serve = (row: Outcome, handler: Handler, handedToConnect: Deferred.Deferre
         (error: unknown) =>
           Deferred.doneUnsafe(
             handedToConnect,
-            Effect.succeed(codeName(ConnectError.from(error).code)),
+            Effect.succeed(
+              error instanceof ConnectError ?
+                codeName(error.code)
+              : `not a ConnectError: ${String(error)}`,
+            ),
           ),
       );
       return reply;
