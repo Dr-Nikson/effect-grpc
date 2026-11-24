@@ -1,11 +1,20 @@
 // packages/e2e-tests/src/tracing.test.ts
-import { Context, Effect, Layer, References } from "effect";
+import { Context, Effect, Layer, Logger, References } from "effect";
 
 import * as NodeSdk from "@effect/opentelemetry/NodeSdk";
+import { createClient } from "@connectrpc/connect";
 import { describe, expect, it } from "@effect/vitest";
+import { SpanKind } from "@opentelemetry/api";
 import { InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
 
-import { clientLayer, createServer, effectProto, serverServiceLayer } from "./test-fixtures.js";
+import { HelloWorldAPI } from "./generated/com/example/v1/hello_world_api_pb.js";
+import {
+  clientLayer,
+  createServer,
+  effectProto,
+  overEachProtocol,
+  serverServiceLayer,
+} from "./test-fixtures.js";
 
 // InMemorySpanExporter tag for tests
 const SpanExporter = Context.Service<InMemorySpanExporter>("SpanExporter");
@@ -31,6 +40,22 @@ function createTestTracingLayer() {
   const exporterLayer = Layer.succeed(SpanExporter, exporter);
 
   return Layer.merge(sdkLayer, exporterLayer);
+}
+
+const HandlerLogs = Context.Service<Array<Record<string, unknown>>>("HandlerLogs");
+
+/**
+ * Keeps the annotations of each `getGreeting called in E2E test` line, which the handler logs.
+ */
+function captureHandlerLogsLayer() {
+  const annotations: Array<Record<string, unknown>> = [];
+  const logger = Logger.make(({ message, fiber }) => {
+    const text = (Array.isArray(message) ? message : [message]).map(String).join(" ");
+    if (text === "getGreeting called in E2E test") {
+      annotations.push({ ...fiber.getRef(References.CurrentLogAnnotations) });
+    }
+  });
+  return Layer.merge(Logger.layer([logger]), Layer.succeed(HandlerLogs, annotations));
 }
 
 describe("OpenTelemetry Tracing E2E", () => {
@@ -60,9 +85,17 @@ describe("OpenTelemetry Tracing E2E", () => {
       const serverSpan = spans.find((s) => s.name === "com.example.v1.HelloWorldAPI/GetGreeting");
       expect(serverSpan).toBeDefined();
 
-      // Check span attributes
-      expect(serverSpan!.attributes["method"]).toBe("com.example.v1.HelloWorldAPI/GetGreeting");
-      expect(serverSpan!.attributes["protocol"]).toBe("gRPC");
+      expect(serverSpan!.kind, "a server span").toBe(SpanKind.SERVER);
+      expect(
+        serverSpan!.attributes,
+        "the server span uses the client's attribute names",
+      ).toMatchObject({
+        "rpc.system": "grpc",
+        "rpc.service": "com.example.v1.HelloWorldAPI",
+        "rpc.method": "GetGreeting",
+        protocol: "gRPC",
+      });
+      expect(serverSpan!.attributes).not.toHaveProperty("method");
     }).pipe(
       Effect.provide(
         Layer.empty.pipe(
@@ -108,6 +141,13 @@ describe("OpenTelemetry Tracing E2E", () => {
       // Server span's parent should be the client RPC span
       expect(serverSpan!.parentSpanContext?.spanId).toBe(clientRpcSpan!.spanContext().spanId);
       expect(serverSpan!.spanContext().traceId).toBe(clientRpcSpan!.spanContext().traceId);
+
+      expect(clientRpcSpan!.kind, "the client span keeps its kind").toBe(SpanKind.INTERNAL);
+      expect(clientRpcSpan!.attributes, "the client span keeps its attributes").toMatchObject({
+        "rpc.system": "grpc",
+        "rpc.service": "com.example.v1.HelloWorldAPI",
+        "rpc.method": "GetGreeting",
+      });
     }).pipe(
       Effect.provide(
         Layer.empty.pipe(
@@ -210,5 +250,56 @@ describe("OpenTelemetry Tracing E2E", () => {
         ),
       ),
     ),
+  );
+
+  it.live(
+    "names the protocol each call used in the server span and the handler's log annotations",
+    () =>
+      Effect.gen(function* () {
+        const exporter = yield* SpanExporter;
+        const handlerLogs = yield* HandlerLogs;
+
+        const server = yield* createServer();
+        const { url } = yield* server.listen({ host: "127.0.0.1", port: 0 });
+        yield* overEachProtocol(url, (transport) =>
+          Effect.promise(() =>
+            createClient(HelloWorldAPI, transport).getGreeting({ name: "ProtocolTest" }),
+          ),
+        );
+
+        yield* Effect.sleep("100 millis");
+
+        const serverSpans = exporter
+          .getFinishedSpans()
+          .filter((span) => span.name === "com.example.v1.HelloWorldAPI/GetGreeting");
+        expect(
+          serverSpans.map(({ attributes }) => ({
+            system: attributes["rpc.system"],
+            protocol: attributes["protocol"],
+          })),
+          "the server spans of the gRPC, gRPC-web and Connect calls, in order",
+        ).toEqual([
+          { system: "grpc", protocol: "gRPC" },
+          { system: "grpc", protocol: "gRPC-web" },
+          { system: "connect_rpc", protocol: "Connect" },
+        ]);
+        expect(
+          handlerLogs.map(({ method, protocol }) => ({ method, protocol })),
+          "the handler's log annotations for the same calls",
+        ).toEqual([
+          { method: "com.example.v1.HelloWorldAPI/GetGreeting", protocol: "gRPC" },
+          { method: "com.example.v1.HelloWorldAPI/GetGreeting", protocol: "gRPC-web" },
+          { method: "com.example.v1.HelloWorldAPI/GetGreeting", protocol: "Connect" },
+        ]);
+      }).pipe(
+        Effect.provide(
+          Layer.empty.pipe(
+            Layer.provideMerge(serverServiceLayer),
+            Layer.provideMerge(createTestTracingLayer()),
+            Layer.provideMerge(captureHandlerLogsLayer()),
+            Layer.provideMerge(Layer.succeed(References.MinimumLogLevel, "Debug")),
+          ),
+        ),
+      ),
   );
 });
