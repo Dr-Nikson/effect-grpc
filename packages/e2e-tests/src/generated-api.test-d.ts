@@ -31,8 +31,8 @@ interface AuthMeta {
 }
 
 type WrappedService<Ctx> = EffectGrpcServer.GrpcService<ServiceId, typeof HelloWorldAPI, Ctx>;
-type ServiceTag<Ctx> = Context.Tag<WrappedService<Ctx>, WrappedService<Ctx>>;
-type ClientTag<Meta> = Context.Tag<
+type ServiceTag<Ctx> = Context.Service<WrappedService<Ctx>, WrappedService<Ctx>>;
+type ClientTag<Meta> = Context.Service<
   effectProto.HelloWorldAPIClient<Meta>,
   effectProto.HelloWorldAPIClient<Meta>
 >;
@@ -154,7 +154,9 @@ describe("the client API generated for HelloWorldAPI", () => {
   });
 
   test("the config tag holds the GrpcClientConfig of HelloWorldAPI", () => {
-    expectTypeOf(effectProto.HelloWorldAPIConfigTag).toEqualTypeOf<Context.Tag<Config, Config>>();
+    expectTypeOf(effectProto.HelloWorldAPIConfigTag).toEqualTypeOf<
+      Context.Service<Config, Config>
+    >();
   });
 
   test("makeExecutor, called the way the generated client layer calls it, gives each method an optional RequestMeta and no error channel", () => {
@@ -178,7 +180,7 @@ describe("the client API generated for HelloWorldAPI", () => {
     });
 
     expectTypeOf(program).toEqualTypeOf<
-      Effect.Effect<Effect.Effect.Success<typeof program>, never, ClientNeeds | Scope.Scope>
+      Effect.Effect<Effect.Success<typeof program>, never, ClientNeeds | Scope.Scope>
     >();
   });
 });

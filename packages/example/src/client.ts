@@ -1,5 +1,5 @@
 // packages/example/src/client.ts
-import { Effect, Layer, LogLevel, Logger } from "effect";
+import { Effect, Layer, References } from "effect";
 
 import { EffectGrpcClient } from "@dr_nikson/effect-grpc";
 import { NodeRuntime } from "@effect/platform-node";
@@ -37,7 +37,7 @@ const prog = Effect.gen(function* () {
 const deps = Layer.empty.pipe(
   Layer.provideMerge(debugApiClientLayer),
   Layer.provideMerge(EffectGrpcClient.liveGrpcClientRuntimeLayer()),
-  Layer.provideMerge(Logger.minimumLogLevel(LogLevel.Trace)),
+  Layer.provideMerge(Layer.succeed(References.MinimumLogLevel, "Trace")),
 );
 
 NodeRuntime.runMain(Effect.provide(prog, deps).pipe(Effect.scoped));

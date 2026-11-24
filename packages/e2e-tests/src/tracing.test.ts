@@ -1,14 +1,14 @@
 // packages/e2e-tests/src/tracing.test.ts
-import { Context, Effect, Layer, LogLevel, Logger } from "effect";
+import { Context, Effect, Layer, References } from "effect";
 
-import { NodeSdk } from "@effect/opentelemetry";
+import * as NodeSdk from "@effect/opentelemetry/NodeSdk";
 import { describe, expect, it } from "@effect/vitest";
 import { InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
 
 import { clientLayer, createServer, effectProto, serverServiceLayer } from "./test-fixtures.js";
 
 // InMemorySpanExporter tag for tests
-const SpanExporter = Context.GenericTag<InMemorySpanExporter>("SpanExporter");
+const SpanExporter = Context.Service<InMemorySpanExporter>("SpanExporter");
 
 /**
  * Creates a tracing layer with an InMemorySpanExporter for testing.
@@ -34,7 +34,7 @@ function createTestTracingLayer() {
 }
 
 describe("OpenTelemetry Tracing E2E", () => {
-  it.scopedLive("server creates span with correct name from gRPC method", () =>
+  it.live("server creates span with correct name from gRPC method", () =>
     Effect.gen(function* () {
       const exporter = yield* SpanExporter;
 
@@ -68,13 +68,13 @@ describe("OpenTelemetry Tracing E2E", () => {
         Layer.empty.pipe(
           Layer.provideMerge(serverServiceLayer),
           Layer.provideMerge(createTestTracingLayer()),
-          Layer.provideMerge(Logger.minimumLogLevel(LogLevel.Debug)),
+          Layer.provideMerge(Layer.succeed(References.MinimumLogLevel, "Debug")),
         ),
       ),
     ),
   );
 
-  it.scopedLive("client creates span that becomes parent of server span", () =>
+  it.live("client creates span that becomes parent of server span", () =>
     Effect.gen(function* () {
       const exporter = yield* SpanExporter;
 
@@ -113,13 +113,13 @@ describe("OpenTelemetry Tracing E2E", () => {
         Layer.empty.pipe(
           Layer.provideMerge(serverServiceLayer),
           Layer.provideMerge(createTestTracingLayer()),
-          Layer.provideMerge(Logger.minimumLogLevel(LogLevel.Debug)),
+          Layer.provideMerge(Layer.succeed(References.MinimumLogLevel, "Debug")),
         ),
       ),
     ),
   );
 
-  it.scopedLive("trace context propagates through full span hierarchy", () =>
+  it.live("trace context propagates through full span hierarchy", () =>
     Effect.gen(function* () {
       const exporter = yield* SpanExporter;
 
@@ -170,13 +170,13 @@ describe("OpenTelemetry Tracing E2E", () => {
         Layer.empty.pipe(
           Layer.provideMerge(serverServiceLayer),
           Layer.provideMerge(createTestTracingLayer()),
-          Layer.provideMerge(Logger.minimumLogLevel(LogLevel.Debug)),
+          Layer.provideMerge(Layer.succeed(References.MinimumLogLevel, "Debug")),
         ),
       ),
     ),
   );
 
-  it.scopedLive("span names follow {service}/{method} convention", () =>
+  it.live("span names follow {service}/{method} convention", () =>
     Effect.gen(function* () {
       const exporter = yield* SpanExporter;
 
@@ -206,7 +206,7 @@ describe("OpenTelemetry Tracing E2E", () => {
         Layer.empty.pipe(
           Layer.provideMerge(serverServiceLayer),
           Layer.provideMerge(createTestTracingLayer()),
-          Layer.provideMerge(Logger.minimumLogLevel(LogLevel.Debug)),
+          Layer.provideMerge(Layer.succeed(References.MinimumLogLevel, "Debug")),
         ),
       ),
     ),
