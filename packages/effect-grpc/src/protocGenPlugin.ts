@@ -1,4 +1,3 @@
-// #!/usr/bin/env -S node
 import type { GeneratedFile, Schema } from "@bufbuild/protoplugin";
 import { createEcmaScriptPlugin, safeIdentifier } from "@bufbuild/protoplugin";
 import type { DescMethod, DescService } from "@bufbuild/protobuf";
@@ -29,54 +28,6 @@ function generateTs(schema: Schema<object>): void {
         // Extract basename from file path for import examples
         const fileBasename = file.name.split('/').pop() || file.name;
         file.services.forEach(service => generateEffectService(f, service, fileBasename, effectImports));
-        /*
-                for (const service of file.services) {
-                    f.print(f.jsDoc(service));
-                    f.print(f.export("class", safeIdentifier(service.name + "Client")), " {");
-
-
-                    // To support the custom option we defined in customoptions/default_host.proto,
-                    // we need to generate code for this proto file first. This will generate the
-                    // file customoptions/default_host_pb.ts, which contains the generated option
-                    // extension `default_host`.
-                    // Then we use the functions hasOption() and getOption() to see whether the
-                    // option is set, and set the value as the default for the constructor argument.
-                    if (hasOption(service, default_host)) {
-                        const defaultHost = getOption(service, default_host);
-                        f.print("  constructor(private readonly baseUrl = ", f.string(defaultHost), ") {}");
-                    } else {
-                        f.print("  constructor(private readonly baseUrl: string) {}");
-                    }
-                    f.print();
-                    for (const method of service.methods) {
-                        if (method.methodKind != "unary") {
-                            // Fetch only supports unary RPCs
-                            continue;
-                        }
-                        f.print(f.jsDoc(method, "  "));
-                        const inputType = f.importShape(method.input);
-                        const inputDesc = f.importSchema(method.input);
-                        const outputType = f.importShape(method.output);
-                        const outputDesc = f.importSchema(method.output);
-                        f.print("  async ", method.localName, "(request: ", inputType, "): Promise<", outputType, "> {");
-                        f.print('    const method = "POST";');
-                        f.print('    const url = `${this.baseUrl}/', service.typeName, '/', method.name, '`;');
-                        f.print('    const headers = new Headers({');
-                        f.print('      "Content-Type": "application/json",');
-                        f.print('    });');
-                        f.print('    const body = ', f.runtime.toJsonString, '(', inputDesc, ', request);');
-                        if (schema.options.logRequests) {
-                            f.print("    console.log(`${method} ${url}`, request);");
-                        }
-                        f.print("    const response = await fetch(url, { method, headers, body });");
-                        f.print("    if (response.status !== 200) {");
-                        f.print("      throw Error(`HTTP ${response.status} ${response.statusText}`);");
-                        f.print("    }");
-                        f.print("    return ", f.runtime.fromJson, "(", outputDesc, ", await response.json());");
-                        f.print("  }");
-                    }
-                    f.print("}");
-                }*/
     }
 }
 
@@ -226,7 +177,6 @@ function generateEffectService(
     );
     f.print();
 
-    // export type DebugAPIServiceTag<Ctx = any> = Context.Tag<DebugAPIGrpcService<Ctx>, DebugAPIGrpcService<Ctx>>
     f.print("/**");
     f.print(" * Type alias for the service Context.Tag.");
     f.print(" *");
@@ -286,14 +236,6 @@ function generateEffectService(
 
     f.print();
 
-    /**
-     * @example
-     * ```typescript
-     * function makeDebugAPIServiceTag<Ctx = any>(ctxKey: string = "any"): DebugAPITag<Ctx> {
-     *     return Context.GenericTag<DebugAPIGrpcService<Ctx>>(`${proto.DebugAPI.typeName}<${ctxKey}}>`);
-     * }
-     * ```
-     */
     f.print( "function ", makeTagSymbol, "<Ctx = any>(ctxKey: string = ", f.string("any"), "): ", serviceTagSymbol, "<Ctx> {");
     f.print("  return ", importContext, ".GenericTag<", grpcServiceSymbol, "<Ctx>>(`", service.typeName, "<${ctxKey}>`);")
     f.print("}")
@@ -634,8 +576,6 @@ function generateEffectService(
 
     function generateServerMethod(method: DescMethod): void {
         const inputType = f.importShape(method.input);
-        // const inputDesc = f.importSchema(method.input);
-        // const outputType = f.importShape(method.output);
         const outputDesc = f.importSchema(method.output);
         const importMessageInitShape = f.import("MessageInitShape", "@bufbuild/protobuf", true);
 
