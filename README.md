@@ -20,10 +20,14 @@ Type-safe gRPC and Protocol Buffer support for the Effect ecosystem
 
 ## Installation
 
+effect-grpc 4 needs Effect 4.1.5 or later and Node.js 22.19 or later.
+
 ```bash
-npm install @dr_nikson/effect-grpc
-# gRPC runtime deps  
-npm install @bufbuild/protobuf  @connectrpc/connect
+npm install @dr_nikson/effect-grpc effect @effect/opentelemetry
+# gRPC runtime deps
+npm install @bufbuild/protobuf @connectrpc/connect
+# Runs the Quick Start programs on Node.js
+npm install @effect/platform-node
 ```
 
 For code generation, you'll also need:
@@ -105,7 +109,7 @@ This will generate TypeScript files in `src/generated/example/v1/` with full Eff
 
 ```typescript
 // src/server.ts
-import { Effect, Layer, LogLevel, Logger } from "effect";
+import { Effect, Layer, References } from "effect";
 import { EffectGrpcServer } from "@dr_nikson/effect-grpc";
 import { NodeRuntime } from "@effect/platform-node";
 
@@ -143,25 +147,26 @@ const program = Effect.gen(function* () {
   return yield* Effect.never;
 });
 
-// Provide dependencies and run
+// Provide dependencies and run. Effect.scoped gives listen its scope and closes it on shutdown.
 const layer = Layer.empty.pipe(
   Layer.provideMerge(helloServiceLayer),
-  Layer.provideMerge(Layer.scope),
-  Layer.provideMerge(Logger.minimumLogLevel(LogLevel.Info))
+  Layer.provideMerge(Layer.succeed(References.MinimumLogLevel, "Info"))
 );
 
-NodeRuntime.runMain(Effect.provide(program, layer));
+NodeRuntime.runMain(Effect.provide(program, layer).pipe(Effect.scoped));
 ```
 
 The server binds `127.0.0.1` instead of `localhost`. Node can bind `localhost` to `::1`, and a client on an IPv4-only host then dials `127.0.0.1` and gets `ECONNREFUSED`.
 
 `listen` succeeds with the address the server bound. Pass `port: 0` to let the OS pick a free port, and read it from the result. The server also logs it, as in `gRPC server listening on http://127.0.0.1:41234`.
 
+Ctrl+C or SIGTERM interrupts the program. The scope closes, the server stops, and the process exits with code 130, which is the code `runMain` of Effect 4 gives a program that a signal stopped. To exit with another code, pass `teardown` to `runMain`.
+
 ### 5. Implement the Client
 
 ```typescript
 // src/client.ts
-import { Effect, Layer, Logger, LogLevel } from "effect";
+import { Effect, Layer, References } from "effect";
 import { EffectGrpcClient } from "@dr_nikson/effect-grpc";
 import { NodeRuntime } from "@effect/platform-node";
 
@@ -196,7 +201,7 @@ const program = Effect.gen(function* () {
 const dependencies = Layer.empty.pipe(
   Layer.provideMerge(helloClientLayer),
   Layer.provideMerge(EffectGrpcClient.liveGrpcClientRuntimeLayer()),
-  Layer.provideMerge(Logger.minimumLogLevel(LogLevel.Info))
+  Layer.provideMerge(Layer.succeed(References.MinimumLogLevel, "Info"))
 );
 
 NodeRuntime.runMain(Effect.provide(program, dependencies));
@@ -496,7 +501,7 @@ Creates a Context tag for service-specific configuration.
 **Parameters:**
 - `service` - Fully-qualified service name
 
-**Returns:** `Context.Tag<GrpcClientConfig<Service>, GrpcClientConfig<Service>>`
+**Returns:** `Context.Service<GrpcClientConfig<Service>, GrpcClientConfig<Service>>`
 
 **Example:**
 ```typescript
@@ -886,18 +891,18 @@ interface User {
   name: string;
 }
 
-// Define a database service tag
-class DatabaseService extends Context.Tag("DatabaseService")<
+// Define a database service
+class DatabaseService extends Context.Service<
   DatabaseService,
   {
     readonly getUser: (id: string) => Effect.Effect<User>;
     readonly listUsers: () => Effect.Effect<Array<User>>;
   }
->() {}
+>()("DatabaseService") {}
 
 // Service implementation class with constructor
 class UserServiceLive implements effectProto.UserService {
-  constructor(private readonly db: Context.Tag.Service<typeof DatabaseService>) {}
+  constructor(private readonly db: Context.Service.Shape<typeof DatabaseService>) {}
 
   getUser(request: proto.GetUserRequest) {
     return this.db.getUser(request.userId).pipe(
@@ -913,7 +918,7 @@ class UserServiceLive implements effectProto.UserService {
 }
 
 // Wire dependencies through constructor
-const userServiceLayer = Layer.unwrapEffect(
+const userServiceLayer = Layer.unwrap(
   Effect.gen(function* () {
     const db = yield* DatabaseService;
     const serviceImpl = new UserServiceLive(db);
@@ -1016,16 +1021,18 @@ When you make a gRPC call, trace context automatically flows from client to serv
 **1. Add OpenTelemetry dependencies:**
 
 ```bash
-npm install @effect/opentelemetry @opentelemetry/api @opentelemetry/sdk-trace-node
-# Plus your preferred exporter
-npm install @opentelemetry/exporter-trace-otlp-http
+# The OpenTelemetry SDK packages that NodeSdk of @effect/opentelemetry loads.
+# @effect/opentelemetry 4.1 works with the 2.x line of the SDK, which is 0.2xx for the logs packages.
+npm install @opentelemetry/sdk-trace-node@2 @opentelemetry/sdk-trace-base@2 @opentelemetry/sdk-metrics@2 @opentelemetry/resources@2 @opentelemetry/sdk-logs@0.223 @opentelemetry/api-logs@0.223
+# Plus your preferred exporter, from the same line
+npm install @opentelemetry/exporter-trace-otlp-http@0.223
 ```
 
 **2. Configure the OpenTelemetry SDK:**
 
 ```typescript
 import { Effect, Layer } from "effect";
-import { NodeSdk } from "@effect/opentelemetry";
+import * as NodeSdk from "@effect/opentelemetry/NodeSdk";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 

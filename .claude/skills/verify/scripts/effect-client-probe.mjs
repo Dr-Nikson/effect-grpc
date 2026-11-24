@@ -8,7 +8,7 @@ import console from "node:console";
 import process from "node:process";
 import { URL } from "node:url";
 
-import { Cause, Effect, Exit, Layer, Option } from "effect";
+import { Cause, Effect, Exit, Layer } from "effect";
 
 import { EffectGrpcClient } from "@dr_nikson/effect-grpc";
 
@@ -39,9 +39,9 @@ const exit = await Effect.runPromiseExit(program.pipe(Effect.provide(clientLayer
 if (Exit.isSuccess(exit)) {
   console.log(JSON.stringify({ url, method, ok: true, response: exit.value }));
 } else {
-  const kind = Option.isSome(Cause.dieOption(exit.cause))
+  const kind = Cause.hasDies(exit.cause)
     ? "defect"
-    : Option.isSome(Cause.failureOption(exit.cause))
+    : Cause.hasFails(exit.cause)
       ? "failure"
       : "interrupt";
   const error = Cause.squash(exit.cause);

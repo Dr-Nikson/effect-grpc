@@ -76,8 +76,6 @@ Tear down with `stop` or `cleanup`:
 
 The server is stateless, so there is no data to seed.
 
-If the server exits during startup with `ERR_PACKAGE_PATH_NOT_EXPORTED … './RunnerStorage'`, the lockfile resolves stale peers of `@effect/platform-node` (`@effect/cluster` older than 0.56). The commented pins in the `pnpm-workspace.yaml` catalog fix that.
-
 ## Doctor
 
 ```sh
@@ -113,7 +111,7 @@ Run doctor first whenever anything looks off. If doctor reports FAIL on a stale 
 
 `call` takes a protocol (`grpc`, `connect` or `http1`), a proto method name on the route `/com.example.v1.HelloWorldAPI/<Method>`, and an optional JSON request that defaults to `{"name":"verify"}`. `probe` takes `getGreeting` or `faceTheError` and an optional name.
 
-The handler's log line is the server-side proof. For example, a `GetGreeting` call logs `getGreeting called, this is really cool!` with `method: com.example.v1.HelloWorldAPI/GetGreeting`.
+The handler's log line is the server-side proof. For example, a `GetGreeting` call logs `getGreeting called, this is really cool!` with `method: 'com.example.v1.HelloWorldAPI/GetGreeting'`.
 
 ## Evidence
 
