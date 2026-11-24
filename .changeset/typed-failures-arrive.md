@@ -12,6 +12,6 @@ Fail generated client calls with `GrpcException` instead of defects, and send a 
 
 Known limitations:
 
-- A reader gets the data as `JSON.stringify` writes it. `NaN` and `Infinity` arrive as `null`, and data that `JSON.stringify` refuses, such as a cycle, is not sent.
+- A reader gets the data as `JSON.stringify` writes it. `NaN` and `Infinity` arrive as `null`. Data that `JSON.stringify` refuses, such as a cycle, and objects nested about 100 levels deep are not sent, and the status goes out without them.
 - Over gRPC the details travel in a trailer, so a status past HTTP/2's header limit fails the call with `INTERNAL`. In a test with Connect 2.3, 32 KiB of data passed and 63 KiB failed.
 - The generated client still speaks gRPC only. A Connect client in Node on gRPC-web or Connect reads the same `GrpcException`, data included, with `GrpcException.from(Code.Unknown, error)`.

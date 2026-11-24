@@ -12,18 +12,15 @@ import type { Code } from "@connectrpc/connect";
 import { GrpcException } from "./grpcException.js";
 
 /**
- * The data travels as one google.protobuf.Value detail of the status. Going through JSON text gives
- * every reader what `JSON.stringify` writes: NaN and Infinity arrive as null, where a Value holding
- * them would make the reader's `toJson` throw. Data that `JSON.stringify` refuses, such as a cycle,
- * sends no detail.
+ * Going through JSON text gives every reader what `JSON.stringify` writes: NaN and Infinity arrive
+ * as null, where a Value holding them would make the reader's `toJson` throw.
  */
 const jsonToValue = Option.liftThrowable(
   (json: Schema.Json): Value => fromJsonString(ValueSchema, JSON.stringify(json)),
 );
 
 /**
- * `toJson` throws on a Value it cannot write as JSON, such as NaN, Infinity or an unset kind. Such a
- * detail gives no data, so the client still fails with the status's code and message.
+ * `toJson` throws on a Value it cannot write as JSON, such as NaN, Infinity or an unset kind.
  */
 const valueToJson = Option.liftThrowable((value: Value): Schema.Json => toJson(ValueSchema, value));
 
@@ -58,8 +55,7 @@ export const create = (code: Code, message: string, cause?: unknown): GrpcExcept
 /**
  * @internal
  */
-export const from = (code: Code, cause: unknown): GrpcException => {
-  // Handle ConnectError - preserve code, message and data
+export const from = (fallbackCode: Code, cause: unknown): GrpcException => {
   if (cause instanceof ConnectError) {
     return new GrpcException({
       code: cause.code,
@@ -72,7 +68,7 @@ export const from = (code: Code, cause: unknown): GrpcException => {
   // Handle regular Error - use error message and set as cause
   if (cause instanceof Error) {
     return new GrpcException({
-      code,
+      code: fallbackCode,
       message: cause.message,
       cause,
     });
@@ -82,7 +78,7 @@ export const from = (code: Code, cause: unknown): GrpcException => {
   const message = String(cause);
 
   return new GrpcException({
-    code,
+    code: fallbackCode,
     message,
     cause,
   });

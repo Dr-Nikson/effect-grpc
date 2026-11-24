@@ -877,7 +877,7 @@ const UserServiceLive: effectProto.UserService = {
 
 **GrpcException API:**
 - `GrpcException.create(code, message, cause?)` - Create a new exception
-- `GrpcException.from(code, cause)` - Convert any error to GrpcException
+- `GrpcException.from(fallbackCode, cause)` - Convert any error to GrpcException. A `ConnectError` keeps its own code, message and data
 - `GrpcException.withDescription(error, desc)` - Add context description, which stays on the server
 - `GrpcException.withData(error, data)` - Attach JSON data, which the client receives. It also works in a pipe: `GrpcException.create(code, message).pipe(GrpcException.withData(data))`
 

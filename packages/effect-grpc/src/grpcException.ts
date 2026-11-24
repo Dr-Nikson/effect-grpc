@@ -186,11 +186,11 @@ export const create: {
 /**
  * Converts any value into a GrpcException, following these rules:
  * - If the cause is a ConnectError, wraps it preserving code and message, and reads the data from
- *   its first `google.protobuf.Value` detail. A detail that does not decode gives no data.
+ *   the first `google.protobuf.Value` detail that decodes. With no such detail there is no data.
  * - For other Errors, creates a GrpcException with the error message and sets it as cause
  * - For other values, converts to string and uses as message
  *
- * @param code - The gRPC status code to use (required)
+ * @param fallbackCode - The gRPC status code for a cause that is not a ConnectError (required)
  * @param cause - The error/value to convert (native Error, ConnectError, or any value)
  * @returns A GrpcException instance
  *
@@ -218,7 +218,7 @@ export const create: {
  * ```
  */
 export const from: {
-  (code: Code, cause: unknown): GrpcException;
+  (fallbackCode: Code, cause: unknown): GrpcException;
 } = internal.from;
 
 /**
@@ -256,7 +256,9 @@ export const withDescription: {
  *
  * The server sends the data as one `google.protobuf.Value` in the status details: in the
  * `grpc-status-details-bin` trailer over gRPC and gRPC-web, and in the error body over Connect.
- * Over gRPC the trailer counts against HTTP/2's header limits, so keep the data small.
+ * Over gRPC the trailer counts against HTTP/2's header limits, so keep the data small. The data
+ * goes out as `JSON.stringify` writes it, so `NaN` becomes `null`. Data that `JSON.stringify`
+ * refuses, such as a cycle, and objects nested about 100 levels deep are not sent.
  *
  * @param error - The GrpcException to modify
  * @param data - The JSON data to send
@@ -288,8 +290,8 @@ export const withData: {
  * This is useful when you need to throw or return errors in Connect-RPC handlers.
  *
  * The code, the message and the cause are preserved, and the data becomes one
- * `google.protobuf.Value` detail. Description is not included as ConnectError doesn't have a
- * corresponding field.
+ * `google.protobuf.Value` detail, except data that `withData` says is not sent. Description is not
+ * included as ConnectError doesn't have a corresponding field.
  *
  * @param error - The GrpcException to convert
  * @returns A ConnectError instance

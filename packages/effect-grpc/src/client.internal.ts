@@ -178,15 +178,10 @@ function makeExecutorMethod<Shape extends GenServiceMethods>(
         return yield* Effect.tryPromise({
           try: (signal) =>
             clientMethod(req, {
-              // timeoutMs: null,
               headers,
               signal,
-              // onHeader: null,
-              // onTrailer: null,
               contextValues: createContextValues(),
             } as CallOptions),
-          // Connect rejects with a ConnectError, whose code `from` keeps. Code.Unknown only covers
-          // a rejection of another kind.
           catch: (error) => GrpcException.from(Code.Unknown, error),
         });
       });

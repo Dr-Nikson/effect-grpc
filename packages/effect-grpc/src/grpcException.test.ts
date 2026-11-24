@@ -3,7 +3,7 @@ import { Effect, Option } from "effect";
 import { inspect } from "node:util";
 import { describe, expect, it } from "vitest";
 
-import { create, toJson } from "@bufbuild/protobuf";
+import { create, toBinary, toJson } from "@bufbuild/protobuf";
 import { EmptySchema, ValueSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 
@@ -248,6 +248,22 @@ describe("GrpcException.from, reading the data of a ConnectError", () => {
 
     expect(error).toMatchObject({ code: Code.FailedPrecondition, message: "Account is locked" });
     expect(error.data).toEqual(Option.none());
+  });
+
+  it("reads the first Value detail from the wire that decodes", () => {
+    const connectError = new ConnectError("m", Code.FailedPrecondition);
+    connectError.details.push(
+      { type: "google.protobuf.Value", value: new Uint8Array([0xff, 0xff]) },
+      {
+        type: "google.protobuf.Value",
+        value: toBinary(
+          ValueSchema,
+          create(ValueSchema, { kind: { case: "stringValue", value: "second" } }),
+        ),
+      },
+    );
+
+    expect(GrpcException.from(Code.Unknown, connectError).data).toEqual(Option.some("second"));
   });
 
   it("gives no data for a Value detail from the wire whose bytes do not decode", () => {
