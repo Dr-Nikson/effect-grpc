@@ -9,6 +9,7 @@
     "a1",
     "feat-x2",
     "v1-foo",
+    "vv1-foo",
     "x-1",
     "reflection-preview",
     "abcdefghijklmnopqrstuvwxyz-12345"
@@ -49,6 +50,11 @@
     "x",
     "vx",
     "v1",
-    "v12"
+    "v12",
+    "vvx",
+    "vv1",
+    "vv10",
+    "vvv0",
+    "vvvvvvv2"
   ]
 }
