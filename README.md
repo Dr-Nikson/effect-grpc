@@ -137,7 +137,6 @@ const helloServiceLayer = effectProto.helloServiceLiveLayer(
   HelloServiceLive
 );
 
-// The gRPC server, as a layer that uses the service
 const grpcServerLayer = Layer.effectDiscard(
   Effect.gen(function* () {
     const helloService = yield* effectProto.HelloServiceTag;
@@ -148,12 +147,10 @@ const grpcServerLayer = Layer.effectDiscard(
         .withService(helloService)
         .build();
 
-    // listen returns once the server listens, and the server serves until the layer is released.
     yield* server.listen({ host: "127.0.0.1", port: 8000 });
   })
 );
 
-// Provide what the server uses, and run it until Ctrl+C or SIGTERM
 const appLayer = grpcServerLayer.pipe(
   Layer.provide(helloServiceLayer),
   Layer.provide(Layer.succeed(References.MinimumLogLevel, "Info"))
@@ -263,7 +260,7 @@ Represents a running gRPC server instance.
 - `Services` - Union type of all service tags registered with this server
 
 **Methods:**
-- `listen(options: { host: string; port: number }): Effect.Effect<GrpcServerAddress, GrpcServerBindError, Scope.Scope>` - Starts the server on the specified host and port, and succeeds with the address it bound once it listens. Port 0 lets the OS pick the port. The server serves until the Scope closes. Closing the Scope stops it: it tells each client to send no new calls, lets the calls in flight finish, and closes each connection, an idle one at once. To serve for the life of the process, run `listen` in `Layer.effectDiscard` and start that layer with `Layer.launch`, as the Quick Start does, so the server stops before the layers that its handlers use are released. Fails with `GrpcServerBindError` when the server cannot listen, for example when the port is taken. Interrupting `listen` before the server listens stops the attempt. `listen` replaces `run`, which never returned.
+- `listen(options: { host: string; port: number }): Effect.Effect<GrpcServerAddress, GrpcServerBindError, Scope.Scope>` - Starts the server on the specified host and port, and succeeds with the address it bound once it listens. Port 0 lets the OS pick the port. The server serves until the Scope closes. Closing the Scope stops it: it tells each client to send no new calls, lets the calls in flight finish, and closes each connection, an idle one at once. Nothing interrupts a call in flight, so a handler that never ends keeps the Scope open, and so does a client that never reads from its connection. To serve for the life of the process, run `listen` in `Layer.effectDiscard` and start that layer with `Layer.launch`, as the Quick Start does, so the server stops before the layers that its handlers use are released. Fails with `GrpcServerBindError` when the server cannot listen, for example when the port is taken. Interrupting `listen` before the server listens stops the attempt. `listen` replaces `run`, which never returned.
 
 **Example:**
 ```typescript
@@ -954,7 +951,6 @@ const appLayer = Layer.empty.pipe(
   Layer.provideMerge(userServiceLayer)
 );
 
-// Build the server as a layer, and run it with all dependencies
 const grpcServerLayer = Layer.effectDiscard(
   Effect.gen(function* () {
     const userService = yield* effectProto.UserServiceTag;
@@ -967,7 +963,6 @@ const grpcServerLayer = Layer.effectDiscard(
   })
 );
 
-// The server stops before the database layer is released
 const program = Layer.launch(grpcServerLayer.pipe(Layer.provide(appLayer)));
 ```
 
