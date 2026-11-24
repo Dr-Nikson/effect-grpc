@@ -1,13 +1,4 @@
 // .claude/skills/verify/scripts/typed-tags-probe.mjs
-//
-// Uses the generated tags the way the docs do, through the compiled module, with no server and no
-// dialing. One Context holds the default service and the default client, each under its own key, and
-// each make…Tag factory returns a tag that a layer provides and that resolves to that layer's value
-// next to the default tag. It never checks `typeof`: on Effect 4 every tag is a function, working or
-// not. `control-example codegen` feeds this file to `node --input-type=module` from packages/example,
-// so `effect` and the library resolve there. Two optional arguments replace the generated module and
-// the library entry, so the same file can run against another tree. Prints one PASS or FAIL line per
-// check, then `verdict=PASS` or `verdict=FAIL`.
 import { Context, Effect, Layer } from "effect";
 import console from "node:console";
 import { isAbsolute } from "node:path";
@@ -34,7 +25,6 @@ const impl = (label) => {
   return { getGreeting: answer, faceTheError: answer };
 };
 
-// Runs a resolved service's handler the way the server does, through GrpcService#implementation.
 const serve = (service, ctx) =>
   Effect.promise(() =>
     service
