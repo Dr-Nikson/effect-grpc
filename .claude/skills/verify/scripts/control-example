@@ -12,7 +12,8 @@ EXAMPLE=$REPO/packages/example
 E2E=$REPO/packages/e2e-tests
 FIXTURES=$E2E/src/fixtures/hostile-requests.json
 DEFAULT_HOST=127.0.0.1
-DEFAULT_PORT=8000
+# The example's own default. A launch without --port asks for port 0 and records the port the server bound.
+EXAMPLE_DEFAULT_PORT=8000
 HOST_ENV=EFFECT_GRPC_EXAMPLE_HOST
 PORT_ENV=EFFECT_GRPC_EXAMPLE_PORT
 SVC=com.example.v1.HelloWorldAPI
@@ -48,7 +49,7 @@ parse_args() {
       --port)
         [ $# -ge 2 ] || die "--port needs a value"
         [ -z "$PORT_ARG" ] || die "--port was given twice"
-        [[ $2 =~ ^[1-9][0-9]{0,4}$ ]] && [ "$2" -le 65535 ] || die "--port must be a whole number from 1 to 65535, not '$2'"
+        [[ $2 =~ ^(0|[1-9][0-9]{0,4})$ ]] && [ "$2" -le 65535 ] || die "--port must be a whole number from 0 to 65535, not '$2'"
         PORT_ARG=$2
         shift 2
         ;;
@@ -107,8 +108,16 @@ ensure_run() {
   echo "$r"
 }
 
-url_for() {
-  case $1 in *:*) echo "http://[$1]:$2" ;; *) echo "http://$1:$2" ;; esac
+authority_for() {
+  case $1 in *:*) echo "[$1]:$2" ;; *) echo "$1:$2" ;; esac
+}
+
+url_for() { echo "http://$(authority_for "$1" "$2")"; }
+
+split_authority() { # split_authority <host:port or [v6]:port> -> "<host> <port>", without brackets
+  local host=${1%:*}
+  host=${host#[}
+  echo "${host%]} ${1##*:}"
 }
 
 load_instance() {
@@ -204,7 +213,7 @@ stale_report() { # prints one STALE line per out-of-date artifact; status 1 when
     out=$LIB/dist/${f#"$LIB/src/"}
     out=${out%.ts}.js
     if [ ! -f "$out" ] || [ "$f" -nt "$out" ]; then echo "STALE lib: ${out#"$REPO/"} is older than ${f#"$REPO/"}"; bad=1; fi
-  done < <(find "$LIB/src" -name '*.ts' ! -name '*.d.ts' ! -name '*.test-d.ts')
+  done < <(find "$LIB/src" -name '*.ts' ! -name '*.d.ts' ! -name '*.test-d.ts' ! -name '*.test.ts')
   for f in server client address; do
     if [ ! -f "$EXAMPLE/dist/$f.js" ] || [ "$EXAMPLE/src/$f.ts" -nt "$EXAMPLE/dist/$f.js" ]; then echo "STALE example: packages/example/dist/$f.js"; bad=1; fi
   done
@@ -224,7 +233,7 @@ stale_report() { # prints one STALE line per out-of-date artifact; status 1 when
 load_example_env() {
   local removed=() assigned=()
   if [ "$HOST" = "$DEFAULT_HOST" ]; then removed+=(-u "$HOST_ENV"); else assigned+=("$HOST_ENV=$HOST"); fi
-  if [ "$PORT" = "$DEFAULT_PORT" ]; then removed+=(-u "$PORT_ENV"); else assigned+=("$PORT_ENV=$PORT"); fi
+  if [ "$PORT" = "$EXAMPLE_DEFAULT_PORT" ]; then removed+=(-u "$PORT_ENV"); else assigned+=("$PORT_ENV=$PORT"); fi
   EXAMPLE_ENV=(env "${removed[@]}" "${assigned[@]}")
 }
 
@@ -316,27 +325,28 @@ cmd_build() {
 }
 
 cmd_launch() {
-  local r listeners rc=0
+  local r listeners rc=0 requested
   r=$(run_dir)
   if [ -n "$r" ] && [ -d "$r" ] && instance_alive "$r"; then
     die "this checkout already has a live instance (pid $(cat "$r/state/server.pid"), port $(cat "$r/state/port" 2>/dev/null || echo unknown)); run: control-example stop"
   fi
   HOST=${HOST_ARG:-$DEFAULT_HOST}
-  PORT=${PORT_ARG:-$DEFAULT_PORT}
-  BASE_URL=$(url_for "$HOST" "$PORT")
+  requested=${PORT_ARG:-0}
+  PORT=$requested
   mkdir -p "$EGV_ROOT"
-  listeners=$(port_listeners "$PORT") || rc=$?
-  [ "$rc" -eq 0 ] || die "cannot inspect port $PORT; refusing to launch blind"
-  [ -z "$listeners" ] || die "port $PORT is already in use (pid address: $listeners). It is not ours; do not stop it to make room. Pick another --port."
+  if [ "$requested" -ne 0 ]; then
+    listeners=$(port_listeners "$requested") || rc=$?
+    [ "$rc" -eq 0 ] || die "cannot inspect port $requested; refusing to launch blind"
+    [ -z "$listeners" ] || die "port $requested is already in use (pid address: $listeners). It is not ours; do not stop it to make room. Launch without --port to get a free port."
+  fi
   if ! stale_report; then die "build output is stale; run: control-example build"; fi
 
   RUN=$(ensure_run)
   local st=$RUN/state log=$RUN/evidence/server.log
   mkdir -p "$st"
-  rm -f "$st/server.pid" "$st/server.start" "$st/exit_code"
-  echo "$PORT" >"$st/port"
+  rm -f "$st/server.pid" "$st/server.start" "$st/exit_code" "$st/port"
   echo "$HOST" >"$st/host"
-  echo "=== launch host=$HOST port=$PORT root=$REPO at $(date -u +%FT%TZ) git=$(git -C "$REPO" rev-parse HEAD)" >>"$log"
+  echo "=== launch host=$HOST port=$requested root=$REPO at $(date -u +%FT%TZ) git=$(git -C "$REPO" rev-parse HEAD)" >>"$log"
   log_size "$log" >"$st/log_offset"
   # setsid detaches the server from this shell; the wrapper sh records node's pid and exit code.
   (
@@ -355,7 +365,7 @@ echo $? >"$3"' sh "$log" "$st/server.pid" "$st/exit_code" </dev/null >/dev/null 
   [ -n "$pid" ] || die "the server did not start (no pid recorded)"
   proc_start "$pid" >"$st/server.start"
 
-  local off ready=0 addr
+  local off ready=0 addr bound_host="" bound_port=""
   off=$(cat "$st/log_offset")
   for i in $(seq 1 150); do
     if ! instance_alive "$RUN"; then
@@ -364,14 +374,18 @@ echo $? >"$3"' sh "$log" "$st/server.pid" "$st/exit_code" </dev/null >/dev/null 
       exit 1
     fi
     addr=$(ready_address "$RUN")
-    if [ -n "$addr" ] && [ "$addr" != "$HOST:$PORT" ]; then
-      echo "control-example: the server reports http://$addr, but this launch expects http://$HOST:$PORT; stopping it" >&2
-      cmd_stop >&2 || true
-      exit 1
-    fi
-    if [ -n "$addr" ] && port_listeners "$PORT" | grep -q "^$pid "; then
-      ready=1
-      break
+    if [ -n "$addr" ]; then
+      read -r bound_host bound_port <<<"$(split_authority "$addr")"
+      if [ "$bound_host" != "$HOST" ] || ! [[ $bound_port =~ ^[1-9][0-9]{0,4}$ ]] ||
+        { [ "$requested" -ne 0 ] && [ "$bound_port" != "$requested" ]; }; then
+        echo "control-example: the server reports http://$addr, but this launch asked for $(url_for "$HOST" "$requested"); stopping it" >&2
+        cmd_stop >&2 || true
+        exit 1
+      fi
+      if port_listeners "$bound_port" | grep -q "^$pid "; then
+        ready=1
+        break
+      fi
     fi
     sleep 0.2
   done
@@ -380,6 +394,9 @@ echo $? >"$3"' sh "$log" "$st/server.pid" "$st/exit_code" </dev/null >/dev/null 
     cmd_stop >&2 || true
     exit 1
   fi
+  PORT=$bound_port
+  BASE_URL=$(url_for "$HOST" "$PORT")
+  echo "$PORT" >"$st/port"
 
   local probe_rc=0
   do_call "$RUN" connect GetGreeting '{"name":"readiness-probe"}' readiness >/dev/null || probe_rc=$?
@@ -421,8 +438,8 @@ cmd_doctor() {
   fi
   off=$(cat "$st/log_offset" 2>/dev/null || echo 0)
   addr=$(ready_address "$RUN")
-  if [ "$addr" = "$HOST:$PORT" ]; then echo "OK   log has the ready line for http://$addr"; else
-    echo "FAIL log lacks the ready line for http://$HOST:$PORT${addr:+ (it reports http://$addr)}"
+  if [ "$addr" = "$(authority_for "$HOST" "$PORT")" ]; then echo "OK   log has the ready line for http://$addr"; else
+    echo "FAIL log lacks the ready line for $(url_for "$HOST" "$PORT")${addr:+ (it reports http://$addr)}"
     ok=0
   fi
   local listeners rc=0
@@ -543,6 +560,46 @@ cmd_hostile_authority() { run_hostile_driver authority hostile-authority; }
 
 cmd_message_limit() { run_hostile_driver message-limit message-limit; }
 
+cmd_taken_port() {
+  local r log f off out err rc=0 started elapsed alive=no call_rc=0 verdict=FAIL
+  require_live
+  r=$RUN
+  log=$r/evidence/server.log
+  f=$(next_evidence "$r" taken-port)
+  : >"$f"
+  off=$(log_size "$log")
+  out=$(mktemp)
+  err=$(mktemp)
+  started=$(date +%s%N)
+  (cd "$EXAMPLE" && with_example_env timeout -k 2 10 node dist/server.js) </dev/null >"$out" 2>"$err" || rc=$?
+  elapsed=$((($(date +%s%N) - started) / 1000000))
+  if instance_alive "$r"; then alive=yes; fi
+  do_call "$r" connect GetGreeting '{"name":"after-taken-port"}' taken-port-after >/dev/null || call_rc=$?
+  # 124 and 137 mean timeout stopped a server that never gave up on the taken port.
+  if [ "$rc" -ne 0 ] && [ "$rc" -ne 124 ] && [ "$rc" -ne 137 ] && [ "$elapsed" -lt 5000 ] &&
+    grep -q 'EADDRINUSE' "$out" "$err" && grep -q 'AddressInUse' "$out" "$err" &&
+    [ "$alive" = yes ] && [ "$call_rc" -eq 0 ] && grep -q '^http_status=200$' "$DO_CALL_EVIDENCE"; then
+    verdict=PASS
+  fi
+  {
+    echo "# taken-port at $(date -u +%FT%TZ): a second node dist/server.js on this instance's $(url_for "$HOST" "$PORT")"
+    echo "second_exit_code=$rc"
+    echo "second_elapsed_ms=$elapsed"
+    echo "instance_alive_after=$alive"
+    echo "call_after=$DO_CALL_EVIDENCE"
+    echo "verdict=$verdict"
+    echo "--- second server stdout"
+    cat "$out"
+    echo "--- second server stderr"
+    cat "$err"
+    echo "--- instance log lines written meanwhile"
+    tail -c +"$((off + 1))" "$log"
+  } >"$f"
+  rm -f "$out" "$err"
+  show "$f"
+  [ "$verdict" = PASS ]
+}
+
 cmd_stop() {
   local st log pid f off i graceful=yes code
   [ -n "$RUN" ] || { echo "no current run"; return 0; }
@@ -610,7 +667,7 @@ Each checkout runs at most one instance. Instances in different checkouts run si
 
 Usage: control-example <command> [arguments] [--port <n>] [--host <address>] [--root <path>]
   build                                      pnpm install --frozen-lockfile, then pnpm -r run build
-  launch                                     start `node dist/server.js` on <host>:<port>, detached; wait until it serves an RPC
+  launch                                     start `node dist/server.js` on <host>, detached; wait until it serves an RPC
   doctor                                     read-only check of this checkout's instance
   call <connect|grpc|http1> <Method> [json]  one unary call; records the response and the server log lines
   client                                     run the README example client (`node dist/client.js`) against the instance
@@ -619,12 +676,14 @@ Usage: control-example <command> [arguments] [--port <n>] [--host <address>] [--
   hostile-authority                          send the fixture's authority cases over gRPC and Connect; check each reply
   message-limit                              send messages at and over the 4 MiB limit, then oversized
                                              messages on one long-lived client per protocol; check each reply
+  taken-port                                 start a second example on this instance's port; check it fails fast
   stop                                       SIGTERM this checkout's instance; record the shutdown
   cleanup                                    stop if running, drop instance state, keep evidence
   evidence                                   print this checkout's current evidence directory
 
-  --port <n>     launch serves on port n (1-65535, default 8000). Every other command refuses
-                 when this checkout's run recorded a different port.
+  --port <n>     launch asks for port n (0-65535). Without --port it asks for port 0, so the OS
+                 picks a free port, and the instance's port is the one its ready line reports.
+                 Every other command refuses when this checkout's run recorded a different port.
   --host <addr>  launch binds 127.0.0.1 (the default) or ::1. Every other command refuses
                  when this checkout's run recorded a different host.
   --root <path>  refuse unless <path> is inside the checkout this script belongs to.
@@ -658,6 +717,7 @@ main() {
     codegen) want_args 0 0 "$@"; cmd_codegen ;;
     hostile-authority) want_args 0 0 "$@"; cmd_hostile_authority ;;
     message-limit) want_args 0 0 "$@"; cmd_message_limit ;;
+    taken-port) want_args 0 0 "$@"; cmd_taken_port ;;
     stop) want_args 0 0 "$@"; cmd_stop ;;
     cleanup) want_args 0 0 "$@"; cmd_cleanup ;;
     evidence) want_args 0 0 "$@"; cmd_evidence ;;

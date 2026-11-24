@@ -6,7 +6,7 @@ This directory is the maintained source for verifying effect-grpc's user-facing 
 
 - Run each command as one call to `.claude/skills/verify/scripts/control-example` in the checkout under test, as [SKILL.md](../SKILL.md) describes. The commands below are written as run from that checkout's root.
 - `.claude/skills/verify/scripts/control-example build` succeeded on the tree under test.
-- The port you launch on is free. Each checkout runs one instance. Another checkout can run its own at the same time on another port.
+- Each checkout runs one instance. `launch` lets the OS pick a free port unless `--port` pins one, so another checkout can run its own instance at the same time.
 - `.claude/skills/verify/scripts/control-example launch` started the instance, and `.claude/skills/verify/scripts/control-example doctor` reports no FAIL.
 - Drive only the instance this checkout's script started. The script refuses a `--port` or `--root` that points anywhere else.
 
