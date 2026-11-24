@@ -1,18 +1,19 @@
 // packages/e2e-tests/src/generated-api.test-d.ts
-import type { Context, Effect, Layer } from "effect";
+import { Effect } from "effect";
+import type { Context, Layer, Scope } from "effect";
 import { describe, expectTypeOf, test } from "vitest";
 
 import type { MessageInitShape } from "@bufbuild/protobuf";
-import type { EffectGrpcClient, GrpcException } from "@dr_nikson/effect-grpc";
-import { EffectGrpcServer } from "@dr_nikson/effect-grpc";
+import { EffectGrpcClient, EffectGrpcServer } from "@dr_nikson/effect-grpc";
+import type { GrpcException } from "@dr_nikson/effect-grpc";
 
 import * as effectProto from "./generated/com/example/v1/hello_world_api_effect.js";
+import { HelloWorldAPI } from "./generated/com/example/v1/hello_world_api_pb.js";
 import type {
   GetGreetingRequest,
   GetGreetingRequestSchema,
   GetGreetingResponse,
   GetGreetingResponseSchema,
-  HelloWorldAPI,
 } from "./generated/com/example/v1/hello_world_api_pb.js";
 
 type ServiceId = "com.example.v1.HelloWorldAPI";
@@ -114,6 +115,8 @@ describe("the client API generated for HelloWorldAPI", () => {
     >();
     expectTypeOf<effectProto.HelloWorldAPIClient<AuthMeta>["getGreeting"]>().toEqualTypeOf<Call>();
     expectTypeOf<effectProto.HelloWorldAPIClient<AuthMeta>["faceTheError"]>().toEqualTypeOf<Call>();
+    // @ts-expect-error the client interface has no default Meta
+    expectTypeOf<effectProto.HelloWorldAPIClient>();
 
     expectTypeOf(authClient.getGreeting({}, { token: "t0k" })).toEqualTypeOf<
       Effect.Effect<GetGreetingResponse>
@@ -131,12 +134,15 @@ describe("the client API generated for HelloWorldAPI", () => {
     >();
   });
 
-  test("the client live layer needs the service's config and the client runtime, with or without a meta transform", () => {
+  test("the client live layer needs the service's config and the client runtime, for the default tag, a typed tag alone as the example builds it, or a typed tag with a meta transform", () => {
     const authTag = effectProto.makeHelloWorldAPIClientTag<AuthMeta>("AuthMeta");
 
     expectTypeOf(
       effectProto.helloWorldAPIClientLiveLayer(effectProto.HelloWorldAPIClientTag),
     ).toEqualTypeOf<Layer.Layer<effectProto.HelloWorldAPIClient<any>, never, ClientNeeds>>();
+    expectTypeOf(effectProto.helloWorldAPIClientLiveLayer(authTag)).toEqualTypeOf<
+      Layer.Layer<effectProto.HelloWorldAPIClient<AuthMeta>, never, ClientNeeds>
+    >();
     expectTypeOf(
       effectProto.helloWorldAPIClientLiveLayer(
         (meta: AuthMeta) => ({ headers: new Headers({ authorization: meta.token }) }),
@@ -149,5 +155,30 @@ describe("the client API generated for HelloWorldAPI", () => {
 
   test("the config tag holds the GrpcClientConfig of HelloWorldAPI", () => {
     expectTypeOf(effectProto.HelloWorldAPIConfigTag).toEqualTypeOf<Context.Tag<Config, Config>>();
+  });
+
+  test("makeExecutor, called the way the generated client layer calls it, gives each method an optional RequestMeta and no error channel", () => {
+    type ExecutorCall = (
+      request: MessageInitShape<typeof GetGreetingRequestSchema>,
+      meta?: EffectGrpcClient.RequestMeta,
+    ) => Effect.Effect<GetGreetingResponse>;
+
+    const program = Effect.gen(function* () {
+      const config = yield* effectProto.HelloWorldAPIConfigTag;
+      const grpcRuntime = yield* EffectGrpcClient.GrpcClientRuntime;
+      const executor = yield* grpcRuntime.makeExecutor(
+        HelloWorldAPI,
+        ["getGreeting", "faceTheError"],
+        config,
+      );
+
+      expectTypeOf(executor.getGreeting).toEqualTypeOf<ExecutorCall>();
+      expectTypeOf(executor.faceTheError).toEqualTypeOf<ExecutorCall>();
+      return executor;
+    });
+
+    expectTypeOf(program).toEqualTypeOf<
+      Effect.Effect<Effect.Effect.Success<typeof program>, never, ClientNeeds | Scope.Scope>
+    >();
   });
 });
