@@ -136,7 +136,10 @@ const program = Effect.gen(function* () {
       .withService(helloService)
       .build();
 
-  return yield* server.run({ host: "127.0.0.1", port: 8000 });
+  // listen returns once the server listens, and the server serves until the scope closes.
+  // Waiting here keeps the scope open until Ctrl+C or SIGTERM.
+  yield* server.listen({ host: "127.0.0.1", port: 8000 });
+  return yield* Effect.never;
 });
 
 // Provide dependencies and run
@@ -150,6 +153,8 @@ NodeRuntime.runMain(Effect.provide(program, layer));
 ```
 
 The server binds `127.0.0.1` instead of `localhost`. Node can bind `localhost` to `::1`, and a client on an IPv4-only host then dials `127.0.0.1` and gets `ECONNREFUSED`.
+
+`listen` succeeds with the address the server bound. Pass `port: 0` to let the OS pick a free port, and read it from the result. The server also logs it, as in `gRPC server listening on http://127.0.0.1:41234`.
 
 ### 5. Implement the Client
 
@@ -244,7 +249,7 @@ Represents a running gRPC server instance.
 - `Services` - Union type of all service tags registered with this server
 
 **Methods:**
-- `run(options: { host: string; port: number }): Effect.Effect<never, never, Scope.Scope>` - Starts the server on the specified host and port. Returns an Effect that requires a Scope for resource management.
+- `listen(options: { host: string; port: number }): Effect.Effect<GrpcServerAddress, GrpcServerBindError, Scope.Scope>` - Starts the server on the specified host and port, and succeeds with the address it bound once it listens. Port 0 lets the OS pick the port. The server serves until the Scope closes, and closing the Scope shuts it down, so a program that only serves follows `listen` with `Effect.never`. Fails with `GrpcServerBindError` when the server cannot listen, for example when the port is taken. Interrupting `listen` before the server listens stops the attempt. `listen` replaces `run`, which never returned.
 
 **Example:**
 ```typescript
@@ -254,9 +259,35 @@ const server: EffectGrpcServer.GrpcServer<"UserService" | "ProductService"> =
     .withService(productService)
     .build();
 
-// Run with proper resource management
+// Serve until the scope closes
 const program = Effect.scoped(
-  server.run({ host: "127.0.0.1", port: 8000 })
+  Effect.gen(function* () {
+    const address = yield* server.listen({ host: "127.0.0.1", port: 0 });
+    yield* Effect.logInfo(`Clients can dial ${address.url}`);
+    return yield* Effect.never;
+  })
+);
+```
+
+##### `GrpcServerAddress`
+
+The address a listening server bound, as the OS reports it:
+- `host` - the IP address, without brackets, such as `127.0.0.1` or `::1`
+- `port` - the port, which is the one the OS picked when `listen` was given port 0
+- `url` - `http://<host>:<port>` with brackets around an IPv6 host, such as `http://[::1]:41234`, as the ready line prints it
+
+##### `GrpcServerBindError`
+
+The error `listen` fails with when the server cannot listen. `host` and `port` are the ones `listen` was given, `cause` is the error Node reported, and `reason._tag` names the cause: `"AddressInUse"` (EADDRINUSE), `"PermissionDenied"` (EACCES or EPERM), `"InvalidPort"` (a port outside 0-65535), or `"Other"`.
+
+```typescript
+// Fall back to a free port when 8000 is taken
+const address = yield* server.listen({ host: "127.0.0.1", port: 8000 }).pipe(
+  Effect.catchTag("@dr_nikson/effect-grpc/server/GrpcServerBindError", (error) =>
+    error.reason._tag === "AddressInUse"
+      ? server.listen({ host: "127.0.0.1", port: 0 })
+      : Effect.fail(error)
+  )
 );
 ```
 
@@ -767,7 +798,8 @@ const program = Effect.gen(function* () {
     .withService(userService)
     .build();
 
-  return yield* server.run({ host: "127.0.0.1", port: 8000 });
+  yield* server.listen({ host: "127.0.0.1", port: 8000 });
+  return yield* Effect.never;
 }).pipe(
   Effect.provide(appLayer)
 );

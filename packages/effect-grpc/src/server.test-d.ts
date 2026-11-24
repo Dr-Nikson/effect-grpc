@@ -1,5 +1,5 @@
 // packages/effect-grpc/src/server.test-d.ts
-import { Effect } from "effect";
+import { Effect, Scope } from "effect";
 import { assertType, expectTypeOf, test } from "vitest";
 
 import type { HandlerContext } from "@connectrpc/connect";
@@ -103,4 +103,20 @@ test("GrpcServer dependencies should be correctly inferred", () => {
   expectTypeOf(fun2).toBeCallableWith(server2);
   // And we can also use all implemented apis
   expectTypeOf(fun).toBeCallableWith(server2);
+});
+
+test("GrpcServer#listen succeeds with the bound address, fails with GrpcServerBindError, needs a Scope", () => {
+  const server: Server.GrpcServer<"DebugAPI"> = null as any;
+
+  expectTypeOf(server.listen({ host: "127.0.0.1", port: 0 })).toEqualTypeOf<
+    Effect.Effect<Server.GrpcServerAddress, Server.GrpcServerBindError, Scope.Scope>
+  >();
+  expectTypeOf<Server.GrpcServerBindError["reason"]["_tag"]>().toEqualTypeOf<
+    "AddressInUse" | "PermissionDenied" | "InvalidPort" | "Other"
+  >();
+  // @ts-expect-error - run, which never returned, is gone, so its old callers fail to compile
+  assertType<unknown>(server.run);
+  expectTypeOf<
+    Server.GrpcServerBindError["_tag"]
+  >().toEqualTypeOf<"@dr_nikson/effect-grpc/server/GrpcServerBindError">();
 });

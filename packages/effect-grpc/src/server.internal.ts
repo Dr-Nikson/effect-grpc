@@ -19,7 +19,7 @@ import {
 
 import * as GrpcException from "./grpcException.js";
 import * as ProtoRuntime from "./protoRuntime.js";
-import type * as T from "./server.js";
+import * as T from "./server.js";
 
 /**
  * @internal
@@ -168,6 +168,97 @@ const makeRequestListener = (options: {
   };
 };
 
+type ListenOptions = Parameters<T.GrpcServer<unknown>["listen"]>[0];
+
+const authorityOf = (host: string, port: number): string =>
+  `${host.includes(":") ? `[${host}]` : host}:${port}`;
+
+const bindReasons: Partial<Record<string, T.GrpcServerBindError["reason"]>> = {
+  EADDRINUSE: { _tag: "AddressInUse" },
+  EACCES: { _tag: "PermissionDenied" },
+  EPERM: { _tag: "PermissionDenied" },
+  ERR_SOCKET_BAD_PORT: { _tag: "InvalidPort" },
+};
+
+const bindError = (options: ListenOptions, cause: unknown): T.GrpcServerBindError => {
+  const code = cause instanceof Error && "code" in cause ? cause.code : undefined;
+  return new T.GrpcServerBindError({
+    host: options.host,
+    port: options.port,
+    reason: (typeof code === "string" && bindReasons[code]) || { _tag: "Other" },
+    cause,
+  });
+};
+
+/**
+ * @internal
+ */
+export const bindErrorMessage = (error: T.GrpcServerBindError): string => {
+  const detail = error.cause instanceof Error ? error.cause.message : String(error.cause);
+  return `gRPC server could not listen on ${authorityOf(error.host, error.port)} (${error.reason._tag}): ${detail}`;
+};
+
+const boundAddress = (server: http2.Http2Server): Effect.Effect<T.GrpcServerAddress> => {
+  const address = server.address();
+  return address !== null && typeof address === "object" ?
+      Effect.succeed({
+        host: address.address,
+        port: address.port,
+        url: `http://${authorityOf(address.address, address.port)}`,
+      })
+    : Effect.dieMessage(`the gRPC server listens on ${String(address)}, not on a TCP port`);
+};
+
+/**
+ * Listens outside the acquire step of the server's acquireRelease, so interruption can stop a listen
+ * that never completes. Closing the server makes Node drop a pending host lookup instead of binding.
+ */
+const awaitListening = (
+  server: http2.Http2Server,
+  options: ListenOptions,
+): Effect.Effect<T.GrpcServerAddress, T.GrpcServerBindError> =>
+  Effect.async((resume) => {
+    function detach() {
+      server.off("listening", onListening).off("error", onError).off("close", onClose);
+    }
+    function settle(outcome: Effect.Effect<T.GrpcServerAddress, T.GrpcServerBindError>) {
+      detach();
+      resume(outcome);
+    }
+    function onListening() {
+      settle(boundAddress(server));
+    }
+    function onError(cause: Error) {
+      settle(Effect.fail(bindError(options, cause)));
+    }
+    // The scope closed this server before it listened.
+    function onClose() {
+      settle(Effect.interrupt);
+    }
+
+    server.once("listening", onListening).once("error", onError).once("close", onClose);
+    try {
+      server.listen({ host: options.host, port: options.port });
+    } catch (cause) {
+      settle(Effect.fail(bindError(options, cause)));
+    }
+    return Effect.sync(() => {
+      detach();
+      server.close();
+    });
+  });
+
+const stopServer = (server: http2.Http2Server): Effect.Effect<unknown> =>
+  server.listening ?
+    Effect.gen(function* () {
+      yield* Effect.logInfo("gRPC server is stopping...");
+
+      yield* Effect.async((resume) => {
+        server.close(() => resume(Effect.logInfo("gRPC server stopped")));
+      });
+    })
+  : Effect.sync(() => server.close());
+
 /**
  * @internal
  * Live implementation of the GrpcServer interface.
@@ -183,7 +274,9 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
 
   readonly _Services: Types.Contravariant<Services> = (a) => a;
 
-  run(options: { host: string; port: number }): Effect.Effect<never, never, Scope.Scope> {
+  listen(
+    options: ListenOptions,
+  ): Effect.Effect<T.GrpcServerAddress, T.GrpcServerBindError, Scope.Scope> {
     const routes = this.routes.bind(this);
     const makeExecutor = this.makeExecutor.bind(this);
 
@@ -210,9 +303,8 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
       //     allowedHeaders: [...connectCors.allowedHeaders],
       //     exposedHeaders: [...connectCors.exposedHeaders],
       // })
-      type Srv = http2.Http2Server;
-      const startServer = Effect.async<Srv>((resume, signal) => {
-        const server = http2
+      const createServer = Effect.sync(() =>
+        http2
           .createServer(handler)
           .addListener("connect", (req, socket, head) => {
             console.log("Connected to server", req.url, socket, head);
@@ -273,32 +365,14 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
           })
           .addListener("dropRequest", (req, socket) => {
             console.warn("Dropped request", req.url, socket);
-          })
-          .listen({ ...options, signal }, () => {
-            resume(
-              Effect.logInfo(
-                `gRPC server listening on http://${options.host}:${options.port}`,
-              ).pipe(Effect.as(server)),
-            );
-          });
-      });
+          }),
+      );
 
-      const stopServer = (server: http2.Http2Server) =>
-        Effect.gen(function* () {
-          yield* Effect.logInfo("gRPC server is stopping...");
+      const server = yield* Effect.acquireRelease(createServer, stopServer);
+      const address = yield* awaitListening(server, options);
+      yield* Effect.logInfo(`gRPC server listening on ${address.url}`);
 
-          yield* Effect.async((resume) => {
-            // Then close the server
-            server.close(() => {
-              return resume(Effect.logInfo("gRPC server stopped"));
-            });
-          });
-        });
-
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const server = yield* Effect.acquireRelease(startServer, stopServer);
-
-      return yield* Effect.never;
+      return address;
     });
   }
 

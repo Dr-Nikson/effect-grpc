@@ -19,7 +19,6 @@ import * as effectProto from "./generated/com/example/v1/hello_world_api_effect.
 import * as raw from "./raw-unary.js";
 import fixtures from "./fixtures/hostile-requests.json" with { type: "json" };
 import { HelloWorldAPI } from "./generated/com/example/v1/hello_world_api_pb.js";
-import { Port, PortLive } from "./test-fixtures.js";
 
 type Repeated = { readonly repeat: string; readonly times: number };
 
@@ -44,14 +43,12 @@ const authorityEcho: effectProto.HelloWorldAPIService<HandlerContext> = {
 
 const serve = (host: string) =>
   Effect.gen(function* () {
-    const port = yield* Port;
     const service = yield* effectProto.HelloWorldAPIServiceTag;
     const server = EffectGrpcServer.GrpcServerBuilder()
       .withContextTransformer((handlerCtx) => Effect.succeed(handlerCtx))
       .withService(service)
       .build();
-    yield* Effect.forkScoped(server.run({ host, port }));
-    yield* Effect.sleep("1 second");
+    const { port } = yield* server.listen({ host, port: 0 });
     return port;
   }).pipe(
     Effect.provide(
@@ -173,7 +170,7 @@ describe("Hostile requests (issue #61)", () => {
         }
       }
       yield* expectServing(session, port);
-    }).pipe(Effect.provide(PortLive)),
+    }),
   );
 
   it.scopedLive.skipIf(!ipv6LoopbackBinds)(
@@ -195,7 +192,7 @@ describe("Hostile requests (issue #61)", () => {
         );
 
         expect(greetings).toEqual([literal, literal]);
-      }).pipe(Effect.provide(PortLive)),
+      }),
   );
 
   it.scopedLive("answers each rejected authority with INVALID_ARGUMENT and keeps serving", () =>
@@ -207,7 +204,7 @@ describe("Hostile requests (issue #61)", () => {
         yield* expectInvalidAuthority(session, authority, name);
         yield* expectServing(session, port);
       }
-    }).pipe(Effect.provide(PortLive)),
+    }),
   );
 
   it.scopedLive("reads the authority from host when :authority is absent", () =>
@@ -225,7 +222,7 @@ describe("Hostile requests (issue #61)", () => {
         yield* expectInvalidAuthority(session, authority, `${name} in host`, "host");
         yield* expectServing(session, port);
       }
-    }).pipe(Effect.provide(PortLive)),
+    }),
   );
 
   it.scopedLive("keeps serving after a 10 KiB authority", () =>
@@ -245,7 +242,7 @@ describe("Hostile requests (issue #61)", () => {
         }
         yield* expectServing(session, port);
       }
-    }).pipe(Effect.provide(PortLive)),
+    }),
   );
 
   it.scopedLive("an empty authority is reset by HTTP/2 before the server sees it", () =>
@@ -260,7 +257,7 @@ describe("Hostile requests (issue #61)", () => {
         );
         yield* expectServing(session, port);
       }
-    }).pipe(Effect.provide(PortLive)),
+    }),
   );
 
   it.scopedLive("limits each request message to 4 MiB and keeps serving", () =>
@@ -313,7 +310,7 @@ describe("Hostile requests (issue #61)", () => {
         "a gzip-compressed oversized message, limited after decompression",
       ).toBe(Code.ResourceExhausted);
       yield* expectServing(session, port);
-    }).pipe(Effect.provide(PortLive)),
+    }),
   );
 
   it.scopedLive("keeps a long-lived client usable after its oversized messages are refused", () =>
@@ -361,6 +358,6 @@ describe("Hostile requests (issue #61)", () => {
         connect: expected,
         generatedClient: expected,
       });
-    }).pipe(Effect.provide(PortLive)),
+    }),
   );
 });
