@@ -23,8 +23,14 @@ const headerSetter: TextMapSetter<Headers> = {
   },
 };
 
+/**
+ * @internal
+ */
 export const grpcClientRuntimeTypeId = Symbol("@dr_nikson/effect-grpc/GrpcClientRuntime");
 
+/**
+ * @internal
+ */
 export const grpcClientRuntimeTag = Context.GenericTag<T.GrpcClientRuntime, T.GrpcClientRuntime>(
   grpcClientRuntimeTypeId.toString(),
 );
@@ -35,7 +41,7 @@ export const grpcClientRuntimeTag = Context.GenericTag<T.GrpcClientRuntime, T.Gr
  * The session manager is automatically aborted when the scope closes.
  * This is important because otherwise we might stuck waiting for the connections to timeout
  */
-function createManagedSessionManager(config: T.GrpcClientConfig<any>) {
+function createManagedSessionManager(config: T.GrpcClientConfig<never>) {
   return Effect.acquireRelease(
     Effect.sync(
       () => new Http2SessionManager(config.baseUrl, config.pingOptions, config.http2SessionOptions),
@@ -44,6 +50,9 @@ function createManagedSessionManager(config: T.GrpcClientConfig<any>) {
   );
 }
 
+/**
+ * @internal
+ */
 export function liveGrpcClientRuntime(): Layer.Layer<T.GrpcClientRuntime> {
   const instance: T.GrpcClientRuntime = {
     Type: grpcClientRuntimeTypeId,
@@ -51,7 +60,7 @@ export function liveGrpcClientRuntime(): Layer.Layer<T.GrpcClientRuntime> {
     makeExecutor<Shape extends GenServiceMethods>(
       serviceDefinition: GenService<Shape>,
       methodNames: ReadonlyArray<keyof GenService<Shape>["method"]>,
-      config: T.GrpcClientConfig<any>,
+      config: T.GrpcClientConfig<never>,
     ) {
       return Effect.gen(function* () {
         // Create managed HTTP/2 session manager as a resource
@@ -182,12 +191,18 @@ function makeExecutorMethod<Shape extends GenServiceMethods>(
   }
 }
 
+/**
+ * @internal
+ */
 export function makeGrpcClientConfigTag<Service extends string>(service: Service) {
   return Context.GenericTag<T.GrpcClientConfig<Service>, T.GrpcClientConfig<Service>>(
     `@dr_nikson/effect-grpc/GrpcClientConfig<${service}>`,
   );
 }
 
+/**
+ * @internal
+ */
 export function makeGrpcClientConfig<Service extends string>(
   opts: Omit<T.GrpcClientConfig<Service>, "_Service">,
 ) {
