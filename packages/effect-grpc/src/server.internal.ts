@@ -221,7 +221,10 @@ const awaitListening = (
 ): Effect.Effect<T.GrpcServerAddress, T.GrpcServerBindError> =>
   Effect.async((resume) => {
     function detach() {
-      server.off("listening", onListening).off("error", onError).off("close", onClose);
+      server
+        .off("listening", onListening)
+        .off("error", onError)
+        .off("close", onClosedBeforeListening);
     }
     function settle(outcome: Effect.Effect<T.GrpcServerAddress, T.GrpcServerBindError>) {
       detach();
@@ -233,12 +236,14 @@ const awaitListening = (
     function onError(cause: Error) {
       settle(Effect.fail(bindError(options, cause)));
     }
-    // The scope closed this server before it listened.
-    function onClose() {
+    function onClosedBeforeListening() {
       settle(Effect.interrupt);
     }
 
-    server.once("listening", onListening).once("error", onError).once("close", onClose);
+    server
+      .once("listening", onListening)
+      .once("error", onError)
+      .once("close", onClosedBeforeListening);
     try {
       server.listen({ host: options.host, port: options.port });
     } catch (cause) {
