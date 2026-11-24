@@ -95,7 +95,6 @@ export const getGreeting = (
       done = true;
       const body = Buffer.concat(chunks);
       const rstCode = stream.rstCode;
-      // The server can stop reading an oversized upload once it has answered; drop the rest.
       stream.close(http2.constants.NGHTTP2_CANCEL);
       resume(
         Effect.try(() => ({

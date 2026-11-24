@@ -221,7 +221,7 @@ stale_report() { # prints one STALE line per out-of-date artifact; status 1 when
 
 # ---------- drivers ----------
 
-example_env() { # sets EXAMPLE_ENV to the env command that gives the example this instance's address and port
+load_example_env() {
   local removed=() assigned=()
   if [ "$HOST" = "$DEFAULT_HOST" ]; then removed+=(-u "$HOST_ENV"); else assigned+=("$HOST_ENV=$HOST"); fi
   if [ "$PORT" = "$DEFAULT_PORT" ]; then removed+=(-u "$PORT_ENV"); else assigned+=("$PORT_ENV=$PORT"); fi
@@ -229,7 +229,7 @@ example_env() { # sets EXAMPLE_ENV to the env command that gives the example thi
 }
 
 with_example_env() {
-  example_env
+  load_example_env
   "${EXAMPLE_ENV[@]}" "$@"
 }
 
@@ -285,7 +285,7 @@ run_node_driver() {
   off=$(log_size "$log")
   out=$(mktemp)
   err=$(mktemp)
-  example_env
+  load_example_env
   local cmd=("${EXAMPLE_ENV[@]}" timeout 30 "$@")
   (cd "$EXAMPLE" && "${cmd[@]}") >"$out" 2>"$err" || rc=$?
   sleep 0.3

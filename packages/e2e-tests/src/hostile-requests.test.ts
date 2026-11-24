@@ -109,7 +109,6 @@ const answerOf = (call: Effect.Effect<{ readonly greeting: string }, unknown>) =
     ),
   );
 
-// The server's scope waits for open connections when it closes, so each client connection closes first.
 const sessionTo = (baseUrl: string) =>
   Effect.acquireRelease(
     Effect.sync(() => new Http2SessionManager(baseUrl)),
