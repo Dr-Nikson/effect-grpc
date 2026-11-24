@@ -1,0 +1,4 @@
+{
+  "trusted": ["OWNER", "MEMBER", "COLLABORATOR"],
+  "untrusted": ["CONTRIBUTOR", "FIRST_TIME_CONTRIBUTOR", "FIRST_TIMER", "MANNEQUIN", "NONE", "", null]
+}

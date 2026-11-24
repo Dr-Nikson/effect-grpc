@@ -1,0 +1,76 @@
+{
+  "releaseRuns": [
+    {
+      "name": "a green push to master in this repository",
+      "workflow_run": { "conclusion": "success", "event": "push", "head_branch": "master", "head_repository": { "full_name": "Dr-Nikson/effect-grpc" } },
+      "runs": true
+    },
+    {
+      "name": "a failed push to master",
+      "workflow_run": { "conclusion": "failure", "event": "push", "head_branch": "master", "head_repository": { "full_name": "Dr-Nikson/effect-grpc" } },
+      "runs": false
+    },
+    {
+      "name": "a green pull request from a fork whose branch is named master",
+      "workflow_run": { "conclusion": "success", "event": "pull_request", "head_branch": "master", "head_repository": { "full_name": "someone/effect-grpc" } },
+      "runs": false
+    },
+    {
+      "name": "a green pull request in this repository from branch master",
+      "workflow_run": { "conclusion": "success", "event": "pull_request", "head_branch": "master", "head_repository": { "full_name": "Dr-Nikson/effect-grpc" } },
+      "runs": false
+    },
+    {
+      "name": "a green push whose head repository is another repository",
+      "workflow_run": { "conclusion": "success", "event": "push", "head_branch": "master", "head_repository": { "full_name": "someone/effect-grpc" } },
+      "runs": false
+    },
+    {
+      "name": "a green push to another branch",
+      "workflow_run": { "conclusion": "success", "event": "push", "head_branch": "feature", "head_repository": { "full_name": "Dr-Nikson/effect-grpc" } },
+      "runs": false
+    },
+    {
+      "name": "a run whose head repository is missing",
+      "workflow_run": { "conclusion": "success", "event": "push", "head_branch": "master", "head_repository": null },
+      "runs": false
+    }
+  ],
+  "snapshotEvents": [
+    {
+      "name": "a dispatch, whatever its tag",
+      "github": { "event_name": "workflow_dispatch", "event": { "inputs": { "tag": "Bad..Tag" } } },
+      "runs": true
+    },
+    {
+      "name": "a /snapshot comment on a plain issue",
+      "github": {
+        "event_name": "issue_comment",
+        "event": { "issue": { "number": 62 }, "comment": { "body": "/snapshot", "author_association": "OWNER" } }
+      },
+      "runs": false
+    },
+    {
+      "name": "a pull request comment that is not a command",
+      "github": {
+        "event_name": "issue_comment",
+        "event": {
+          "issue": { "number": 83, "pull_request": { "url": "https://api.github.com/repos/Dr-Nikson/effect-grpc/pulls/83" } },
+          "comment": { "body": "LGTM", "author_association": "OWNER" }
+        }
+      },
+      "runs": false
+    },
+    {
+      "name": "a pull request comment that mentions /snapshot after other text",
+      "github": {
+        "event_name": "issue_comment",
+        "event": {
+          "issue": { "number": 83, "pull_request": { "url": "https://api.github.com/repos/Dr-Nikson/effect-grpc/pulls/83" } },
+          "comment": { "body": "Please run /snapshot", "author_association": "OWNER" }
+        }
+      },
+      "runs": false
+    }
+  ]
+}

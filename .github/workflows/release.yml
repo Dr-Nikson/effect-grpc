@@ -2,7 +2,8 @@
 name: Release
 
 on:
-  workflow_run:
+  # Only CI runs from a push to master in this repository start a job; see version-pr.if.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: ["Typescript CI"]
     types: [completed]
     branches:
@@ -11,34 +12,40 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
 
-permissions:
-  contents: write
-  id-token: write
-  pull-requests: write
+permissions: {}
 
 jobs:
   version-pr:
     name: Create Version PR
-    if: github.event.workflow_run.conclusion == 'success'
+    # `branches: [master]` matches the head branch name of any CI run, including a pull
+    # request from a fork whose branch is called master.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'master' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: write # commit the version PR branch through the API
+      pull-requests: write # open or update the version PR
     outputs:
-      has_changesets: ${{ steps.changesets.outputs.hasChangesets }}
       has_unpublished: ${{ steps.check-unpublished.outputs.has_unpublished }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5.0.0
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5.0.0
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: '24.x'
           cache: 'pnpm'
@@ -52,9 +59,18 @@ jobs:
           find packages/*/bin -type f -exec chmod -x {} \; 2>/dev/null || true
           echo "✅ Executable bits removed"
 
+      - name: Find the open version PR
+        id: open-version-pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          NUMBER=$(gh pr list --head changeset-release/master --base master --state open --json number --jq '.[0].number // empty')
+          echo "number=$NUMBER" >> "$GITHUB_OUTPUT"
+
       - name: Create Release Pull Request
         id: changesets
-        uses: changesets/action@v1
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
         with:
           version: pnpm changeset:version
           title: 'chore: version packages'
@@ -63,9 +79,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # The action sets pullRequestNumber only when it created or updated a version PR.
+      # hasChangesets is also true when every pending changeset is empty.
       - name: Check for unpublished packages
         id: check-unpublished
-        if: steps.changesets.outputs.hasChangesets == 'false'
+        if: steps.changesets.outputs.pullRequestNumber == ''
         run: |
           echo "Checking for unpublished packages tracked by changesets..."
           HAS_UNPUBLISHED=false
@@ -97,41 +115,55 @@ jobs:
           echo "has_unpublished=$HAS_UNPUBLISHED" >> $GITHUB_OUTPUT
 
       - name: Log status
+        env:
+          HAS_CHANGESETS: ${{ steps.changesets.outputs.hasChangesets }}
+          OPEN_VERSION_PR: ${{ steps.open-version-pr.outputs.number }}
+          VERSION_PR: ${{ steps.changesets.outputs.pullRequestNumber }}
+          HAS_UNPUBLISHED: ${{ steps.check-unpublished.outputs.has_unpublished }}
         run: |
-          echo "Has changesets: ${{ steps.changesets.outputs.hasChangesets }}"
-          echo "Has unpublished packages: ${{ steps.check-unpublished.outputs.has_unpublished }}"
-          echo "PR Number: ${{ steps.changesets.outputs.pullRequestNumber }}"
-          if [[ "${{ steps.changesets.outputs.hasChangesets }}" == "true" ]]; then
-            echo "📝 Version PR created/updated"
-          elif [[ "${{ steps.check-unpublished.outputs.has_unpublished }}" == "true" ]]; then
-            echo "📦 Unpublished packages detected - publish job will run after approval"
+          if [[ -n "$VERSION_PR" && "$VERSION_PR" == "$OPEN_VERSION_PR" ]]; then
+            echo "Updated version PR #$VERSION_PR"
+          elif [[ -n "$VERSION_PR" ]]; then
+            echo "Created version PR #$VERSION_PR"
+          elif [[ "$HAS_CHANGESETS" == "true" ]]; then
+            echo "No version PR: every pending changeset is empty"
           else
-            echo "✅ All packages already published - nothing to do"
+            echo "No version PR: no pending changesets"
+          fi
+          if [[ "$HAS_UNPUBLISHED" == "true" ]]; then
+            echo "Unpublished packages found: the publish job waits for npm-publish approval"
+          elif [[ -z "$VERSION_PR" ]]; then
+            echo "Every package version is already on npm"
           fi
 
   publish:
     name: Publish to npm
     needs: version-pr
-    if: needs.version-pr.outputs.has_changesets == 'false' && needs.version-pr.outputs.has_unpublished == 'true'
+    if: needs.version-pr.outputs.has_unpublished == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment:
       name: npm-publish
       url: https://npmjs.com/package/@dr_nikson/effect-grpc
+    permissions:
+      actions: read # download the CI run's build artifacts
+      contents: write # push release tags and create GitHub releases
+      id-token: write # npm trusted publishing with provenance
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5.0.0
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5.0.0
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: '24.x'
           cache: 'pnpm'
@@ -141,7 +173,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: build-artifacts-${{ github.event.workflow_run.head_sha }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -160,8 +192,14 @@ jobs:
           find packages/*/bin -type f -exec chmod -x {} \; 2>/dev/null || true
           echo "✅ Executable bits removed"
 
+      # changesets/action publishes only when no changeset is pending, empty ones included.
+      # This job runs only when no version PR was due, so what is pending here is empty; the
+      # script deletes it from this checkout and fails on anything else.
+      - name: Drop empty changesets
+        run: node .github/scripts/drop-empty-changesets.mjs
+
       - name: Publish to npm
-        uses: changesets/action@v1
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
         with:
           publish: pnpm changeset:publish
         env:
