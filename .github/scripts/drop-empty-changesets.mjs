@@ -1,5 +1,4 @@
 // .github/scripts/drop-empty-changesets.mjs
-// Usage: node .github/scripts/drop-empty-changesets.mjs [changeset-dir]
 import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,40 +9,32 @@ const FRONTMATTER = /\s*---([^]*?)\n\s*---(\s*(?:\n|$)[^]*)/;
  * Lists the changesets that changesets/action counts as pending: every `.md` file except
  * README.md and dotfiles, minus the ids that pre.json records as consumed in pre mode.
  *
- * @param {string} dir the `.changeset` directory
+ * @param {string} changesetDir
  * @returns {{ id: string, file: string, empty: boolean }[]}
  */
-export function pendingChangesets(dir) {
-  const prePath = join(dir, "pre.json");
+export function pendingChangesets(changesetDir) {
+  const prePath = join(changesetDir, "pre.json");
   const pre = existsSync(prePath) ? JSON.parse(readFileSync(prePath, "utf8")) : undefined;
   const consumed = new Set(pre?.mode === "pre" ? pre.changesets : []);
-  return readdirSync(dir)
+  return readdirSync(changesetDir)
     .filter((name) => !name.startsWith(".") && name.endsWith(".md") && !/^README\.md$/i.test(name))
-    .map((name) => ({ id: name.replace(".md", ""), file: join(dir, name) }))
+    .map((name) => ({ id: name.replace(".md", ""), file: join(changesetDir, name) }))
     .filter(({ id }) => !consumed.has(id))
-    .map(({ id, file }) => ({ id, file, empty: isEmpty(readFileSync(file, "utf8")) }));
+    .map(({ id, file }) => ({ id, file, empty: hasBlankFrontmatter(readFileSync(file, "utf8")) }));
 }
 
-/**
- * Only a frontmatter of whitespace counts as empty. Anything else, a YAML comment included,
- * counts as a release, so a changeset this check cannot read is never dropped.
- *
- * @param {string} text
- */
-function isEmpty(text) {
+/** @param {string} text */
+function hasBlankFrontmatter(text) {
   const match = FRONTMATTER.exec(text);
   return match !== null && match[1].trim() === "";
 }
 
 /**
- * Deletes every pending empty changeset. Throws, and deletes nothing, when a pending
- * changeset lists a package, because that changeset needs a version PR rather than a publish.
- *
- * @param {string} dir the `.changeset` directory
- * @returns {string[]} the ids it deleted
+ * @param {string} changesetDir
+ * @returns {string[]}
  */
-export function dropEmptyChangesets(dir) {
-  const pending = pendingChangesets(dir);
+export function dropEmptyChangesets(changesetDir) {
+  const pending = pendingChangesets(changesetDir);
   const releasing = pending
     .filter((changeset) => !changeset.empty)
     .map((changeset) => changeset.id);
