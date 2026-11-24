@@ -3,12 +3,12 @@ packages:
 
 catalogs:
   default:
-    '@bufbuild/buf': 1.57.0
-    '@bufbuild/protobuf': 2.8.0
-    '@bufbuild/protoc-gen-es': 2.8.0
-    '@bufbuild/protoplugin': 2.9.0
-    '@connectrpc/connect': 2.1.0
-    '@connectrpc/connect-node': 2.1.0
+    '@bufbuild/buf': 1.75.0
+    '@bufbuild/protobuf': 2.17.0
+    '@bufbuild/protoc-gen-es': 2.17.0
+    '@bufbuild/protoplugin': 2.17.0
+    '@connectrpc/connect': 2.3.0
+    '@connectrpc/connect-node': 2.3.0
     '@effect/language-service': 0.41.0
     '@effect/opentelemetry': 0.61.0
     '@effect/platform': 0.94.2
@@ -29,9 +29,9 @@ catalogs:
     '@effect/sql': 0.49.0
     '@effect/workflow': 0.16.0
   peer:
-    "@bufbuild/buf": ^1.57.0
-    "@bufbuild/protoc-gen-es": ^2.8.0
-    '@bufbuild/protobuf': ^2.8.0
-    '@connectrpc/connect': ^2.1.0
+    "@bufbuild/buf": ^1.75.0
+    "@bufbuild/protoc-gen-es": ^2.17.0
+    '@bufbuild/protobuf': ^2.17.0
+    '@connectrpc/connect': ^2.3.0
     '@effect/opentelemetry': ^0.61.0
     effect: ^3.19.15
