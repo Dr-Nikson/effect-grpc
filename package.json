@@ -20,6 +20,7 @@
     "test:workflows": "node --test .github/scripts/*.test.mjs",
     "test": "pnpm -r run test",
     "test:types": "pnpm -r run test:types",
+    "test:readme": "node packages/e2e-tests/readme/check-readme.mjs",
     "changeset": "changeset",
     "changeset:version": "changeset version && pnpm install --lockfile-only",
     "changeset:publish": "pnpm -r run build && changeset publish",
