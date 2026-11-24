@@ -1,8 +1,4 @@
 // .github/scripts/snapshot-request.mjs
-// Decides whether a snapshot request may go on to the job that uses the npm-publish
-// environment. snapshot-release.yml runs it from a checkout of trusted code: the default
-// branch for a comment, the dispatched ref for a dispatch. The workflow's `if:` lets only
-// owners, members and collaborators start it, so every comment that reaches it gets a reply.
 
 const TAG_GRAMMAR = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const TAG_MAX_LENGTH = 32;
@@ -17,19 +13,18 @@ const CI_WORKFLOW = "typescript-ci.yml";
  *   | { kind: "refused", reason: Refusal, reply: boolean }
  *   | { kind: "allowed", tag: string, sha: string, runId: number, artifact: string,
  *       prNumber: number | null, reply: boolean }} Decision
- * `reply` is true for a comment request and false for a dispatch.
  */
 
 /**
- * @typedef {object} SnapshotEvent The fields of the GitHub Actions context the decision reads.
+ * @typedef {object} SnapshotEvent
  * @property {string} eventName
  * @property {any} payload
  * @property {string} sha
- * @property {string} repository "owner/name"
+ * @property {string} repository
  */
 
 /**
- * @typedef {object} Evidence Read-only GitHub lookups.
+ * @typedef {object} Evidence
  * @property {(prNumber: number) => Promise<{ sha: string, repository: string | null }>} pullRequestHead
  * @property {(sha: string) => Promise<{ id: number, event: string, conclusion: string | null, headSha: string }[]>} pushRuns
  * @property {(runId: number) => Promise<{ name: string, expired: boolean }[]>} artifacts
@@ -60,8 +55,6 @@ function isValidTag(tag) {
 }
 
 /**
- * Reads the first line of a comment as `/snapshot` or `/snapshot <tag>`.
- *
  * @param {unknown} body
  * @returns {"not-a-command" | "malformed" | { tag: string | undefined }}
  */
@@ -83,9 +76,6 @@ function readCommand(body) {
 const refuse = (reason, reply) => ({ kind: "refused", reason, reply });
 
 /**
- * Checks, in order: the command, the tag, the pull request head, the CI run and its build
- * artifact. Every check that needs no lookup runs before the first lookup.
- *
  * @param {SnapshotEvent} event
  * @param {Evidence} evidence
  * @returns {Promise<Decision>}
@@ -135,7 +125,7 @@ export async function decideSnapshot({ eventName, payload, sha, repository }, ev
 }
 
 /**
- * @param {any} github Octokit client from actions/github-script
+ * @param {any} github
  * @param {string} owner
  * @param {string} repo
  * @returns {Evidence}
@@ -175,12 +165,7 @@ function githubEvidence(github, owner, repo) {
   };
 }
 
-/**
- * Entry point for actions/github-script. Sets the step outputs the later jobs read and fails
- * the step on a refusal. It never prints text taken from the event.
- *
- * @param {{ github: any, context: any, core: any }} script
- */
+/** @param {{ github: any, context: any, core: any }} script */
 export async function runSnapshotValidation({ github, context, core }) {
   const { owner, repo } = context.repo;
   const decision = await decideSnapshot(
