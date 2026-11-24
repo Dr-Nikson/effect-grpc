@@ -100,27 +100,199 @@ const refuseMalformedAuthority = (
   res.end(JSON.stringify({ code: "invalid_argument", message }));
 };
 
+type MethodKind = ConnectRouter["handlers"][number]["method"]["methodKind"];
+
 /**
- * Connect stops reading a request it refuses, and Node then stops granting the client window to
- * send the rest. A Node client keeps those bytes queued, and Node never returns their memory, even
- * when the stream is reset. Past the session's memory limit, the client rejects every response.
+ * Connect refuses a message over the limit as soon as it reads the message's length, while the
+ * client still has the rest queued. A Node client counts queued request bytes against its
+ * session's memory and never gets them back once that stream is reset. Past the limit it rejects
+ * every response on the session. So the listener discards the rest of the upload, and an answer
+ * that is ready early waits until the client has nothing more queued: for the first three kinds
+ * until the upload ends, because their clients send the whole request without waiting, and for
+ * bidi until the message in flight has arrived and nothing follows it, because a bidi client may
+ * wait for each reply.
  */
-const uploadEnded = (upload: http2.ServerHttp2Stream): Promise<void> => {
-  if (upload.readableEnded || upload.destroyed) return Promise.resolve();
-  // Node's compat layer would push each chunk into the request and pause the stream again.
-  upload.removeAllListeners("data");
-  upload.resume();
-  return new Promise((resolve) => upload.once("end", resolve));
+const earlyAnswerWaitsFor = {
+  unary: "uploadEnd",
+  server_streaming: "uploadEnd",
+  client_streaming: "uploadEnd",
+  bidi_streaming: "quietUpload",
+} as const satisfies Record<MethodKind, "uploadEnd" | "quietUpload">;
+
+/**
+ * Follows the envelope framing that gRPC, gRPC-web and Connect streaming share (a flag byte and a
+ * 4-byte length before each message), to tell when the message in flight has fully arrived.
+ */
+const trackEnvelopes = () => {
+  let headerBytes = 0;
+  let length = 0;
+  let remaining = 0;
+  let received = 0;
+  let waiting: Array<() => void> = [];
+  const atBoundary = () => headerBytes === 0 && remaining === 0;
+  const track = (chunk: Uint8Array): void => {
+    received += chunk.length;
+    for (let offset = 0; offset < chunk.length; ) {
+      if (remaining > 0) {
+        const skipped = Math.min(remaining, chunk.length - offset);
+        remaining -= skipped;
+        offset += skipped;
+        continue;
+      }
+      if (headerBytes > 0) length = length * 256 + (chunk[offset] ?? 0);
+      headerBytes += 1;
+      offset += 1;
+      if (headerBytes === 5) {
+        remaining = length;
+        headerBytes = 0;
+        length = 0;
+      }
+    }
+    if (atBoundary()) {
+      const ready = waiting;
+      waiting = [];
+      ready.forEach((resolve) => resolve());
+    }
+  };
+  const boundary = (): Promise<void> =>
+    atBoundary() ? Promise.resolve() : new Promise((resolve) => waiting.push(resolve));
+  return { track, boundary, received: () => received };
 };
+
+type PingRound = { inFlight: boolean; waiting: Array<() => void> };
+
+const pingRounds = new WeakMap<http2.Http2Session, PingRound>();
+
+const sendPing = (session: http2.Http2Session, round: PingRound): void => {
+  const batch = round.waiting;
+  round.waiting = [];
+  round.inFlight = true;
+  const acknowledged = (): void => {
+    round.inFlight = false;
+    // DATA frames read together with the ACK reach the stream before the waiters run.
+    setImmediate(() => batch.forEach((resolve) => resolve()));
+    if (round.waiting.length > 0) sendPing(session, round);
+  };
+  try {
+    if (!session.ping(acknowledged)) acknowledged();
+  } catch {
+    acknowledged();
+  }
+};
+
+/**
+ * Resolves after a PING sent once this was called is acknowledged, so request bytes the client
+ * queued before that PING reached it have arrived. One PING is in flight per session, because Node
+ * allows ten outstanding by default.
+ */
+const pingRoundTrip = (session: http2.Http2Session): Promise<void> =>
+  new Promise((resolve) => {
+    const round = Option.getOrElse(Option.fromNullable(pingRounds.get(session)), () => {
+      const created: PingRound = { inFlight: false, waiting: [] };
+      pingRounds.set(session, created);
+      return created;
+    });
+    round.waiting.push(resolve);
+    if (!round.inFlight) sendPing(session, round);
+  });
+
+/**
+ * The body of one request, read through one iterator. Connect borrows it, and once connect stops
+ * reading before the upload has ended, the listener reads the rest from the same iterator and
+ * discards it.
+ */
+const lendUpload = (req: http2.Http2ServerRequest) => {
+  const source: AsyncIterator<Uint8Array> = req[Symbol.asyncIterator]();
+  const envelopes = trackEnvelopes();
+  const stream = req.stream;
+  const ended = new Promise<void>((resolve) => {
+    stream.once("end", resolve);
+    stream.once("close", resolve);
+  });
+  const open = () => !stream.readableEnded && !stream.destroyed;
+  let lent = true;
+  let stopped = false;
+  const read = async (): Promise<IteratorResult<Uint8Array>> => {
+    const chunk = await source.next();
+    if (chunk.done !== true) envelopes.track(chunk.value);
+    return chunk;
+  };
+  const discardRest = (): void => {
+    if (!lent) return;
+    lent = false;
+    void (async () => {
+      let chunk = await read();
+      while (chunk.done !== true) chunk = await read();
+    })().catch(() => {
+      // The client reset the stream: nothing is left to read.
+    });
+  };
+  const quiet = async (): Promise<void> => {
+    for (;;) {
+      await Promise.race([envelopes.boundary(), ended]);
+      const session = Option.fromNullable(stream.session);
+      if (!open() || Option.isNone(session)) return;
+      const received = envelopes.received();
+      await pingRoundTrip(session.value);
+      if (!open() || envelopes.received() === received) return;
+    }
+  };
+  const stop = (): void => {
+    stopped = true;
+    discardRest();
+  };
+  const body: AsyncIterable<Uint8Array> = {
+    [Symbol.asyncIterator]: () => ({
+      next: () => (lent ? read() : Promise.resolve({ done: true, value: undefined })),
+      return: (value?: unknown) => {
+        stop();
+        return Promise.resolve({ done: true, value });
+      },
+      throw: (error?: unknown) => {
+        stop();
+        return Promise.reject(error);
+      },
+    }),
+  };
+  return {
+    body,
+    stopped: () => stopped,
+    wait: (until: "uploadEnd" | "quietUpload"): Promise<void> => {
+      discardRest();
+      return until === "uploadEnd" ? ended : Promise.race([ended, quiet()]);
+    },
+  };
+};
+
+type Upload = ReturnType<typeof lendUpload>;
+
+/**
+ * A bidi answer streams while connect reads the request. Once connect has stopped reading, the
+ * rest of the answer, which carries the status, waits for the upload to go quiet.
+ */
+async function* restAfterQuiet(
+  body: AsyncIterable<Uint8Array>,
+  upload: Upload,
+): AsyncGenerator<Uint8Array> {
+  const chunks = body[Symbol.asyncIterator]();
+  let waited = false;
+  for (;;) {
+    const chunk = await chunks.next();
+    if (!waited && upload.stopped()) {
+      await upload.wait("quietUpload");
+      waited = true;
+    }
+    if (chunk.done === true) return;
+    yield chunk.value;
+  }
+}
 
 /**
  * connect-node builds each request's URL from its authority synchronously inside the listener, and
  * Node turns a throw there into an uncaught exception that stops the process.
  *
- * The listener routes with the functions connectNodeAdapter is built from, so that it can hold an
- * answer. A client of a unary or server-streaming method sends its one message without waiting, and
- * Node's client rejects response headers while too much of its upload is still queued, so those
- * answers leave only after the upload has ended. A streaming client may wait for the answer.
+ * The listener routes with the functions connectNodeAdapter is built from, so that it owns the
+ * request body and can hold an answer.
  */
 const makeRequestListener = (options: {
   readonly routes: (router: ConnectRouter) => ConnectRouter;
@@ -131,42 +303,54 @@ const makeRequestListener = (options: {
     readMaxBytes: grpcDefaultMaxReceiveMessageBytes,
   });
   options.routes(router);
-  const handlers = new Map(router.handlers.map((handler) => [handler.requestPath, handler]));
+  const routes = new Map(
+    router.handlers.map((handler) => [
+      handler.requestPath,
+      { handler, waitsFor: earlyAnswerWaitsFor[handler.method.methodKind] },
+    ]),
+  );
   return (req, res) => {
     const resetStream = () => res.stream.close(http2.constants.NGHTTP2_INTERNAL_ERROR);
     try {
-      const handler = Option.fromNullable(handlers.get(req.url.split("?", 1)[0] ?? ""));
-      const sendsOneMessage = Option.exists(
-        handler,
-        ({ method }) => method.methodKind === "unary" || method.methodKind === "server_streaming",
-      );
-      const answer = (send: () => unknown): void => {
-        void (sendsOneMessage ? uploadEnded(req.stream) : Promise.resolve())
-          .then(send)
-          .catch(resetStream);
-      };
+      const route = Option.fromNullable(routes.get(req.url.split("?", 1)[0] ?? ""));
+      const upload = lendUpload(req);
       // Node types it as a string, but its getter returns undefined without :authority and host.
       const authority = Option.fromNullable(req.authority).pipe(Option.flatMap(readAuthority));
       if (Option.isNone(authority)) {
-        answer(() => refuseMalformedAuthority(req, res));
+        void Option.match(route, {
+          onNone: () => Promise.resolve(),
+          onSome: ({ waitsFor }) => upload.wait(waitsFor),
+        })
+          .then(() => refuseMalformedAuthority(req, res))
+          .catch(resetStream);
         return;
       }
       // Connect reads req.authority, and Node's getter returns this header first.
       if (authority.value !== req.authority) req.headers[":authority"] = authority.value;
-      if (Option.isNone(handler)) {
+      if (Option.isNone(route)) {
         res.writeHead(404);
         res.end();
         return;
       }
-      const request = universalRequestFromNodeRequest(
-        req,
-        res,
-        undefined,
-        options.contextValues(req),
-      );
-      void handler
-        .value(request)
-        .then((response) => answer(() => universalResponseToNodeResponse(response, res)))
+      const { handler, waitsFor } = route.value;
+      const request = {
+        ...universalRequestFromNodeRequest(req, res, undefined, options.contextValues(req)),
+        body: upload.body,
+      };
+      void handler(request)
+        .then(async (response) => {
+          if (waitsFor === "uploadEnd") {
+            await upload.wait("uploadEnd");
+            return universalResponseToNodeResponse(response, res);
+          }
+          const body = Option.fromNullable(response.body);
+          return universalResponseToNodeResponse(
+            Option.isSome(body) ?
+              { ...response, body: restAfterQuiet(body.value, upload) }
+            : response,
+            res,
+          );
+        })
         .catch(resetStream);
     } catch {
       resetStream();
