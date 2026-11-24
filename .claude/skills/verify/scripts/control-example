@@ -681,7 +681,7 @@ Usage: control-example <command> [arguments] [--port <n>] [--host <address>] [--
   message-limit                              send messages at and over the 4 MiB limit, then oversized
                                              messages on one long-lived client per protocol; check each reply
   connect-method                             send an HTTP/2 CONNECT request; check that it gets 405 and the next calls work
-  taken-port                                start a second example on this instance's port; check it fails fast
+  taken-port                                 start a second example on this instance's port; check it fails fast
   stop                                       SIGTERM this checkout's instance; record the shutdown
   cleanup                                    stop if running, drop instance state, keep evidence
   evidence                                   print this checkout's current evidence directory
