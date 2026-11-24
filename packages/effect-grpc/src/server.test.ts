@@ -14,7 +14,8 @@ import {
   FileDescriptorProtoSchema,
   file_google_protobuf_empty,
 } from "@bufbuild/protobuf/wkt";
-import { createClient } from "@connectrpc/connect";
+import type { ContextValues } from "@connectrpc/connect";
+import { createClient, createContextKey } from "@connectrpc/connect";
 import { Http2SessionManager, createGrpcTransport } from "@connectrpc/connect-node";
 
 import * as Server from "./server.js";
@@ -47,16 +48,20 @@ const PingService = serviceDesc<{
   ping: { methodKind: "unary"; input: typeof EmptySchema; output: typeof EmptySchema };
 }>(pingFile, 0);
 
+const contextValuesSeen: Array<ContextValues> = [];
+
 const server = Server.GrpcServerBuilder()
   .withService(
     Server.GrpcService(
       "effect_grpc_test.PingService",
       PingService,
     )((executor) => ({
-      ping: (request, context) =>
-        executor.unary("effect_grpc_test.PingService/Ping", request, context, () =>
+      ping: (request, context) => {
+        contextValuesSeen.push(context.values);
+        return executor.unary("effect_grpc_test.PingService/Ping", request, context, () =>
           Effect.succeed({}),
-        ),
+        );
+      },
     })),
   )
   .build();
@@ -375,6 +380,22 @@ describe("GrpcServer while it serves", () => {
       expect(yield* connectStatus(address)).toBe(405);
       const reply = yield* ping(address);
       expect(reply.$typeName).toBe("google.protobuf.Empty");
+    }).pipe(Effect.scoped, Effect.runPromise));
+
+  it("hands each handler its own, empty context values", () =>
+    Effect.gen(function* () {
+      const address = yield* server.listen({ host: "127.0.0.1", port: 0 });
+      contextValuesSeen.length = 0;
+      yield* ping(address);
+      yield* ping(address);
+
+      const unset = createContextKey("no default replaced", { description: "a key nothing sets" });
+      expect(contextValuesSeen).toHaveLength(2);
+      expect(contextValuesSeen[0]).not.toBe(contextValuesSeen[1]);
+      expect(contextValuesSeen.map((values) => values.get(unset))).toEqual([
+        "no default replaced",
+        "no default replaced",
+      ]);
     }).pipe(Effect.scoped, Effect.runPromise));
 
   it("writes nothing to the console for a call, a rejected HTTP/1.1 client, a closed connection or a shutdown", () =>
