@@ -1,166 +1,111 @@
+# .github/workflows/snapshot-release.yml
 name: Snapshot Release
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Snapshot tag name (e.g., mvp, beta, pr-123)'
+        description: 'Snapshot dist-tag: lowercase letters, digits and single hyphens, starting with a letter (e.g. mvp, pr-123)'
         required: true
         default: 'snapshot'
-  issue_comment:
+  # Only an owner, member or collaborator starts the validate job, which reads the comment with
+  # read-only access and trusted code; only a request it allows reaches npm-publish.
+  issue_comment: # zizmor: ignore[dangerous-triggers]
     types: [created]
 
-concurrency:
-  group: snapshot-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}-${{ github.event.inputs.tag || 'pr' }}
-  cancel-in-progress: true
-
-permissions:
-  contents: read
-  id-token: write
-  pull-requests: write
+permissions: {}
 
 jobs:
-  check-ci:
-    name: Check CI Status
-    if: |
+  validate:
+    name: Validate snapshot request
+    if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request &&
-       startsWith(github.event.comment.body, '/snapshot'))
+       startsWith(github.event.comment.body, '/snapshot') &&
+       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read # find the commit's CI run and its build artifact
+      contents: read
+      pull-requests: read # read the pull request head
     outputs:
-      sha: ${{ steps.get-sha.outputs.sha }}
-      artifact-name: ${{ steps.get-sha.outputs.artifact-name }}
-      run-id: ${{ steps.find-ci.outputs.run-id }}
+      kind: ${{ steps.request.outputs.kind }}
+      reply: ${{ steps.request.outputs.reply }}
+      message: ${{ steps.request.outputs.message }}
+      tag: ${{ steps.request.outputs.tag }}
+      sha: ${{ steps.request.outputs.sha }}
+      run-id: ${{ steps.request.outputs.run-id }}
+      artifact: ${{ steps.request.outputs.artifact }}
     steps:
-      - name: Get commit SHA
-        id: get-sha
-        uses: actions/github-script@v7
+      # The default ref is the default branch for a comment and the dispatched ref for a
+      # dispatch, so the validation code never comes from the pull request.
+      - name: Checkout validation scripts
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
+      - name: Validate request
+        id: request
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
           script: |
-            let sha;
-            if (context.eventName === 'issue_comment') {
-              const { data: pr } = await github.rest.pulls.get({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: context.issue.number
-              });
-              sha = pr.head.sha;
-            } else {
-              sha = context.sha;
-            }
-            core.setOutput('sha', sha);
-            core.setOutput('artifact-name', `build-artifacts-${sha}`);
-            console.log(`Commit SHA: ${sha}`);
-            return sha;
-
-      - name: Find CI workflow run
-        id: find-ci
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const sha = '${{ steps.get-sha.outputs.sha }}';
-
-            // Find completed CI workflow runs for this SHA
-            const { data: runs } = await github.rest.actions.listWorkflowRunsForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              status: 'completed',
-              head_sha: sha,
-              per_page: 10
-            });
-
-            const ciRun = runs.workflow_runs.find(run =>
-              run.name === 'Typescript CI' && run.conclusion === 'success'
-            );
-
-            if (!ciRun) {
-              const message = '⚠️ CI has not passed yet. Please wait for the build to complete and try again.';
-              core.setFailed(message);
-
-              if (context.eventName === 'issue_comment') {
-                await github.rest.issues.createComment({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: context.issue.number,
-                  body: message
-                });
-              }
-              return;
-            }
-
-            core.setOutput('run-id', ciRun.id);
-            console.log(`✅ Found successful CI run: ${ciRun.id}`);
+            const { runSnapshotValidation } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/snapshot-request.mjs`);
+            await runSnapshotValidation({ github, context, core });
 
   snapshot:
     name: Publish Snapshot
-    needs: [check-ci]
+    needs: validate
+    if: needs.validate.outputs.kind == 'allowed'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    concurrency:
+      group: snapshot-publish-${{ needs.validate.outputs.tag }}
+      cancel-in-progress: false
     environment:
       name: npm-publish
       url: https://npmjs.com/package/@dr_nikson/effect-grpc
+    permissions:
+      actions: read # download the CI run's build artifacts
+      contents: read
+      id-token: write # npm trusted publishing with provenance
+    outputs:
+      version: ${{ steps.publish.outputs.version }}
+    env:
+      SNAPSHOT_TAG: ${{ needs.validate.outputs.tag }}
+      SNAPSHOT_SHA: ${{ needs.validate.outputs.sha }}
     steps:
-      - name: Determine snapshot tag
-        id: tag
-        uses: actions/github-script@v7
-        with:
-          script: |
-            let tag = 'snapshot';
-            let prNumber = null;
-
-            if (context.eventName === 'issue_comment') {
-              // Extract custom tag from comment if provided
-              const comment = context.payload.comment.body.trim();
-              const match = comment.match(/^\/snapshot(?:\s+(\S+))?/);
-              const customTag = match && match[1];
-
-              // Get PR details
-              const { data: pr } = await github.rest.pulls.get({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: context.issue.number
-              });
-
-              prNumber = pr.number;
-              tag = customTag || `pr-${prNumber}`;
-
-              core.setOutput('pr-number', prNumber);
-            } else {
-              // workflow_dispatch
-              tag = context.payload.inputs.tag;
-            }
-
-            core.setOutput('tag', tag);
-            console.log(`Snapshot tag: ${tag}`);
-            return tag;
-
       - name: Checkout repository
-        uses: actions/checkout@v5.0.0
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
-          ref: ${{ needs.check-ci.outputs.sha }}
+          ref: ${{ needs.validate.outputs.sha }}
+          persist-credentials: false
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           run_install: false
 
+      # No dependency cache: this job runs pull request code, and a cache it saved would be
+      # restored by default-branch runs.
       - name: Setup Node.js
-        uses: actions/setup-node@v5.0.0
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: '24.x'
-          cache: 'pnpm'
+          package-manager-cache: false
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: ${{ needs.check-ci.outputs.artifact-name }}
+          name: ${{ needs.validate.outputs.artifact }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ needs.check-ci.outputs.run-id }}
+          run-id: ${{ needs.validate.outputs.run-id }}
 
       - name: Verify build artifacts
         run: |
@@ -169,72 +114,85 @@ jobs:
           ls -la packages/*/bin || echo "⚠️  bin folders not found (may not exist)"
           echo "✅ Build artifacts restored successfully"
 
+      # changesets refuses --snapshot in pre mode. Leaving pre mode here changes only this
+      # checkout, which is never committed. The version check stops a publish when the
+      # checkout's changeset config does not produce the 0.0.0 snapshot version.
       - name: Version snapshot
-        run: pnpm changeset version --snapshot ${{ steps.tag.outputs.tag }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ -f .changeset/pre.json ]]; then
+            pnpm exec changeset pre exit
+          fi
+          pnpm exec changeset version --snapshot "$SNAPSHOT_TAG"
+          VERSION=$(node -p "require('./packages/effect-grpc/package.json').version")
+          if [[ "$VERSION" != "0.0.0-$SNAPSHOT_TAG-$SNAPSHOT_SHA" ]]; then
+            echo "::error::The snapshot version is not 0.0.0-$SNAPSHOT_TAG-$SNAPSHOT_SHA"
+            exit 1
+          fi
+          echo "Snapshot version: $VERSION"
 
       - name: Publish snapshot
         id: publish
         run: |
-          pnpm exec changeset publish --tag ${{ steps.tag.outputs.tag }}
-
-          # Get published version
-          VERSION=$(node -p "require('./packages/effect-grpc/package.json').version" 2>/dev/null || echo "unknown")
-          if [ "$VERSION" = "unknown" ]; then
-            echo "Failed to extract version"
-            exit 1
-          fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          pnpm exec changeset publish --tag "$SNAPSHOT_TAG"
+          echo "version=0.0.0-$SNAPSHOT_TAG-$SNAPSHOT_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Output to console
         if: github.event_name == 'workflow_dispatch'
+        env:
+          SNAPSHOT_VERSION: ${{ steps.publish.outputs.version }}
         run: |
           echo "✅ Snapshot published!"
-          echo "Version: ${{ steps.publish.outputs.version }}"
-          echo "Tag: ${{ steps.tag.outputs.tag }}"
-          echo "Install with: pnpm add @dr_nikson/effect-grpc@${{ steps.tag.outputs.tag }}"
+          echo "Version: $SNAPSHOT_VERSION"
+          echo "Tag: $SNAPSHOT_TAG"
+          echo "Install with: pnpm add @dr_nikson/effect-grpc@$SNAPSHOT_TAG"
 
+  reply:
+    name: Reply on the pull request
+    needs: [validate, snapshot]
+    if: always() && needs.validate.outputs.reply == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write # comment on the pull request
+    steps:
       - name: Comment on PR
-        if: github.event_name == 'issue_comment'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        env:
+          REFUSAL: ${{ needs.validate.outputs.message }}
+          RESULT: ${{ needs.snapshot.result }}
+          SNAPSHOT_TAG: ${{ needs.validate.outputs.tag }}
+          SNAPSHOT_VERSION: ${{ needs.snapshot.outputs.version }}
         with:
           script: |
-            const version = '${{ steps.publish.outputs.version }}';
-            const tag = '${{ steps.tag.outputs.tag }}';
-
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: `## 🚀 Snapshot Published!
-
-              **Version:** \`${version}\`
-              **Tag:** \`${tag}\`
-              
-              ### Install:
-              \`\`\`bash
-              pnpm add @dr_nikson/effect-grpc@${tag}
-              # or
-              npm install @dr_nikson/effect-grpc@${tag}
-              \`\`\`
-              
-              ### Using specific version:
-              \`\`\`bash
-              pnpm add @dr_nikson/effect-grpc@${version}
-              \`\`\`
-              
-              This snapshot will be available until a newer version is published.`
-            });
-
-      - name: Handle failure
-        if: failure() && github.event_name == 'issue_comment'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: `❌ Snapshot publish failed. Check the [workflow run](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}) for details.`
-            });
+            const { REFUSAL, RESULT, SNAPSHOT_TAG, SNAPSHOT_VERSION } = process.env;
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            let body;
+            if (REFUSAL) {
+              body = `❌ ${REFUSAL}`;
+            } else if (RESULT === 'success') {
+              body = [
+                '## 🚀 Snapshot Published!',
+                '',
+                `**Version:** \`${SNAPSHOT_VERSION}\``,
+                `**Tag:** \`${SNAPSHOT_TAG}\``,
+                '',
+                '### Install:',
+                '```bash',
+                `pnpm add @dr_nikson/effect-grpc@${SNAPSHOT_TAG}`,
+                '# or',
+                `npm install @dr_nikson/effect-grpc@${SNAPSHOT_TAG}`,
+                '```',
+                '',
+                '### Using specific version:',
+                '```bash',
+                `pnpm add @dr_nikson/effect-grpc@${SNAPSHOT_VERSION}`,
+                '```',
+                '',
+                'This snapshot will be available until a newer version is published.',
+              ].join('\n');
+            } else {
+              body = `❌ Snapshot publish ${RESULT === 'cancelled' ? 'was cancelled' : 'failed'}. Check the [workflow run](${runUrl}) for details.`;
+            }
+            await github.rest.issues.createComment({ ...context.repo, issue_number: context.issue.number, body });
