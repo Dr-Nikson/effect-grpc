@@ -131,36 +131,38 @@ const helloServiceLayer = effectProto.helloServiceLiveLayer(
   HelloServiceLive
 );
 
-// Build and run the gRPC server
-const program = Effect.gen(function* () {
-  const helloService = yield* effectProto.HelloServiceTag;
+// The gRPC server, as a layer that uses the service
+const grpcServerLayer = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const helloService = yield* effectProto.HelloServiceTag;
 
-  const server: EffectGrpcServer.GrpcServer<"example.v1.HelloService"> =
-    EffectGrpcServer
-      .GrpcServerBuilder()
-      .withService(helloService)
-      .build();
+    const server: EffectGrpcServer.GrpcServer<"example.v1.HelloService"> =
+      EffectGrpcServer
+        .GrpcServerBuilder()
+        .withService(helloService)
+        .build();
 
-  // listen returns once the server listens, and the server serves until the scope closes.
-  // Waiting here keeps the scope open until Ctrl+C or SIGTERM.
-  yield* server.listen({ host: "127.0.0.1", port: 8000 });
-  return yield* Effect.never;
-});
-
-// Provide dependencies and run
-const layer = Layer.empty.pipe(
-  Layer.provideMerge(helloServiceLayer),
-  Layer.provideMerge(Layer.succeed(References.MinimumLogLevel, "Info"))
+    // listen returns once the server listens, and the server serves until the layer is released.
+    yield* server.listen({ host: "127.0.0.1", port: 8000 });
+  })
 );
 
-NodeRuntime.runMain(Effect.provide(program, layer).pipe(Effect.scoped));
+// Provide what the server uses, and run it until Ctrl+C or SIGTERM
+const appLayer = grpcServerLayer.pipe(
+  Layer.provide(helloServiceLayer),
+  Layer.provide(Layer.succeed(References.MinimumLogLevel, "Info"))
+);
+
+NodeRuntime.runMain(Layer.launch(appLayer));
 ```
 
 The server binds `127.0.0.1` instead of `localhost`. Node can bind `localhost` to `::1`, and a client on an IPv4-only host then dials `127.0.0.1` and gets `ECONNREFUSED`.
 
 `listen` succeeds with the address the server bound. Pass `port: 0` to let the OS pick a free port, and read it from the result. The server also logs it, as in `gRPC server listening on http://127.0.0.1:41234`.
 
-`Effect.scoped` gives `listen` its scope. Ctrl+C or SIGTERM interrupts the program, so the scope closes and the server stops. The process then exits with code 130, which is the code `runMain` of Effect 4 gives a program that a signal stopped. To exit with another code, pass `teardown` to `runMain`.
+`Layer.launch` builds the layers and keeps them until Ctrl+C or SIGTERM interrupts it. Effect releases a layer only after the layers that use it, so on shutdown the server stops first. It tells each client to send no new calls, lets the calls in flight finish, and closes each connection, an idle one at once. Then `helloServiceLayer` is released, with anything that a service layer holds, such as a database pool. The process then exits with code 130, which is the code `runMain` of Effect 4 gives a program that a signal stopped. To exit with another code, pass `teardown` to `runMain`.
+
+To run `listen` in an Effect program of your own, put `Effect.scoped` inside `Effect.provide`, as in `program.pipe(Effect.scoped, Effect.provide(layer))`. The other way round, `Effect.provide(program, layer).pipe(Effect.scoped)` releases the layers before the server stops, and a call in flight then runs against closed resources.
 
 ### 5. Implement the Client
 
@@ -255,7 +257,7 @@ Represents a running gRPC server instance.
 - `Services` - Union type of all service tags registered with this server
 
 **Methods:**
-- `listen(options: { host: string; port: number }): Effect.Effect<GrpcServerAddress, GrpcServerBindError, Scope.Scope>` - Starts the server on the specified host and port, and succeeds with the address it bound once it listens. Port 0 lets the OS pick the port. The server serves until the Scope closes, and closing the Scope shuts it down, so a program that only serves follows `listen` with `Effect.never`. Fails with `GrpcServerBindError` when the server cannot listen, for example when the port is taken. Interrupting `listen` before the server listens stops the attempt. `listen` replaces `run`, which never returned.
+- `listen(options: { host: string; port: number }): Effect.Effect<GrpcServerAddress, GrpcServerBindError, Scope.Scope>` - Starts the server on the specified host and port, and succeeds with the address it bound once it listens. Port 0 lets the OS pick the port. The server serves until the Scope closes. Closing the Scope stops it: it tells each client to send no new calls, lets the calls in flight finish, and closes each connection, an idle one at once. To serve for the life of the process, run `listen` in `Layer.effectDiscard` and start that layer with `Layer.launch`, as the Quick Start does, so the server stops before the layers that its handlers use are released. Fails with `GrpcServerBindError` when the server cannot listen, for example when the port is taken. Interrupting `listen` before the server listens stops the attempt. `listen` replaces `run`, which never returned.
 
 **Example:**
 ```typescript
@@ -946,19 +948,21 @@ const appLayer = Layer.empty.pipe(
   Layer.provideMerge(userServiceLayer)
 );
 
-// Build and run your server with all dependencies
-const program = Effect.gen(function* () {
-  const userService = yield* effectProto.UserServiceTag;
+// Build the server as a layer, and run it with all dependencies
+const grpcServerLayer = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const userService = yield* effectProto.UserServiceTag;
 
-  const server = EffectGrpcServer.GrpcServerBuilder()
-    .withService(userService)
-    .build();
+    const server = EffectGrpcServer.GrpcServerBuilder()
+      .withService(userService)
+      .build();
 
-  yield* server.listen({ host: "127.0.0.1", port: 8000 });
-  return yield* Effect.never;
-}).pipe(
-  Effect.provide(appLayer)
+    yield* server.listen({ host: "127.0.0.1", port: 8000 });
+  })
 );
+
+// The server stops before the database layer is released
+const program = Layer.launch(grpcServerLayer.pipe(Layer.provide(appLayer)));
 ```
 
 ### Request Metadata and Headers
