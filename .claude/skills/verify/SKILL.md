@@ -35,7 +35,7 @@ Each checkout runs at most one instance, and each instance has its own run state
 
 To serve IPv6, give `launch` the `::1` address as well, as in `.claude/skills/verify/scripts/control-example launch --port 8001 --host ::1 --root .`. The instance then binds `::1`, and every client command dials `http://[::1]:8001`.
 
-Later commands read the port and the address from the checkout's run, so they need no flag. On any later command, `--port`, `--host` and `--root` are checks. The command refuses, exits 2 and changes nothing when `--port` differs from the instance's port or `--root` names another checkout. `cleanup` in one checkout stops only that checkout's server.
+Later commands read the port and the address from the checkout's run, so they need no flag. On any later command, `--port`, `--host` and `--root` are checks. The command refuses, exits 2 and changes nothing when `--port` differs from the instance's port, `--host` differs from its address, or `--root` names another checkout. `cleanup` in one checkout stops only that checkout's server.
 
 A lane whose shell starts outside its worktree writes the worktree's absolute path in both places, as in `/dr_nikson/effect-grpc/.worktrees/p02-live2/.claude/skills/verify/scripts/control-example launch --port 8122 --root /dr_nikson/effect-grpc/.worktrees/p02-live2`.
 
