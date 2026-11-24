@@ -125,7 +125,7 @@ Each run writes to `${EGV_ROOT:-${XDG_STATE_HOME:-~/.local/state}/effect-grpc-ve
 `cleanup` prints the same path. Runs accumulate there until you delete them, so the evidence outlives the checkout. The checkout's pointer to its current run lives in its git dir, at `<git dir>/effect-grpc-verify/current`. The evidence directory holds:
 
 - `run.txt`: run id, start time, the checkout, the path of the script that ran, the full git HEAD, and the number of changed paths.
-- `server.log`: all server output, with one `=== launch host=… port=… root=… at … git=…` banner per instance.
+- `server.log`: all server output, with one `=== launch host=… port=… root=… at … git=…` banner per instance. The banner's port is the port the launch asked for, which is 0 unless `--port` pins one. The ready line after it names the port the server bound.
 - `NN-<slug>.txt`, one file per action. Each file has the exact command, the port, the exit code, the HTTP or gRPC status, the response, stderr, and the server log lines written during that action. The action and its server-side effect stay together in one file.
 
 Proof standards:
