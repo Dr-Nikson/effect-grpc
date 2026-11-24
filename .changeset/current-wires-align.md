@@ -11,4 +11,4 @@ An app that installs other versions of these packages gets a second copy of each
 What else changes for a user:
 
 - A connection attempt that takes longer than 20 seconds now fails the call with `Code.Unavailable`. Set `connectTimeoutMs` in the `pingOptions` of the client config to change the limit.
-- protobuf-es 2.12 and later parse binary and JSON input more strictly. They reject an overlong binary tag and a duplicate key in JSON, limit how deep a message can nest, and fix the UTF-8 check of proto3 strings. Input that parsed before can now fail.
+- protobuf-es 2.12 and later parse input more strictly. A string field that holds invalid UTF-8 now fails a gRPC call with `Code.Internal`, where it decoded to replacement characters before. A JSON request with a duplicate key now fails with `Code.InvalidArgument`, where the last value won before. The parser also rejects an overlong binary tag and limits how deep a message can nest.
