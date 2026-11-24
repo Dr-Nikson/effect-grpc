@@ -1,5 +1,5 @@
 // packages/effect-grpc/src/protoRuntime.test.ts
-import { Cause, Deferred, Effect, Exit, Ref } from "effect";
+import { Cause, Deferred, Effect, Exit, LogLevel, Logger } from "effect";
 import type { Scope } from "effect";
 import http2 from "node:http2";
 import net from "node:net";
@@ -28,7 +28,7 @@ type HandlerEnd = "interrupted" | "ended another way" | "still running";
 type Sent =
   | {
       readonly kind: "status";
-      readonly code: Code | undefined;
+      readonly code: string;
       readonly message: string | undefined;
     }
   | {
@@ -45,8 +45,17 @@ interface Outcome {
   readonly sends: Sent;
 }
 
-// The number of pairs follows the handler's structure: 5 for a bare Effect.never, 6 once the
-// handler adds an Effect.onExit. The matcher pins the pairs, not their number.
+const codeName = (code: number | undefined): string =>
+  code === undefined ? "no grpc-status" : (Code[code] ?? String(code));
+
+const status = (code: Code, message: string): Sent => ({
+  kind: "status",
+  code: codeName(code),
+  message,
+});
+
+// How many pairs an interrupt leaves depends on how Effect's runtime unwinds it: 5 for a bare
+// Effect.never, 6 once the handler adds an Effect.onExit. The matcher pins the pairs, not the count.
 const deadlineMessage = expect.stringMatching(
   /^Unknown error; Request was canceled(; Unknown error; Request was canceled)*$/,
 );
@@ -57,13 +66,13 @@ const outcomes: ReadonlyArray<Outcome> = [
     call: "waits for the reply",
     handler: () =>
       Effect.fail(GrpcException.create(Code.FailedPrecondition, "Face the consequences!")),
-    sends: { kind: "status", code: Code.FailedPrecondition, message: "Face the consequences!" },
+    sends: status(Code.FailedPrecondition, "Face the consequences!"),
   },
   {
     outcome: "a defect",
     call: "waits for the reply",
     handler: () => Effect.die(new Error("the handler died")),
-    sends: { kind: "status", code: Code.Internal, message: "Internal server error" },
+    sends: status(Code.Internal, "Internal server error"),
   },
   {
     outcome: "a client cancel",
@@ -75,7 +84,7 @@ const outcomes: ReadonlyArray<Outcome> = [
     outcome: "a deadline expiry",
     call: "sends a 50 ms deadline",
     handler: () => Effect.never,
-    sends: { kind: "status", code: Code.Internal, message: deadlineMessage },
+    sends: status(Code.Internal, deadlineMessage),
   },
   {
     outcome: "a typed failure with a dying finalizer",
@@ -84,7 +93,7 @@ const outcomes: ReadonlyArray<Outcome> = [
       Effect.fail(GrpcException.create(Code.NotFound, "typed failure")).pipe(
         Effect.ensuring(Effect.die(new Error("the finalizer died"))),
       ),
-    sends: { kind: "status", code: Code.Internal, message: "typed failure; Internal server error" },
+    sends: status(Code.Internal, "typed failure; Internal server error"),
   },
   {
     outcome: "a throw inside a context transformer",
@@ -93,13 +102,28 @@ const outcomes: ReadonlyArray<Outcome> = [
       throw new Error("the context transformer threw");
     },
     handler: () => Effect.succeed({}),
-    sends: { kind: "status", code: Code.Internal, message: "Internal server error" },
+    sends: status(Code.Internal, "Internal server error"),
+  },
+  {
+    outcome: "a typed failure inside a context transformer",
+    call: "waits for the reply",
+    contextTransformer: () => Effect.fail(GrpcException.create(Code.Unauthenticated, "no token")),
+    handler: () => Effect.succeed({}),
+    sends: status(Code.Unauthenticated, "no token"),
+  },
+  {
+    outcome: "a throw inside the handler body",
+    call: "waits for the reply",
+    handler: () => {
+      throw new Error("the handler threw");
+    },
+    sends: status(Code.Internal, "Internal server error"),
   },
   {
     outcome: "an interrupt inside the handler",
     call: "waits for the reply",
     handler: () => Effect.interrupt,
-    sends: { kind: "status", code: Code.Aborted, message: "Request was canceled" },
+    sends: status(Code.Aborted, "Request was canceled"),
   },
   {
     outcome: "two typed failures in parallel",
@@ -111,13 +135,13 @@ const outcomes: ReadonlyArray<Outcome> = [
           Cause.fail(GrpcException.create(Code.AlreadyExists, "second")),
         ),
       ),
-    sends: { kind: "status", code: Code.Internal, message: "first | second" },
+    sends: status(Code.Internal, "first | second"),
   },
   {
     outcome: "an empty cause",
     call: "waits for the reply",
     handler: () => Effect.failCause(Cause.empty),
-    sends: { kind: "status", code: Code.Unknown, message: "Unknown error" },
+    sends: status(Code.Unknown, "Unknown error"),
   },
 ];
 
@@ -211,7 +235,13 @@ const call = (
     };
     stream.on("response", read);
     stream.on("trailers", read);
-    stream.on("close", () => resume(Effect.succeed({ stream: stream.id ?? 0, code, message })));
+    stream.on("close", () =>
+      resume(
+        stream.id !== undefined && stream.rstCode === http2.constants.NGHTTP2_NO_ERROR ?
+          Effect.succeed({ stream: stream.id, code, message })
+        : Effect.dieMessage(`${method} did not end cleanly: RST_STREAM ${stream.rstCode}`),
+      ),
+    );
     stream.resume();
     return Effect.sync(() => stream.close(http2.constants.NGHTTP2_CANCEL));
   });
@@ -260,10 +290,12 @@ const frameTap = (port: number) =>
             client.write(chunk);
           });
           client.pipe(upstream);
-          upstream.on("end", () => client.end());
-          upstream.on("close", () => Deferred.unsafeDone(serverClosed, Effect.void));
+          upstream.on("end", () => {
+            client.end();
+            Deferred.unsafeDone(serverClosed, Effect.void);
+          });
+          upstream.on("error", (error) => Deferred.unsafeDone(serverClosed, Effect.die(error)));
           client.on("error", () => {});
-          upstream.on("error", () => {});
         });
         relay.listen(0, "127.0.0.1", () => resume(Effect.succeed(relay)));
       }),
@@ -278,19 +310,19 @@ const frameTap = (port: number) =>
     return {
       url: `http://127.0.0.1:${relayPort}`,
       framesOn: (stream: number): ReadonlyArray<string> => frames.get(stream) ?? [],
-      serverClosed: Deferred.await(serverClosed),
+      allServerFramesSeen: Deferred.await(serverClosed),
     };
   });
 
 const observeCancel = (row: Outcome) =>
   Effect.gen(function* () {
     const started = yield* Deferred.make<void>();
-    const handlerEnd = yield* Ref.make<HandlerEnd>("still running");
+    const ended = yield* Deferred.make<HandlerEnd>();
     const address = yield* serve(row, () =>
       Deferred.succeed(started, undefined).pipe(
         Effect.zipRight(row.handler()),
         Effect.onExit((exit) =>
-          Ref.set(handlerEnd, Exit.isInterrupted(exit) ? "interrupted" : "ended another way"),
+          Deferred.succeed(ended, Exit.isInterrupted(exit) ? "interrupted" : "ended another way"),
         ),
       ),
     );
@@ -299,18 +331,26 @@ const observeCancel = (row: Outcome) =>
 
     const cancelled = open(session, "Run");
     yield* Deferred.await(started);
+    const cancelledStream = cancelled.id;
+    if (cancelledStream === undefined) return yield* Effect.dieMessage("Run has no stream id");
     cancelled.close(http2.constants.NGHTTP2_CANCEL);
+    const handler = yield* Deferred.await(ended).pipe(
+      Effect.timeoutTo({
+        duration: "2 seconds",
+        onSuccess: (end) => end,
+        onTimeout: (): HandlerEnd => "still running",
+      }),
+    );
     const ping = yield* call(session, "Ping");
-    // Once the server closes the connection, it can send no more frames on the cancelled stream.
     session.close();
-    yield* tap.serverClosed;
+    yield* tap.allServerFramesSeen;
 
     expect(ping.code, "the connection still serves a call after the cancel").toBe(0);
     expect(tap.framesOn(ping.stream), "the tap records the server's frames").toContain("HEADERS");
     return {
       kind: "after the cancel",
-      frames: tap.framesOn(cancelled.id ?? 0),
-      handler: yield* Ref.get(handlerEnd),
+      frames: tap.framesOn(cancelledStream),
+      handler,
     } satisfies Sent;
   });
 
@@ -325,14 +365,20 @@ const observe = (row: Outcome): Effect.Effect<Sent, Server.GrpcServerBindError, 
         "Run",
         row.call === "sends a 50 ms deadline" ? { "grpc-timeout": "50m" } : {},
       );
-      return { kind: "status", code: reply.code, message: reply.message } satisfies Sent;
+      return {
+        kind: "status",
+        code: codeName(reply.code),
+        message: reply.message,
+      } satisfies Sent;
     });
 
 describe("what the server sends for each handler outcome", () => {
   for (const row of outcomes) {
-    it(`${row.outcome}, when the client ${row.call}`, () =>
-      Effect.gen(function* () {
-        expect(yield* observe(row)).toEqual(row.sends);
-      }).pipe(Effect.scoped, Effect.runPromise));
+    it(`${row.outcome}, when the client ${row.call}`, async () => {
+      const sent = await Effect.runPromise(
+        observe(row).pipe(Effect.scoped, Effect.provide(Logger.minimumLogLevel(LogLevel.Warning))),
+      );
+      expect(sent).toEqual(row.sends);
+    });
   }
 });
