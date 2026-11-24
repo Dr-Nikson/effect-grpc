@@ -1,7 +1,7 @@
 # Fixture: a service with one rpc of each kind
 
-The generator supports unary rpcs only. This fixture records what it generates for a service that
-also has streaming rpcs.
+The generator supports unary rpcs only. This fixture checks that the code it generates for a service
+with one rpc of each kind compiles, and that its service and its client list the unary rpc.
 
 ```protobuf
 // proto/example/v1/chat.proto
