@@ -29,6 +29,9 @@ test("a consumer names every type GrpcService reaches through the package entry 
   expectTypeOf<Parameters<Service["implementation"]>[0]>().toEqualTypeOf<
     EffectGrpcServer.ServerExecutor<AppContext>
   >();
+  expectTypeOf<ReturnType<Service["implementation"]>>().toEqualTypeOf<
+    EffectGrpcServer.GrpcServiceImplementation<GenService<PingMethods>>
+  >();
 
   const service = EffectGrpcServer.GrpcService(
     PingServiceId,

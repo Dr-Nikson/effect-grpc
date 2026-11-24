@@ -2,9 +2,37 @@
 import { Effect, Scope } from "effect";
 import { assertType, expectTypeOf, test } from "vitest";
 
-import type { HandlerContext } from "@connectrpc/connect";
+import type { GenService } from "@bufbuild/protobuf/codegenv2";
+import type { EmptySchema } from "@bufbuild/protobuf/wkt";
+import type { HandlerContext, ServiceImpl } from "@connectrpc/connect";
 
 import * as Server from "./server.js";
+
+type MixedMethods = {
+  unary: { methodKind: "unary"; input: typeof EmptySchema; output: typeof EmptySchema };
+  serverStream: {
+    methodKind: "server_streaming";
+    input: typeof EmptySchema;
+    output: typeof EmptySchema;
+  };
+  clientStream: {
+    methodKind: "client_streaming";
+    input: typeof EmptySchema;
+    output: typeof EmptySchema;
+  };
+  bidi: { methodKind: "bidi_streaming"; input: typeof EmptySchema; output: typeof EmptySchema };
+};
+type UnaryMethods = {
+  first: { methodKind: "unary"; input: typeof EmptySchema; output: typeof EmptySchema };
+  second: { methodKind: "unary"; input: typeof EmptySchema; output: typeof EmptySchema };
+};
+
+const MixedServiceId = "example.v1.MixedService" as const;
+
+declare const MixedService: GenService<MixedMethods>;
+declare const UnaryService: GenService<UnaryMethods>;
+declare const mixedServiceImpl: ServiceImpl<typeof MixedService>;
+declare const unaryServiceImpl: ServiceImpl<typeof UnaryService>;
 
 test("GrpcServerBuilder#withService should work correctly", () => {
   const empty = Server.GrpcServerBuilder();
@@ -118,4 +146,47 @@ test("GrpcServer#listen succeeds with the bound address, fails with GrpcServerBi
   expectTypeOf<
     Server.GrpcServerBindError["_tag"]
   >().toEqualTypeOf<"@dr_nikson/effect-grpc/server/GrpcServerBindError">();
+});
+
+test("GrpcService takes handlers for the unary methods alone of a service that also has streaming methods", () => {
+  const service = Server.GrpcService(
+    MixedServiceId,
+    MixedService,
+  )((executor: Server.ServerExecutor<HandlerContext>) => ({
+    unary: (request, handlerContext): Promise<object> =>
+      executor.unary(`${MixedServiceId}/Unary`, request, handlerContext, () => Effect.succeed({})),
+  }));
+  expectTypeOf(service).toEqualTypeOf<
+    Server.GrpcService<typeof MixedServiceId, GenService<MixedMethods>, HandlerContext>
+  >();
+
+  const server = Server.GrpcServerBuilder()
+    .withContextTransformer((ctx) => Effect.succeed(ctx))
+    .withService(service)
+    .build();
+  expectTypeOf(server).toEqualTypeOf<Server.GrpcServer<typeof MixedServiceId>>();
+});
+
+test("GrpcService still takes a Connect ServiceImpl that handles every method", () => {
+  expectTypeOf(
+    Server.GrpcService(MixedServiceId, MixedService)(() => mixedServiceImpl),
+  ).toEqualTypeOf<Server.GrpcService<typeof MixedServiceId, GenService<MixedMethods>, unknown>>();
+});
+
+test("GrpcService needs a handler for each unary method", () => {
+  const mixedService = Server.GrpcService(MixedServiceId, MixedService);
+  // @ts-expect-error the unary method has no handler
+  mixedService(() => ({}));
+
+  const unaryService = Server.GrpcService("example.v1.UnaryService" as const, UnaryService);
+  // @ts-expect-error the unary method second has no handler
+  unaryService(() => ({ first: unaryServiceImpl.first }));
+});
+
+test("GrpcServiceImplementation refuses a handler for a method the service does not have", () => {
+  assertType<Server.GrpcServiceImplementation<typeof MixedService>>({
+    unary: mixedServiceImpl.unary,
+    // @ts-expect-error the service has no method named other
+    other: mixedServiceImpl.unary,
+  });
 });

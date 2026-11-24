@@ -3,7 +3,7 @@ import { Cause, Effect, Exit, Option, Predicate, Record, Scope, Types } from "ef
 import http2 from "node:http2";
 
 import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
-import type { ConnectRouter, HandlerContext, ServiceImpl } from "@connectrpc/connect";
+import type { ConnectRouter, HandlerContext } from "@connectrpc/connect";
 import { Code, createConnectRouter } from "@connectrpc/connect";
 import {
   compressionBrotli,
@@ -31,7 +31,7 @@ export function makeGrpcService<
   Proto extends GenService<RuntimeShape>,
   RuntimeShape extends GenServiceMethods,
 >(tag: Tag, definition: Proto) {
-  return <Ctx>(implementation: (exec: ProtoRuntime.ServerExecutor<Ctx>) => ServiceImpl<Proto>) => {
+  return <Ctx>(implementation: T.GrpcService<Tag, Proto, Ctx>["implementation"]) => {
     return {
       Type: grpcServiceTypeId,
       _Tag: tag,
