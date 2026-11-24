@@ -122,8 +122,7 @@ function generateEffectService(
   f.print(" * Creates a Layer that provides a gRPC service implementation.");
   f.print(" *");
   f.print(" * This function takes your service implementation and wraps it in a Layer that can be");
-  f.print(" * composed with other layers to build your application. The returned function accepts");
-  f.print(" * a tag to identify the service in the Effect context.");
+  f.print(" * composed with other layers to build your application.");
   f.print(" *");
   f.print(" * @typeParam Ctx - The context type used by your service implementation");
   f.print(" *");

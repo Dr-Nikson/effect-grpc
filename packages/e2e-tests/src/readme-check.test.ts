@@ -38,10 +38,7 @@ describe("README check", () => {
     expect(status).toBe(1);
   });
 
-  // Issue #76: the generated server glue registers the unary rpcs only, so a service that also has
-  // streaming rpcs does not compile. Once the generator handles them, this fixture compiles:
-  // expect "TypeScript blocks compile" and status 0.
-  it("generates one compile error for a service that has streaming rpcs", () => {
+  it("generates one compile error for a service that has streaming rpcs (#76)", () => {
     const { status, stdout } = check("streaming-rpc.md");
     expect(stdout).toMatch(
       /error TS2739: src\/generated\/example\/v1\/chat_effect\.ts:\d+:\d+ .* is missing the following properties .*: watch, upload, talk/,
