@@ -179,7 +179,7 @@ The next "Version Packages" PR will create the stable version (e.g., `0.2.0`).
 
 For testing changes in consuming projects before official release.
 
-A snapshot version has the form `0.0.0-<tag>-<commit sha>`. It is outside every release range, so a range such as `^3.0.0-alpha.5` never resolves to a snapshot. Install a snapshot by its tag or by its exact version:
+A snapshot version has the form `0.0.0-<tag>-<commit sha>`. It sorts below every 3.x release, so a range such as `^3.0.0-alpha.5` never matches a snapshot from this workflow. Two older snapshots from before this workflow, `3.0.0-mvp-87283f517fd15c8199f5ba251bf74e2503cd0baf` and `3.0.0-mvp-e2b78b1c4be4bb339577d68dfce008ef1b56218c`, do match that range. Install a snapshot by its tag or by its exact version:
 
 ```bash
 pnpm add @dr_nikson/effect-grpc@pr-123
@@ -189,15 +189,13 @@ pnpm add @dr_nikson/effect-grpc@pr-123
 
 An owner, member or collaborator of the repository comments on a pull request. The command is the first line of the comment:
 
-```
-/snapshot          # publishes under the tag pr-<number>
-/snapshot <tag>    # publishes under <tag>
-```
+- `/snapshot` publishes under the tag `pr-<number>`.
+- `/snapshot <tag>` publishes under `<tag>`.
 
 The Snapshot Release workflow then:
 
 1. Ignores the comment when the account is not an owner, member or collaborator.
-2. Refuses a tag that is not 1 to 32 lowercase letters, digits and single hyphens starting with a letter. It also refuses `latest`, `alpha` and version ranges such as `v1`.
+2. Refuses a tag that is not 1 to 32 lowercase letters, digits and single hyphens starting with a letter. It also refuses `latest`, `alpha` and every tag that npm reads as a version range, such as `x`, `v1` or `vv10`. npm refuses to publish under such a tag.
 3. Refuses a pull request whose head lives in a fork.
 4. Requires a successful Typescript CI push run for the head commit, with its build artifact.
 5. Waits for approval of the `npm-publish` environment, publishes, and replies on the pull request.
@@ -208,13 +206,15 @@ Run **Actions → Snapshot Release → Run workflow**, pick the branch, and ente
 
 ### Local Snapshot
 
-`changeset version --snapshot` refuses to run in pre mode. Work in a scratch clone, set `GITHUB_TOKEN` for the changelog generator, and never commit the result:
+To preview the version of a snapshot, work in a scratch clone and never commit the result. `changeset version --snapshot` refuses to run in pre mode, so leave pre mode first. Set `GITHUB_TOKEN` for the changelog generator:
 
 ```bash
+pnpm install --frozen-lockfile
 pnpm changeset pre exit
 pnpm changeset version --snapshot pr-123
-pnpm changeset publish --tag pr-123
 ```
+
+`packages/effect-grpc/package.json` then holds the version `0.0.0-pr-123-<commit sha>`. Publish through the Snapshot Release workflow. The package sets `provenance: true`. npm refuses to generate provenance outside GitHub Actions and GitLab CI, so a publish from your machine fails.
 
 ## Package Configuration
 
