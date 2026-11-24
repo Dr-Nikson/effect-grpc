@@ -58,7 +58,7 @@
   "dependencies": {
     "@bufbuild/protoplugin": "catalog:",
     "@connectrpc/connect-node": "catalog:",
-    "@opentelemetry/api": "catalog:",
+    "@opentelemetry/api": "catalog:peer",
     "@opentelemetry/core": "catalog:"
   },
   "peerDependencies": {

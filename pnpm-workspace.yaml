@@ -34,4 +34,8 @@ catalogs:
     '@bufbuild/protobuf': ^2.17.0
     '@connectrpc/connect': ^2.3.0
     '@effect/opentelemetry': ^0.61.0
+    # The library's dependency range. With an exact pin (1.9.0), a fresh npm install of the library failed with
+    # ERESOLVE on api 1.10.0, because @opentelemetry/resources 2.12.1, the last 2.x, accepts <1.10.0 only.
+    # With this range, npm settles on 1.9.1.
+    '@opentelemetry/api': '>=1.9.0 <1.10.0'
     effect: ^3.22.5

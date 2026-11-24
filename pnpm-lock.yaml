@@ -75,6 +75,10 @@ catalogs:
     vitest:
       specifier: 4.1.12
       version: 4.1.12
+  peer:
+    '@opentelemetry/api':
+      specifier: '>=1.9.0 <1.10.0'
+      version: 1.9.0
 
 importers:
 
@@ -202,7 +206,7 @@ importers:
         specifier: 'catalog:'
         version: 2.3.0(@bufbuild/protobuf@2.17.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.17.0))
       '@opentelemetry/api':
-        specifier: 'catalog:'
+        specifier: catalog:peer
         version: 1.9.0
       '@opentelemetry/core':
         specifier: 'catalog:'
