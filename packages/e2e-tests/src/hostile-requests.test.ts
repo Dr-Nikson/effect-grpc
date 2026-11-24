@@ -18,7 +18,6 @@ type Repeated = { readonly repeat: string; readonly times: number };
 
 const expand = ({ repeat, times }: Repeated): string => repeat.repeat(times);
 
-/** Answers every call with the host the server read from the request's authority. */
 const authorityEcho: effectProto.HelloWorldAPIService<HandlerContext> = {
   getGreeting: (_request, ctx) => Effect.succeed({ greeting: new URL(ctx.url).host }),
   faceTheError: (_request, ctx) => Effect.succeed({ greeting: new URL(ctx.url).host }),
@@ -59,7 +58,11 @@ const call = (
   protocol: raw.Protocol,
   authority: string,
   name = "hostile",
-) => raw.getGreeting(session, protocol, authority, name).pipe(Effect.timeout("5 seconds"));
+  contentType?: string,
+) =>
+  raw
+    .getGreeting(session, protocol, authority, name, contentType)
+    .pipe(Effect.timeout("5 seconds"));
 
 const expectServing = (session: http2.ClientHttp2Session, port: number) =>
   Effect.gen(function* () {
@@ -75,19 +78,23 @@ const expectInvalidAuthority = (
   name: string,
 ) =>
   Effect.gen(function* () {
-    const grpc = yield* call(session, "grpc", authority);
-    expect(
-      {
-        httpStatus: grpc.httpStatus,
-        headersEndedStream: grpc.headersEndedStream,
-        grpcStatus: grpc.grpcStatus,
-      },
-      `${name} over gRPC`,
-    ).toEqual({
-      httpStatus: 200,
-      headersEndedStream: true,
-      grpcStatus: String(Code.InvalidArgument),
-    });
+    for (const contentType of fixtures.grpcContentTypes) {
+      const grpc = yield* call(session, "grpc", authority, "hostile", contentType);
+      expect(
+        {
+          httpStatus: grpc.httpStatus,
+          contentType: grpc.contentType,
+          headersEndedStream: grpc.headersEndedStream,
+          grpcStatus: grpc.grpcStatus,
+        },
+        `${name} over gRPC as ${contentType}`,
+      ).toEqual({
+        httpStatus: 200,
+        contentType,
+        headersEndedStream: true,
+        grpcStatus: String(Code.InvalidArgument),
+      });
+    }
 
     const connect = yield* call(session, "connect", authority);
     expect(

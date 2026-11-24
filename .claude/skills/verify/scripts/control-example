@@ -107,7 +107,7 @@ ensure_run() {
   echo "$r"
 }
 
-url_for() { # url_for <host> <port>: a URL needs an IPv6 address in brackets
+url_for() {
   case $1 in *:*) echo "http://[$1]:$2" ;; *) echo "http://$1:$2" ;; esac
 }
 
@@ -221,7 +221,7 @@ stale_report() { # prints one STALE line per out-of-date artifact; status 1 when
 
 # ---------- drivers ----------
 
-with_example_env() { # run "$@" with the example's host and port variables set only where they differ from its defaults
+with_example_env() {
   local removed=() assigned=()
   if [ "$HOST" = "$DEFAULT_HOST" ]; then removed+=(-u "$HOST_ENV"); else assigned+=("$HOST_ENV=$HOST"); fi
   if [ "$PORT" = "$DEFAULT_PORT" ]; then removed+=(-u "$PORT_ENV"); else assigned+=("$PORT_ENV=$PORT"); fi
@@ -494,7 +494,7 @@ cmd_codegen() {
   return "$rc"
 }
 
-run_hostile_driver() { # run_hostile_driver <authority|message-limit> <slug>
+run_hostile_driver() {
   local mode=$1 slug=$2 r log f off rc=0 out err alive=no
   require_live
   r=$RUN

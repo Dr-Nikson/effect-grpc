@@ -44,6 +44,14 @@
     { "case": "an unbracketed IPv6 address with no port", "authority": "::1" },
     { "case": "an unbracketed IPv6 address with a zone ID", "authority": "fe80::1%eth0:8080" }
   ],
+  "grpcContentTypes": [
+    "application/grpc",
+    "application/grpc+proto",
+    "application/grpc+json; charset=utf-8",
+    "application/grpc-web",
+    "application/grpc-web+proto",
+    "application/grpc-web-text+proto"
+  ],
   "longAuthorities": [
     {
       "case": "a 10 KiB host name, which is a valid authority",

@@ -1,10 +1,4 @@
 // .claude/skills/verify/scripts/hostile-requests.mjs
-//
-// Sends the hostile requests from packages/e2e-tests/src/fixtures/hostile-requests.json to the
-// example server and checks each reply. Run it through `control-example hostile-authority` or
-// `control-example message-limit`, which feed this file to `node --input-type=module` from
-// packages/example so `@bufbuild/protobuf` and ./dist resolve there. Prints one JSON line per
-// check and a verdict line last, and exits 1 when any check fails.
 import { readFileSync } from "node:fs";
 import http2 from "node:http2";
 import process from "node:process";
@@ -37,8 +31,8 @@ const envelope = (message) => {
   return frame;
 };
 
-// One GetGreeting call. With `authority` undefined, Node's client sends its default for the
-// session URL, which for an IPv6 literal URL is the address and port without brackets.
+// With `authority` undefined, Node's client sends its default for the session URL, which for an
+// IPv6 literal URL is the address and port without brackets.
 const call = (protocol, authority, name) =>
   new Promise((resolve) => {
     const headers = {

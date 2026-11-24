@@ -161,5 +161,5 @@ This failure was recorded on 2026-11-24 on branch `v4/p02-authority-guard-size-c
 ## Helpers
 
 - `scripts/control-example` runs every command above. Its `help` command prints the usage.
-- `scripts/hostile-requests.mjs` runs through `hostile-authority` and `message-limit`. It reads the env vars `HOSTILE_URL`, `HOSTILE_FIXTURES` and `HOSTILE_MODE`, sends each fixture case with Node's HTTP/2 client, and prints one JSON line per check and a verdict line last.
+- `scripts/hostile-requests.mjs` runs through `hostile-authority` and `message-limit`. Like `probe`, those commands feed the file to `node --input-type=module` from `packages/example`, so its imports resolve there. It reads the env vars `HOSTILE_URL`, `HOSTILE_FIXTURES` and `HOSTILE_MODE`, sends each fixture case with Node's HTTP/2 client, and prints one JSON line per check and a verdict line last.
 - `scripts/effect-client-probe.mjs` runs through `probe`. `probe` feeds the file to `node --input-type=module` from `packages/example`, so its imports resolve there. It reads the env vars `PROBE_URL`, `PROBE_METHOD` and `PROBE_NAME`, and refuses to run without `PROBE_URL`.

@@ -13,18 +13,14 @@ export type Protocol = "grpc" | "connect";
 
 export const protocols: ReadonlyArray<Protocol> = ["grpc", "connect"];
 
-/**
- * What a client sees on the wire for one unary `GetGreeting` call.
- */
 export interface RawReply {
   readonly httpStatus: number | undefined;
-  /** True when the response HEADERS frame ended the stream, as in a gRPC trailers-only response. */
+  readonly contentType: string | undefined;
   readonly headersEndedStream: boolean;
   readonly grpcStatus: string | undefined;
   readonly grpcMessage: string | undefined;
   readonly connectCode: string | undefined;
   readonly greeting: string | undefined;
-  /** The RST_STREAM code, or undefined when the response ended before the stream closed. */
   readonly rstCode: number | undefined;
 }
 
@@ -68,15 +64,12 @@ export const connect = (url: string): Effect.Effect<http2.ClientHttp2Session, ne
     (session) => Effect.sync(() => session.destroy()),
   );
 
-/**
- * Sends one `GetGreeting` call with the given `:authority`, exactly as given, over gRPC or Connect.
- * Node's HTTP/2 client would otherwise derive the authority from the session URL.
- */
 export const getGreeting = (
   session: http2.ClientHttp2Session,
   protocol: Protocol,
   authority: string,
   name: string,
+  contentType: string = protocol === "grpc" ? "application/grpc" : "application/json",
 ): Effect.Effect<RawReply> =>
   Effect.async<RawReply>((resume) => {
     const message = toBinary(GetGreetingRequestSchema, create(GetGreetingRequestSchema, { name }));
@@ -84,12 +77,12 @@ export const getGreeting = (
       ":method": "POST",
       ":path": path,
       ":authority": authority,
-      ...(protocol === "grpc" ?
-        { "content-type": "application/grpc", te: "trailers" }
-      : { "content-type": "application/json" }),
+      "content-type": contentType,
+      ...(protocol === "grpc" ? { te: "trailers" } : {}),
     });
 
     let httpStatus: number | undefined;
+    let responseContentType: string | undefined;
     let headersEndedStream = false;
     let grpcStatus: string | undefined;
     let grpcMessage: string | undefined;
@@ -106,6 +99,7 @@ export const getGreeting = (
       resume(
         Effect.try(() => ({
           httpStatus,
+          contentType: responseContentType,
           headersEndedStream,
           grpcStatus,
           grpcMessage: grpcMessage === undefined ? undefined : decodeURIComponent(grpcMessage),
@@ -117,6 +111,7 @@ export const getGreeting = (
 
     stream.on("response", (headers, flags) => {
       httpStatus = headers[":status"];
+      responseContentType = header(headers["content-type"]);
       headersEndedStream = (flags & http2.constants.NGHTTP2_FLAG_END_STREAM) !== 0;
       grpcStatus = header(headers["grpc-status"]);
       grpcMessage = header(headers["grpc-message"]);
