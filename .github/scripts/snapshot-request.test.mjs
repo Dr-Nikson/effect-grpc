@@ -13,7 +13,6 @@ const scenarios = fixture("snapshot-requests.json");
 const REPOSITORY = "Dr-Nikson/effect-grpc";
 const HEAD = "1092b7f3ad43a293c48e61af1334444674f5148e";
 
-/** Evidence for a same-repository head whose push CI run passed and kept its build artifact. */
 const GREEN = {
   pullRequest: { sha: HEAD, repository: REPOSITORY },
   runs: [{ id: 45314327524, event: "push", conclusion: "success", headSha: HEAD }],

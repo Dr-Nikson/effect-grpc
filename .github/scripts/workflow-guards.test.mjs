@@ -1,7 +1,4 @@
 // .github/scripts/workflow-guards.test.mjs
-// Evaluates the `if:` conditions of release.yml and snapshot-release.yml with GitHub's own
-// expression evaluator against event payloads from fixtures. These conditions run only from the
-// default branch, so this is the check that exists before a change merges.
 import { load } from "js-yaml";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -20,8 +17,8 @@ const events = readJson("./fixtures/workflow-events.json");
 const associations = readJson("./fixtures/comment-associations.json");
 
 /**
- * Whether GitHub runs a job or step with this `if:` for these contexts. The evaluator knows no job
- * status, so always() is true and success() and failure() follow `status`.
+ * The evaluator knows no job status, so always() is true and success() and failure()
+ * follow `status`.
  *
  * @param {string | undefined} condition
  * @param {Record<string, unknown>} contexts
@@ -64,7 +61,6 @@ for (const { name, workflow_run, runs: expected } of events.releaseRuns) {
 test("release.yml checks npm whenever the action opened no version PR, also when every changeset is empty", () => {
   const check = release.jobs["version-pr"].steps.find((step) => step.id === "check-unpublished").if;
   const after = (outputs) => ({ steps: { changesets: { outputs } } });
-  // The action's outputs on master at 448c926, where only an empty changeset was pending.
   assert.equal(
     runs(check, after({ published: "false", publishedPackages: "[]", hasChangesets: "true" })),
     true,

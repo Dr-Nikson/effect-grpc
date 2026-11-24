@@ -2,7 +2,6 @@
 name: Release
 
 on:
-  # Only CI runs from a push to master in this repository start a job; see version-pr.if.
   workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: ["Typescript CI"]
     types: [completed]
@@ -17,8 +16,8 @@ permissions: {}
 jobs:
   version-pr:
     name: Create Version PR
-    # `branches: [master]` matches the head branch name of any CI run, including a pull
-    # request from a fork whose branch is called master.
+    # `branches: [master]` filters only on the triggering run's head branch name, not on its
+    # event or its repository.
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
@@ -27,8 +26,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: write # commit the version PR branch through the API
-      pull-requests: write # open or update the version PR
+      contents: write
+      pull-requests: write
     outputs:
       has_unpublished: ${{ steps.check-unpublished.outputs.has_unpublished }}
     steps:
@@ -146,7 +145,7 @@ jobs:
       name: npm-publish
       url: https://npmjs.com/package/@dr_nikson/effect-grpc
     permissions:
-      actions: read # download the CI run's build artifacts
+      actions: read
       contents: write # push release tags and create GitHub releases
       id-token: write # npm trusted publishing with provenance
     steps:
@@ -193,8 +192,6 @@ jobs:
           echo "✅ Executable bits removed"
 
       # changesets/action publishes only when no changeset is pending, empty ones included.
-      # This job runs only when no version PR was due, so what is pending here is empty; the
-      # script deletes it from this checkout and fails on anything else.
       - name: Drop empty changesets
         run: node .github/scripts/drop-empty-changesets.mjs
 
