@@ -115,7 +115,7 @@ IMPORTANT: refer to the best practices and coding standards described in @agents
 - After changing `.github/workflows` or `.github/scripts`, run both checks from the root. Each must pass:
   ```bash
   pnpm run test:workflows # fixture tests for the workflow scripts and the workflows' if: guards
-  pnpm run lint:workflows # zizmor over .github/workflows (needs uv); must report no findings
+  pnpm run lint:workflows
   ```
 - Values from events, inputs, branch names and step outputs reach `run:` and `script:` through `env:`, never as `${{ }}` inside the script.
 - Pin every action to a full commit SHA with its version in a comment.
