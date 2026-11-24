@@ -494,8 +494,11 @@ describe("GrpcServer while it serves", () => {
     Effect.gen(function* () {
       const contextsSeen: Array<Array<string>> = [];
       const chained = Server.GrpcServerBuilder()
-        .withContextTransformer((handlerContext) =>
-          Effect.succeed([`first saw ${handlerContext.method.name}`]),
+        .withContextTransformer((handlerContext, current) =>
+          Effect.succeed([
+            `first saw ${handlerContext.method.name}`,
+            `its current context is the HandlerContext: ${current === handlerContext}`,
+          ]),
         )
         .withContextTransformer((handlerContext, steps) =>
           Effect.succeed([...steps, `second saw ${handlerContext.protocolName}`]),
@@ -520,7 +523,7 @@ describe("GrpcServer while it serves", () => {
       yield* ping(address);
 
       expect(contextsSeen, "the context the handler received").toEqual([
-        ["first saw Ping", "second saw grpc"],
+        ["first saw Ping", "its current context is the HandlerContext: true", "second saw grpc"],
       ]);
     }).pipe(Effect.scoped, Effect.runPromise));
 
