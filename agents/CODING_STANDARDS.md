@@ -50,7 +50,7 @@ Each package consists of modules, for example: `packages/effect-grpc` contains m
 
 ## Data types
 
-1. Absent values use Effect data types such as `Option`, never `null` or `undefined`. Convert a nullable value from Node, connect or another library at that boundary with `Option.fromNullable`.
+1. Absent values use Effect data types such as `Option`, never `null` or `undefined`. Convert a nullable value from Node, connect or another library at that boundary with `Option.fromNullishOr`.
 
 
 ## Comments and JSDoc

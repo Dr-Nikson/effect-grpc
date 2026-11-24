@@ -279,7 +279,7 @@ const streamingAnswerOf = (
     const chunks = messages.map((message) => ({
       data: message === "oversized" ? expand(oversized) : normal,
     }));
-    const first = Option.getOrThrow(Option.fromNullable(chunks[0]));
+    const first = Option.getOrThrow(Option.fromNullishOr(chunks[0]));
     const replies: Array<string> = [];
     const collect = async (responses: AsyncIterable<Chunk>) => {
       for await (const response of responses) replies.push(response.data);
@@ -297,7 +297,7 @@ const streamingAnswerOf = (
     return replies;
   }).pipe(
     Effect.timeout("10 seconds"),
-    Effect.catchTag("TimeoutException", () => Effect.succeed(["no answer within 10 seconds"])),
+    Effect.catchTag("TimeoutError", () => Effect.succeed(["no answer within 10 seconds"])),
   );
 
 describe("Hostile requests (issue #61)", () => {
@@ -504,7 +504,7 @@ describe("Hostile requests (issue #61)", () => {
     }),
   );
 
-  it.scopedLive(
+  it.live(
     "keeps a long-lived client usable after oversized unary and server-streaming messages",
     () =>
       Effect.gen(function* () {
@@ -548,7 +548,7 @@ describe("Hostile requests (issue #61)", () => {
       }),
   );
 
-  it.scopedLive("sends a client-streaming answer that is ready before the request ends", () =>
+  it.live("sends a client-streaming answer that is ready before the request ends", () =>
     Effect.gen(function* () {
       const port = yield* serveStreaming({
         ...streamingTestService,
@@ -577,7 +577,7 @@ describe("Hostile requests (issue #61)", () => {
     }),
   );
 
-  it.scopedLive("stops a bidi handler when its client cancels the call", () =>
+  it.live("stops a bidi handler when its client cancels the call", () =>
     Effect.gen(function* () {
       const { replyEveryMs, replies: expectedReplies } = fixtures.cancelledBidi;
       const running = { handlers: 0 };
