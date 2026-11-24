@@ -569,8 +569,10 @@ cmd_taken_port() {
   off=$(log_size "$log")
   out=$(mktemp)
   err=$(mktemp)
+  load_example_env
+  local cmd=("${EXAMPLE_ENV[@]}" timeout -k 2 10 node dist/server.js)
   started=$(date +%s%N)
-  (cd "$EXAMPLE" && with_example_env timeout -k 2 10 node dist/server.js) </dev/null >"$out" 2>"$err" || rc=$?
+  (cd "$EXAMPLE" && "${cmd[@]}") </dev/null >"$out" 2>"$err" || rc=$?
   elapsed=$((($(date +%s%N) - started) / 1000000))
   if instance_alive "$r"; then alive=yes; fi
   do_call "$r" connect GetGreeting '{"name":"after-taken-port"}' taken-port-after >/dev/null || call_rc=$?
@@ -582,6 +584,9 @@ cmd_taken_port() {
   fi
   {
     echo "# taken-port at $(date -u +%FT%TZ): a second node dist/server.js on this instance's $(url_for "$HOST" "$PORT")"
+    printf '$ cd %q &&' "$EXAMPLE"
+    printf ' %q' "${cmd[@]}"
+    echo ' </dev/null'
     echo "second_exit_code=$rc"
     echo "second_elapsed_ms=$elapsed"
     echo "instance_alive_after=$alive"
