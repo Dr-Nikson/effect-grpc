@@ -1,5 +1,5 @@
 // packages/effect-grpc/src/protoRuntime.test.ts
-import { Cause, Deferred, Effect, Exit, LogLevel, Logger } from "effect";
+import { Cause, Deferred, Effect, Exit, Layer, References } from "effect";
 import type { Scope } from "effect";
 import http2 from "node:http2";
 import net from "node:net";
@@ -54,12 +54,19 @@ const status = (code: Code, message: string): Sent => ({
   message,
 });
 
-// How many pairs an interrupt leaves depends on how Effect's runtime unwinds it: 5 for a bare
-// Effect.never, 6 once the handler adds an Effect.onExit. The matcher pins the pairs, not the count.
-const deadlineMessage = expect.stringMatching(
-  /^Unknown error; Request was canceled(; Unknown error; Request was canceled)*$/,
-);
-
+/**
+ * An Effect 4 cause is a flat list of reasons, with no sequential or parallel structure and no empty
+ * node, so four rows send something else than they did on Effect 3:
+ * - A deadline expiry sends Aborted "Request was canceled". It sent Internal, with the message
+ *   "Unknown error; Request was canceled" five or six times in a row.
+ * - A typed failure with a dying finalizer sends Internal "Internal server error; Internal server
+ *   error". It sent Internal "typed failure; Internal server error". Effect 4 turns the typed
+ *   failure into a defect once the finalizer dies, and the server never sends what a defect holds.
+ * - Two typed failures in one cause send Internal "first; second". They sent Internal
+ *   "first | second".
+ * - A typed failure while concurrent work is interrupted sends its own status, NotFound "first". It
+ *   sent Internal "first | Unknown error; Request was canceled".
+ */
 const outcomes: ReadonlyArray<Outcome> = [
   {
     outcome: "a typed failure",
@@ -84,7 +91,7 @@ const outcomes: ReadonlyArray<Outcome> = [
     outcome: "a deadline expiry",
     call: "sends a 50 ms deadline",
     handler: () => Effect.never,
-    sends: status(Code.Internal, deadlineMessage),
+    sends: status(Code.Aborted, "Request was canceled"),
   },
   {
     outcome: "a typed failure with a dying finalizer",
@@ -93,7 +100,7 @@ const outcomes: ReadonlyArray<Outcome> = [
       Effect.fail(GrpcException.create(Code.NotFound, "typed failure")).pipe(
         Effect.ensuring(Effect.die(new Error("the finalizer died"))),
       ),
-    sends: status(Code.Internal, "typed failure; Internal server error"),
+    sends: status(Code.Internal, "Internal server error; Internal server error"),
   },
   {
     outcome: "a throw inside a context transformer",
@@ -126,16 +133,25 @@ const outcomes: ReadonlyArray<Outcome> = [
     sends: status(Code.Aborted, "Request was canceled"),
   },
   {
-    outcome: "two typed failures in parallel",
+    outcome: "two typed failures in one cause",
     call: "waits for the reply",
     handler: () =>
       Effect.failCause(
-        Cause.parallel(
+        Cause.combine(
           Cause.fail(GrpcException.create(Code.NotFound, "first")),
           Cause.fail(GrpcException.create(Code.AlreadyExists, "second")),
         ),
       ),
-    sends: status(Code.Internal, "first | second"),
+    sends: status(Code.Internal, "first; second"),
+  },
+  {
+    outcome: "a typed failure while concurrent work is interrupted",
+    call: "waits for the reply",
+    handler: () =>
+      Effect.all([Effect.fail(GrpcException.create(Code.NotFound, "first")), Effect.never], {
+        concurrency: "unbounded",
+      }).pipe(Effect.as({})),
+    sends: status(Code.NotFound, "first"),
   },
   {
     outcome: "an empty cause",
@@ -219,7 +235,7 @@ const call = (
   method: "Run" | "Ping",
   headers?: http2.OutgoingHttpHeaders,
 ) =>
-  Effect.async<{
+  Effect.callback<{
     readonly stream: number;
     readonly code: Code | undefined;
     readonly message: string | undefined;
@@ -239,7 +255,7 @@ const call = (
       resume(
         stream.id !== undefined && stream.rstCode === http2.constants.NGHTTP2_NO_ERROR ?
           Effect.succeed({ stream: stream.id, code, message })
-        : Effect.dieMessage(`${method} did not end cleanly: RST_STREAM ${stream.rstCode}`),
+        : Effect.die(new Error(`${method} did not end cleanly: RST_STREAM ${stream.rstCode}`)),
       ),
     );
     stream.resume();
@@ -269,7 +285,7 @@ const frameTap = (port: number) =>
     const serverClosed = yield* Deferred.make<void>();
     const sockets: Array<net.Socket> = [];
     const relay = yield* Effect.acquireRelease(
-      Effect.async<net.Server>((resume) => {
+      Effect.callback<net.Server>((resume) => {
         const relay = net.createServer((client) => {
           const upstream = net.connect(port, "127.0.0.1");
           sockets.push(client, upstream);
@@ -292,9 +308,9 @@ const frameTap = (port: number) =>
           client.pipe(upstream);
           upstream.on("end", () => {
             client.end();
-            Deferred.unsafeDone(serverClosed, Effect.void);
+            Deferred.doneUnsafe(serverClosed, Effect.void);
           });
-          upstream.on("error", (error) => Deferred.unsafeDone(serverClosed, Effect.die(error)));
+          upstream.on("error", (error) => Deferred.doneUnsafe(serverClosed, Effect.die(error)));
           client.on("error", () => {});
         });
         relay.listen(0, "127.0.0.1", () => resume(Effect.succeed(relay)));
@@ -320,9 +336,9 @@ const observeCancel = (row: Outcome) =>
     const ended = yield* Deferred.make<HandlerEnd>();
     const address = yield* serve(row, () =>
       Deferred.succeed(started, undefined).pipe(
-        Effect.zipRight(row.handler()),
+        Effect.andThen(row.handler()),
         Effect.onExit((exit) =>
-          Deferred.succeed(ended, Exit.isInterrupted(exit) ? "interrupted" : "ended another way"),
+          Deferred.succeed(ended, Exit.hasInterrupts(exit) ? "interrupted" : "ended another way"),
         ),
       ),
     );
@@ -332,13 +348,12 @@ const observeCancel = (row: Outcome) =>
     const cancelled = open(session, "Run");
     yield* Deferred.await(started);
     const cancelledStream = cancelled.id;
-    if (cancelledStream === undefined) return yield* Effect.dieMessage("Run has no stream id");
+    if (cancelledStream === undefined) return yield* Effect.die(new Error("Run has no stream id"));
     cancelled.close(http2.constants.NGHTTP2_CANCEL);
     const handler = yield* Deferred.await(ended).pipe(
-      Effect.timeoutTo({
+      Effect.timeoutOrElse({
         duration: "2 seconds",
-        onSuccess: (end) => end,
-        onTimeout: (): HandlerEnd => "still running",
+        orElse: () => Effect.succeed<HandlerEnd>("still running"),
       }),
     );
     const ping = yield* call(session, "Ping");
@@ -376,7 +391,10 @@ describe("what the server sends for each handler outcome", () => {
   for (const row of outcomes) {
     it(`${row.outcome}, when the client ${row.call}`, async () => {
       const sent = await Effect.runPromise(
-        observe(row).pipe(Effect.scoped, Effect.provide(Logger.minimumLogLevel(LogLevel.Warning))),
+        observe(row).pipe(
+          Effect.scoped,
+          Effect.provide(Layer.succeed(References.MinimumLogLevel, "Warn")),
+        ),
       );
       expect(sent).toEqual(row.sends);
     });
