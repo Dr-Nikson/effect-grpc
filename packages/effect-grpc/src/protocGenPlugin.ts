@@ -70,9 +70,6 @@ function generateEffectService(
   const serviceLiveLayerSymbol = safeIdentifier(serviceNameLower + "LiveLayer");
   const makeTagSymbol = safeIdentifier("make" + serviceName + "Tag");
   const makeLiveLayerSymbol = safeIdentifier("make" + serviceName + "LiveLayer");
-  // Not Context.Tag.Identifier<Tag>: Effect 4 renames it to Context.Service.Identifier, which turns
-  // the `any` of an erased overload check into `unknown`, so the client layer's two overloads fail
-  // with TS2322. The indexed access is the same type on Effect 3 and Effect 4.
   const providedType = 'Tag["Identifier"]';
 
   f.print("/**");
@@ -585,10 +582,10 @@ function generateEffectService(
   f.print(" * // Transform app metadata to gRPC headers");
   f.print(" * const ClientLayer = effectProto.", clientLiveLayerSymbol, "(");
   f.print(" *   (meta: AppMeta) => ({");
-  f.print(" *     headers: {");
+  f.print(" *     headers: new Headers({");
   f.print(' *       "authorization": `Bearer ${meta.authToken}`,');
   f.print(' *       "x-user-id": meta.userId');
-  f.print(" *     }");
+  f.print(" *     })");
   f.print(" *   }),");
   f.print(" *   AppClientTag");
   f.print(" * );");
