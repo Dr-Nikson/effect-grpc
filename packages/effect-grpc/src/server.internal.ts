@@ -9,7 +9,8 @@ import type {
   HandlerContext,
   ServiceImpl,
 } from "@connectrpc/connect";
-import { createContextValues } from "@connectrpc/connect";
+import { Code, createContextValues } from "@connectrpc/connect";
+import type { ConnectNodeAdapterOptions } from "@connectrpc/connect-node";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 
 import * as GrpcException from "./grpcException.js";
@@ -44,6 +45,90 @@ export function makeGrpcService<
 }
 
 /**
+ * The largest request message the server reads, in bytes, which is the default of other gRPC
+ * implementations. Connect checks it on the wire and again after decompression.
+ */
+const maxRequestMessageBytes = 4 * 1024 * 1024;
+
+type RequestListener = (req: http2.Http2ServerRequest, res: http2.Http2ServerResponse) => void;
+
+const addressAndPort = /^(.+):(\d+)$/;
+
+/**
+ * Returns the authority to give Connect, or undefined when the authority cannot name a host.
+ *
+ * Node's HTTP/2 client strips the brackets from an IPv6 literal when it builds `:authority`, so it
+ * sends `::1:8000` for `http://[::1]:8000`. An authority that does not parse is therefore read as
+ * an IPv6 address and a decimal port, split at its last colon, when that bracketed form parses.
+ * `::1:8000` is also a complete IPv6 address, but a valid authority must bracket an IPv6 address,
+ * and Node's client always appends the port.
+ */
+const readAuthority = (authority: string): string | undefined => {
+  if (URL.canParse(`http://${authority}`)) return authority;
+  const match = addressAndPort.exec(authority);
+  if (match === null) return undefined;
+  const bracketed = `[${match[1]}]:${match[2]}`;
+  return URL.canParse(`http://${bracketed}`) ? bracketed : undefined;
+};
+
+const grpcContentType = /^application\/grpc(?:-web(?:-text)?)?(?:\+\w+)?$/i;
+
+/**
+ * Answers INVALID_ARGUMENT in the format of the request's protocol. This runs before Connect picks
+ * a protocol, so it reads the content type itself. A gRPC or gRPC-web client reads the status from
+ * an HTTP 200 response, and it would read a 4xx status as INTERNAL. Strict clients also check that
+ * the response content type matches their own, so the reply echoes it.
+ */
+const refuseMalformedAuthority = (
+  req: http2.Http2ServerRequest,
+  res: http2.Http2ServerResponse,
+): void => {
+  const message = "malformed request authority";
+  const contentType = req.headers["content-type"];
+  if (contentType !== undefined && grpcContentType.test(contentType)) {
+    // Headers set before end() leave in one HEADERS frame that ends the stream, which is a gRPC
+    // trailers-only response. writeHead() would send them without END_STREAM.
+    res.statusCode = 200;
+    res.setHeader("content-type", contentType);
+    res.setHeader("grpc-status", String(Code.InvalidArgument));
+    res.setHeader("grpc-message", encodeURIComponent(message));
+    res.end();
+    return;
+  }
+  res.statusCode = 400;
+  res.setHeader("content-type", "application/json");
+  res.end(JSON.stringify({ code: "invalid_argument", message }));
+};
+
+/**
+ * Connect's request listener for `routes`, with the message limit, behind a guard. connect-node
+ * builds each request's URL from its authority synchronously inside the listener, and Node turns a
+ * throw there into an uncaught exception that stops the process. Every route on the adapter goes
+ * through this one listener, including routes that later code registers.
+ */
+const makeRequestListener = (
+  options: Pick<ConnectNodeAdapterOptions, "routes" | "interceptors" | "contextValues">,
+): RequestListener => {
+  const handler = connectNodeAdapter({ ...options, readMaxBytes: maxRequestMessageBytes });
+  return (req, res) => {
+    try {
+      const authority = readAuthority(req.authority);
+      if (authority === undefined) {
+        refuseMalformedAuthority(req, res);
+        return;
+      }
+      // Connect reads req.authority, and Node's getter returns this header first.
+      if (authority !== req.authority) req.headers[":authority"] = authority;
+      handler(req, res);
+    } catch {
+      // A throw that readAuthority does not foresee. Resetting this one stream keeps the process
+      // serving every other request.
+      res.stream.close(http2.constants.NGHTTP2_INTERNAL_ERROR);
+    }
+  };
+};
+
+/**
  * @internal
  * Live implementation of the GrpcServer interface.
  * Manages the HTTP/2 server and routes gRPC requests to registered services.
@@ -65,7 +150,7 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
     return Effect.gen(function* () {
       const executor = yield* makeExecutor();
       const handler = yield* Effect.sync(() =>
-        connectNodeAdapter({
+        makeRequestListener({
           routes: routes(executor),
           interceptors: [],
           contextValues(req): ContextValues {
