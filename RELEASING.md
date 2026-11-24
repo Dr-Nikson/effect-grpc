@@ -231,7 +231,7 @@ Published files (from `package.json` `files` field):
 The package is published with:
 - **Public access** - Anyone can install from npm
 - **Provenance** - npm package provenance for security/supply chain verification
-- **Node.js 22+** - Minimum supported version
+- **Node.js 22.19+** - Minimum supported version
 
 ## Scripts Reference
 
