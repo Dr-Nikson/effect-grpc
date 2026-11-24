@@ -8,7 +8,8 @@
     "compile": "tsc --build tsconfig.json",
     "clean": "rm -rf ./dist ./tsconfig.tsbuildinfo ./src/generated",
     "generate:proto": "pnpm buf generate",
-    "build": "pnpm run clean && pnpm run generate:proto && pnpm run compile"
+    "build": "pnpm run clean && pnpm run generate:proto && pnpm run compile",
+    "lint:effect": "effect-language-service diagnostics --project tsconfig.json"
   },
   "dependencies": {
     "effect": "catalog:",
