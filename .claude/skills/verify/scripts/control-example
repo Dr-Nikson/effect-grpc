@@ -495,6 +495,13 @@ cmd_probe() {
     sh -c 'node --input-type=module <"$1"' sh "$SCRIPT_DIR/effect-client-probe.mjs"
 }
 
+cmd_deadline() {
+  require_live
+  run_node_driver "$RUN" deadline "deadline: GetGreetingSlowly with a 200 ms deadline over gRPC, gRPC-web and Connect, url=$BASE_URL" \
+    env DEADLINE_URL="$BASE_URL" DEADLINE_MS=200 \
+    sh -c 'node --input-type=module <"$1"' sh "$SCRIPT_DIR/deadline-probe.mjs"
+}
+
 cmd_codegen() {
   local r f g pkg rc=0 tags_rc=0
   r=$(ensure_run)
@@ -677,6 +684,8 @@ Usage: control-example <command> [arguments] [--port <n>] [--host <address>] [--
   call <connect|grpc|http1> <Method> [json]  one unary call; records the response and the server log lines
   client                                     run the README example client (`node dist/client.js`) against the instance
   probe <getGreeting|faceTheError> [name]    call the instance through the generated Effect client
+  deadline                                   call GetGreetingSlowly with a 200 ms deadline over gRPC, gRPC-web and
+                                             Connect from Node's HTTP/2 client; check each reply is deadline_exceeded
   codegen                                    rebuild everything (codegen included), record generated exports, check the typed tags
   hostile-authority                          send the fixture's authority cases over gRPC and Connect; check each reply
   message-limit                              send messages at and over the 4 MiB limit, then oversized
@@ -720,6 +729,7 @@ main() {
     call) want_args 2 3 "$@"; cmd_call "$@" ;;
     client) want_args 0 0 "$@"; cmd_client ;;
     probe) want_args 1 2 "$@"; cmd_probe "$@" ;;
+    deadline) want_args 0 0 "$@"; cmd_deadline ;;
     codegen) want_args 0 0 "$@"; cmd_codegen ;;
     hostile-authority) want_args 0 0 "$@"; cmd_hostile_authority ;;
     message-limit) want_args 0 0 "$@"; cmd_message_limit ;;

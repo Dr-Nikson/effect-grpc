@@ -13,7 +13,7 @@ This directory is the maintained source for verifying effect-grpc's user-facing 
 ## Driving conventions
 
 - Server journeys use independent clients: `call grpc` (`buf curl`, gRPC protocol) and `call connect` (`curl`, Connect JSON over HTTP/2).
-- Name methods by their proto names on `/com.example.v1.HelloWorldAPI/<Method>`: `GetGreeting` and `FaceTheError`.
+- Name methods by their proto names on `/com.example.v1.HelloWorldAPI/<Method>`: `GetGreeting`, `FaceTheError`, `FaceTheDefect` and `GetGreetingSlowly`.
 - Dial an IPv6 literal URL (`http://[::1]:<port>`) only against an instance launched with `--host ::1`.
 - Hostile inputs come only from `packages/e2e-tests/src/fixtures/hostile-requests.json`, through the `hostile-authority` and `message-limit` commands. Never put them on a command line. The `connect-method` command sends a plain CONNECT request and uses no fixture case.
 - Run the hostile-authority journey last, on its own instance.
@@ -43,11 +43,11 @@ Keep implementation details out of the map. Name only user paths, stable handles
 - [Code generation](./codegen.md) covers `protoc-gen-effect` output: files, export names, the no-duplicate-suffix rule, a service that mixes unary and streaming rpcs, compilation, and the default and typed tags.
 - [Server lifecycle](./server-lifecycle.md) covers startup, readiness, HTTP/2-only transport, unknown methods, CONNECT requests, graceful shutdown, hostile `:authority` values, and the 4 MiB message limit.
 - [Unary RPC](./unary-rpc.md) covers `GetGreeting` over gRPC and Connect, with the handler's server-side effect.
-- [Error mapping](./error-mapping.md) covers `GrpcException` to gRPC status and Connect HTTP status, and keeping the server up afterwards.
+- [Error mapping](./error-mapping.md) covers `GrpcException` to gRPC status and Connect HTTP status, a defect, a deadline that expires during the call, and keeping the server up afterwards.
 - [Effect client](./effect-client.md) covers the README example client and the generated client on its default tag, including how errors reach the caller and a call to an IPv6 literal address.
 
 ## Not mapped yet
 
-- Distributed tracing (W3C `traceparent` to a server span). The example configures no OpenTelemetry exporter, so a user sees nothing to check. Only `packages/e2e-tests/src/tracing.test.ts` covers it.
-- Context transformers (`withContextTransformer`), request headers and metadata transformers, compression, and timeouts. The example does not use them.
+- Distributed tracing (W3C `traceparent` to a server span, and the server span's kind and `rpc.*` attributes). The example configures no OpenTelemetry exporter, so a user sees nothing to check. Only `packages/e2e-tests/src/tracing.test.ts` covers it.
+- Context transformers (`withContextTransformer`), request headers and metadata transformers, compression, and client-side timeouts. The example does not use them. `packages/e2e-tests/src/handler-context.test.ts` checks the context a handler gets with no transformer, and the library's unit tests check chained transformers.
 - Calls to streaming rpcs. The example has none, so no journey calls one. `packages/e2e-tests/src/mixed-service.test.ts` serves a service that mixes unary and streaming rpcs and checks that each streaming rpc gets `UNIMPLEMENTED` over gRPC, gRPC-web and Connect.
