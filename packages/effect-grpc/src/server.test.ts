@@ -1,5 +1,16 @@
 // packages/effect-grpc/src/server.test.ts
-import { Cause, Deferred, Effect, Exit, Fiber, LogLevel, Logger, Scope } from "effect";
+import {
+  Cause,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  LogLevel,
+  Logger,
+  Scheduler,
+  Scope,
+} from "effect";
 import dns from "node:dns";
 import { readFileSync } from "node:fs";
 import http2 from "node:http2";
@@ -184,6 +195,26 @@ const holdNextLookup = Effect.gen(function* () {
   });
   return Deferred.await(held);
 });
+
+/**
+ * Node turns an `'error'` event that nobody listens to into an uncaught exception, which ends a real
+ * process. Vitest keeps its workers alive through one, so a test records them instead.
+ */
+const recordUncaughtExceptions = Effect.acquireRelease(
+  Effect.sync(() => {
+    const errors: Array<string> = [];
+    const record = (error: unknown) => {
+      errors.push(String(error));
+    };
+    process.on("uncaughtException", record);
+    return { errors, record };
+  }),
+  ({ record }) => Effect.sync(() => process.off("uncaughtException", record)),
+).pipe(Effect.map(({ errors }) => errors));
+
+const afterQueuedNodeEvents = Effect.promise(
+  () => new Promise<void>((resolve) => setImmediate(resolve)),
+);
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -370,6 +401,67 @@ describe("GrpcServer.listen", () => {
       expect(yield* acceptsConnections(port)).toBe(false);
       expect(messages.filter((message) => message.startsWith("gRPC server"))).toEqual([]);
     }).pipe(Effect.runPromise));
+
+  it("keeps the process up when a failing sibling layer interrupts a listen on a taken port", () =>
+    Effect.gen(function* () {
+      const uncaught = yield* recordUncaughtExceptions;
+      const first = yield* server.listen({ host: "", port: 0 });
+
+      // With an empty host, Node binds inside listen() and reports the failure on its next tick.
+      const error = yield* Effect.flip(
+        Layer.launch(
+          Layer.mergeAll(
+            Layer.scopedDiscard(server.listen({ host: "", port: first.port })),
+            Layer.effectDiscard(Effect.fail("a sibling layer failed")),
+          ),
+        ),
+      );
+      yield* afterQueuedNodeEvents;
+
+      expect(error).toBe("a sibling layer failed");
+      expect(uncaught.join("\n")).toBe("");
+    }).pipe(Effect.scoped, Effect.runPromise));
+
+  it("keeps the process up wherever an interrupt lands in a listen on a taken port", () =>
+    Effect.gen(function* () {
+      const uncaught = yield* recordUncaughtExceptions;
+      const first = yield* server.listen({ host: "127.0.0.1", port: 0 });
+      // Fiber steps on Node's tick queue can run between a failed bind and Node's report of it.
+      const onNodeTicks = Scheduler.make((task) => process.nextTick(task));
+      const interruptAfter = (steps: number) =>
+        Effect.gen(function* () {
+          const startup = yield* Effect.fork(
+            Effect.flip(Effect.scoped(server.listen({ host: "127.0.0.1", port: first.port }))),
+          );
+          for (let step = 0; step < steps; step++) yield* Effect.yieldNow();
+          return yield* Fiber.interrupt(startup);
+        }).pipe(Effect.withScheduler(onNodeTicks));
+
+      let steps = 0;
+      let exit = yield* interruptAfter(steps);
+      while (Exit.isFailure(exit) && steps < 32) exit = yield* interruptAfter(++steps);
+      yield* afterQueuedNodeEvents;
+
+      expect(uncaught.join("\n")).toBe("");
+      expect(Exit.isSuccess(exit) && exit.value, "a listen that failed on its own").toBeInstanceOf(
+        Server.GrpcServerBindError,
+      );
+    }).pipe(Effect.scoped, Effect.runPromise));
+
+  it("keeps the process up when a listen on a taken port runs in a scope that already closed", () =>
+    Effect.gen(function* () {
+      const uncaught = yield* recordUncaughtExceptions;
+      const first = yield* server.listen({ host: "127.0.0.1", port: 0 });
+      const closed = yield* Scope.make();
+      yield* Scope.close(closed, Exit.void);
+
+      yield* Effect.exit(
+        server.listen({ host: "127.0.0.1", port: first.port }).pipe(Scope.extend(closed)),
+      );
+      yield* afterQueuedNodeEvents;
+
+      expect(uncaught.join("\n")).toBe("");
+    }).pipe(Effect.scoped, Effect.runPromise));
 });
 
 describe("GrpcServer while it serves", () => {
