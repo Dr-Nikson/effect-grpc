@@ -9,18 +9,18 @@ catalogs:
     '@bufbuild/protoplugin': 2.17.0
     '@connectrpc/connect': 2.3.0
     '@connectrpc/connect-node': 2.3.0
-    '@effect/language-service': 0.41.0
+    '@effect/language-service': 0.87.5
     '@effect/opentelemetry': 0.61.0
     '@effect/platform': 0.94.2
     '@effect/platform-node': 0.104.1
-    '@effect/vitest': 0.19.4
+    '@effect/vitest': 0.30.1
     '@opentelemetry/api': 1.9.0
     '@opentelemetry/core': 2.0.0
     '@opentelemetry/sdk-trace-base': 2.0.0
     '@types/node': 24.4.0
-    effect: 3.19.15
+    effect: 3.22.5
     typescript: 5.9.2
-    vitest: 3.2.4
+    vitest: 4.1.12
     # Peers of @effect/platform-node, declared so pnpm can't keep stale auto-installed versions
     # (packages/example crashed on load). Newer patches in range need effect >= 3.19.17.
     '@effect/cluster': 0.56.1
@@ -34,4 +34,4 @@ catalogs:
     '@bufbuild/protobuf': ^2.17.0
     '@connectrpc/connect': ^2.3.0
     '@effect/opentelemetry': ^0.61.0
-    effect: ^3.19.15
+    effect: ^3.22.5
