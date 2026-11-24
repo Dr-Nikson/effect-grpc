@@ -4,28 +4,15 @@ import { Cause, Effect, Exit, Layer, LogLevel, Logger, Option } from "effect";
 import { describe, expect, it } from "@effect/vitest";
 
 import * as namingTestProto from "./generated/com/example/v1/naming_test_service_effect.js";
-import {
-  Port,
-  PortLive,
-  clientLayer,
-  createServer,
-  effectProto,
-  serverServiceLayer,
-} from "./test-fixtures.js";
+import { clientLayer, createServer, effectProto, serverServiceLayer } from "./test-fixtures.js";
 
 describe("E2E gRPC Client-Server Tests", () => {
   it.scopedLive("should successfully call getGreeting RPC", () =>
     Effect.gen(function* () {
-      // Get port from context
-      const port = yield* Port;
-      yield* Effect.logInfo(`Starting test server on port ${port}`);
-
       // Create and start server
       const server = yield* createServer();
-      yield* Effect.forkScoped(server.run({ host: "127.0.0.1", port }));
-
-      // Small delay to ensure server is ready
-      yield* Effect.sleep("1 second");
+      const address = yield* server.listen({ host: "127.0.0.1", port: 0 });
+      yield* Effect.logInfo(`Test server listening on port ${address.port}`);
 
       const result = yield* Effect.gen(function* () {
         // Get client and make request that should fail
@@ -33,7 +20,7 @@ describe("E2E gRPC Client-Server Tests", () => {
         const result = yield* client.getGreeting({ name: "TestUser" }, {});
 
         return result;
-      }).pipe(Effect.provide(clientLayer), Effect.scoped);
+      }).pipe(Effect.provide(clientLayer(address)), Effect.scoped);
 
       // Verify response
       expect(result.greeting).toContain("Hello, TestUser!");
@@ -42,7 +29,6 @@ describe("E2E gRPC Client-Server Tests", () => {
       Effect.provide(
         Layer.empty.pipe(
           Layer.provideMerge(serverServiceLayer),
-          Layer.provideMerge(PortLive),
           Layer.provideMerge(Logger.minimumLogLevel(LogLevel.Debug)),
         ),
       ),
@@ -51,16 +37,10 @@ describe("E2E gRPC Client-Server Tests", () => {
 
   it.scopedLive("should handle error from faceTheError RPC", () =>
     Effect.gen(function* () {
-      // Get port from context
-      const port = yield* Port;
-      yield* Effect.logInfo(`Starting test server on port ${port}`);
-
       // Create and start server
       const server = yield* createServer();
-      yield* Effect.forkScoped(server.run({ host: "127.0.0.1", port }));
-
-      // Small delay to ensure server is ready
-      yield* Effect.sleep("1 second");
+      const address = yield* server.listen({ host: "127.0.0.1", port: 0 });
+      yield* Effect.logInfo(`Test server listening on port ${address.port}`);
 
       const result = yield* Effect.gen(function* () {
         // Get client and make request that should fail
@@ -68,7 +48,7 @@ describe("E2E gRPC Client-Server Tests", () => {
         const result = yield* Effect.exit(client.faceTheError({ name: "TestUser" }, null));
 
         return result;
-      }).pipe(Effect.provide(clientLayer), Effect.scoped);
+      }).pipe(Effect.provide(clientLayer(address)), Effect.scoped);
 
       // Verify it failed with expected error
       if (!Exit.isFailure(result)) {
@@ -88,7 +68,6 @@ describe("E2E gRPC Client-Server Tests", () => {
         Layer.empty.pipe(
           Layer.provideMerge(serverServiceLayer),
           Layer.provideMerge(Logger.minimumLogLevel(LogLevel.Debug)),
-          Layer.provideMerge(PortLive),
         ),
       ),
     ),

@@ -36,7 +36,6 @@ import fixtures from "./fixtures/hostile-requests.json" with { type: "json" };
 import { HelloWorldAPI } from "./generated/com/example/v1/hello_world_api_pb.js";
 import { NamingTestService } from "./generated/com/example/v1/naming_test_service_pb.js";
 import { StreamingTestService } from "./generated/com/example/v1/streaming_test_service_pb.js";
-import { Port, PortLive } from "./test-fixtures.js";
 
 type Repeated = { readonly repeat: string; readonly times: number };
 
@@ -65,14 +64,12 @@ const serve = (
   service: effectProto.HelloWorldAPIService<HandlerContext> = authorityEcho,
 ) =>
   Effect.gen(function* () {
-    const port = yield* Port;
     const service = yield* effectProto.HelloWorldAPIServiceTag;
     const server = EffectGrpcServer.GrpcServerBuilder()
       .withContextTransformer((handlerCtx) => Effect.succeed(handlerCtx))
       .withService(service)
       .build(options);
-    yield* Effect.forkScoped(server.run({ host, port }));
-    yield* Effect.sleep("1 second");
+    const { port } = yield* server.listen({ host, port: 0 });
     return port;
   }).pipe(
     Effect.provide(
@@ -237,14 +234,12 @@ const streamingTestService: ServiceImpl<typeof StreamingTestService> = {
 
 const serveStreaming = (implementation: ServiceImpl<typeof StreamingTestService>) =>
   Effect.gen(function* () {
-    const port = yield* Port;
     const service = EffectGrpcServer.GrpcService(
       "StreamingTestService",
       StreamingTestService,
     )(() => implementation);
     const server = EffectGrpcServer.GrpcServerBuilder().withService(service).build();
-    yield* Effect.forkScoped(server.run({ host: "127.0.0.1", port }));
-    yield* Effect.sleep("1 second");
+    const { port } = yield* server.listen({ host: "127.0.0.1", port: 0 });
     return port;
   });
 
@@ -292,7 +287,7 @@ describe("Hostile requests (issue #61)", () => {
         }
       }
       yield* expectServing(session, port);
-    }).pipe(Effect.provide(PortLive)),
+    }),
   );
 
   it.scopedLive.skipIf(!ipv6LoopbackBinds)(
@@ -314,7 +309,7 @@ describe("Hostile requests (issue #61)", () => {
         );
 
         expect(greetings).toEqual([literal, literal]);
-      }).pipe(Effect.provide(PortLive)),
+      }),
   );
 
   it.scopedLive("answers each rejected authority with INVALID_ARGUMENT and keeps serving", () =>
@@ -326,7 +321,7 @@ describe("Hostile requests (issue #61)", () => {
         yield* expectInvalidAuthority(session, authority, name);
         yield* expectServing(session, port);
       }
-    }).pipe(Effect.provide(PortLive)),
+    }),
   );
 
   it.scopedLive("reads the authority from host when :authority is absent", () =>
@@ -344,7 +339,7 @@ describe("Hostile requests (issue #61)", () => {
         yield* expectInvalidAuthority(session, authority, `${name} in host`, "host");
         yield* expectServing(session, port);
       }
-    }).pipe(Effect.provide(PortLive)),
+    }),
   );
 
   it.scopedLive("keeps serving after a 10 KiB authority", () =>
@@ -364,7 +359,7 @@ describe("Hostile requests (issue #61)", () => {
         }
         yield* expectServing(session, port);
       }
-    }).pipe(Effect.provide(PortLive)),
+    }),
   );
 
   it.scopedLive("resets only the stream of a request that throws inside the listener", () =>
@@ -381,18 +376,16 @@ describe("Hostile requests (issue #61)", () => {
         );
         yield* expectServing(session, port);
       }
-    }).pipe(Effect.provide(PortLive)),
+    }),
   );
 
   it.scopedLive("serves every service the server is built with", () =>
     Effect.gen(function* () {
-      const port = yield* Port;
       const server = EffectGrpcServer.GrpcServerBuilder()
         .withService(yield* effectProto.HelloWorldAPIServiceTag)
         .withService(yield* namingProto.NamingTestServiceTag)
         .build();
-      yield* Effect.forkScoped(server.run({ host: "127.0.0.1", port }));
-      yield* Effect.sleep("1 second");
+      const { port } = yield* server.listen({ host: "127.0.0.1", port: 0 });
       const baseUrl = `http://127.0.0.1:${port}`;
       const transport = createGrpcTransport({ baseUrl, sessionManager: yield* sessionTo(baseUrl) });
 
@@ -409,7 +402,6 @@ describe("Hostile requests (issue #61)", () => {
     }).pipe(
       Effect.provide(
         Layer.mergeAll(
-          PortLive,
           effectProto.helloWorldAPIServiceLiveLayer(effectProto.HelloWorldAPIServiceTag, {
             getGreeting: (request) => Effect.succeed({ greeting: `Hello, ${request.name}` }),
             faceTheError: (request) => Effect.succeed({ greeting: request.name }),
@@ -434,7 +426,7 @@ describe("Hostile requests (issue #61)", () => {
         );
         yield* expectServing(session, port);
       }
-    }).pipe(Effect.provide(PortLive)),
+    }),
   );
 
   it.scopedLive("limits each request message to 4 MiB and keeps serving", () =>
@@ -487,7 +479,7 @@ describe("Hostile requests (issue #61)", () => {
         "a gzip-compressed oversized message, limited after decompression",
       ).toBe(Code.ResourceExhausted);
       yield* expectServing(session, port);
-    }).pipe(Effect.provide(PortLive)),
+    }),
   );
 
   it.scopedLive("limits each request message to the readMaxBytes the server is built with", () =>
@@ -508,7 +500,7 @@ describe("Hostile requests (issue #61)", () => {
         `a server built with readMaxBytes ${readMaxBytes}, at and 1 byte over that limit`,
       ).toEqual({ atLimit: `127.0.0.1:${port}`, justOverLimit: String(Code.ResourceExhausted) });
       yield* expectServing(session, port);
-    }).pipe(Effect.provide(PortLive)),
+    }),
   );
 
   it.scopedLive("refuses at build a readMaxBytes outside 1 to 4294967295", () =>
@@ -558,12 +550,9 @@ describe("Hostile requests (issue #61)", () => {
       ).toEqual(["served"]);
     }).pipe(
       Effect.provide(
-        Layer.merge(
-          PortLive,
-          effectProto.helloWorldAPIServiceLiveLayer(
-            effectProto.HelloWorldAPIServiceTag,
-            authorityEcho,
-          ),
+        effectProto.helloWorldAPIServiceLiveLayer(
+          effectProto.HelloWorldAPIServiceTag,
+          authorityEcho,
         ),
       ),
     ),
@@ -613,7 +602,7 @@ describe("Hostile requests (issue #61)", () => {
         Option.isSome(stopped),
         `the server stopped within ${stopDeadlineMs} ms while every client kept its connection`,
       ).toBe(true);
-    }).pipe(Effect.provide(PortLive)),
+    }),
   );
 
   it.scopedLive("closes a refused request that its client keeps sending", () =>
@@ -656,7 +645,7 @@ describe("Hostile requests (issue #61)", () => {
         },
       });
       yield* expectServing(session, port);
-    }).pipe(Effect.provide(PortLive)),
+    }),
   );
 
   it.scopedLive("delivers a refusal that waits behind a stalled connection", () =>
@@ -706,7 +695,7 @@ describe("Hostile requests (issue #61)", () => {
           rstCode: http2.constants.NGHTTP2_NO_ERROR,
         }),
       );
-    }).pipe(Effect.provide(PortLive)),
+    }),
   );
 
   it.scopedLive("sends a client-streaming answer that is ready before the request ends", () =>
@@ -735,7 +724,7 @@ describe("Hostile requests (issue #61)", () => {
         grpcWeb: answer,
         connect: answer,
       });
-    }).pipe(Effect.provide(PortLive)),
+    }),
   );
 
   it.scopedLive("stops a bidi handler when its client cancels the call", () =>
@@ -790,6 +779,6 @@ describe("Hostile requests (issue #61)", () => {
         running.handlers,
         "bidi handlers still running 5 seconds after their clients cancelled",
       ).toBe(0);
-    }).pipe(Effect.provide(PortLive)),
+    }),
   );
 });

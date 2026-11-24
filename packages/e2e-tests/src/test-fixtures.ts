@@ -1,22 +1,11 @@
 // packages/e2e-tests/src/test-fixtures.ts
-import { Brand, Context, Effect, Layer } from "effect";
-import { getPort } from "get-port-please";
+import { Effect, Layer } from "effect";
 
 import { Code } from "@connectrpc/connect";
 import { EffectGrpcClient, EffectGrpcServer, GrpcException } from "@dr_nikson/effect-grpc";
 
 import * as effectProto from "./generated/com/example/v1/hello_world_api_effect.js";
 import type * as proto from "./generated/com/example/v1/hello_world_api_pb.js";
-
-// Branded Port type
-export type Port = number & Brand.Brand<"Port">;
-export const Port = Context.GenericTag<Port>("Port");
-
-// Port layer - gets available port dynamically
-export const PortLive = Layer.effect(
-  Port,
-  Effect.promise(() => getPort()).pipe(Effect.map((port) => port as Port)),
-);
 
 // Server service implementation
 export const HelloWorldAPIServiceLive: effectProto.HelloWorldAPIService = {
@@ -58,25 +47,22 @@ export function createServer(): Effect.Effect<
   });
 }
 
-// Client config layer - depends on Port using flatMap
-export const ClientConfigLayer = Layer.service(Port).pipe(
-  Layer.flatMap((ctx) =>
-    Layer.succeed(
-      effectProto.HelloWorldAPIConfigTag,
-      EffectGrpcClient.GrpcClientConfig({
-        baseUrl: new URL(`http://127.0.0.1:${Context.get(ctx, Port)}`),
-      }),
-    ),
-  ),
-);
-
-// Client layer - depends on ClientConfig and GrpcClientRuntime
-export const clientLayer = effectProto
-  .helloWorldAPIClientLiveLayer(effectProto.HelloWorldAPIClientTag)
-  .pipe(
-    Layer.provide(ClientConfigLayer),
-    Layer.provide(EffectGrpcClient.liveGrpcClientRuntimeLayer()),
-  );
+// The generated client for the server listening at `address`
+export function clientLayer(
+  address: EffectGrpcServer.GrpcServerAddress,
+): Layer.Layer<effectProto.HelloWorldAPIClientTag["Identifier"]> {
+  return effectProto
+    .helloWorldAPIClientLiveLayer(effectProto.HelloWorldAPIClientTag)
+    .pipe(
+      Layer.provide(
+        Layer.succeed(
+          effectProto.HelloWorldAPIConfigTag,
+          EffectGrpcClient.GrpcClientConfig({ baseUrl: new URL(address.url) }),
+        ),
+      ),
+      Layer.provide(EffectGrpcClient.liveGrpcClientRuntimeLayer()),
+    );
+}
 
 // Re-export proto types for convenience
 export { effectProto };
