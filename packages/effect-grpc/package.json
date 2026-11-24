@@ -52,12 +52,13 @@
     "build": "pnpm run clean && pnpm run compile",
     "test": "vitest run --config vitest.config.ts",
     "test:types": "vitest --typecheck.only --watch=false --config vitest.config.ts",
+    "lint:effect": "effect-language-service diagnostics --project tsconfig.json",
     "prepublishOnly": "cp ../../README.md ."
   },
   "dependencies": {
     "@bufbuild/protoplugin": "catalog:",
     "@connectrpc/connect-node": "catalog:",
-    "@opentelemetry/api": "catalog:",
+    "@opentelemetry/api": "catalog:peer",
     "@opentelemetry/core": "catalog:"
   },
   "peerDependencies": {

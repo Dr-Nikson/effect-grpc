@@ -1,5 +1,8 @@
 // packages/effect-grpc/src/client.internal.ts
-import { Context, Effect, Either, Layer } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Either from "effect/Either";
+import * as Layer from "effect/Layer";
 import type { Span } from "effect/Tracer";
 
 import type { DescMessage, MessageInitShape, MessageShape } from "@bufbuild/protobuf";

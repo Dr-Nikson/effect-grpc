@@ -1,5 +1,12 @@
 // packages/effect-grpc/src/server.internal.ts
-import { Cause, Effect, ExecutionStrategy, Exit, Predicate, Runtime, Scope, Types } from "effect";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as ExecutionStrategy from "effect/ExecutionStrategy";
+import * as Exit from "effect/Exit";
+import * as Predicate from "effect/Predicate";
+import * as Runtime from "effect/Runtime";
+import * as Scope from "effect/Scope";
+import * as Types from "effect/Types";
 import http2 from "node:http2";
 
 import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";

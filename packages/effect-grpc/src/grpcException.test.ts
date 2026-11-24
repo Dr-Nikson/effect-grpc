@@ -1,5 +1,5 @@
 // packages/effect-grpc/src/grpcException.test.ts
-import { Effect } from "effect";
+import * as Effect from "effect/Effect";
 import { inspect } from "node:util";
 import { describe, expect, it } from "vitest";
 

@@ -18,8 +18,8 @@ This file defines the core project structure and coding standards for the Effect
 - The project is a TypeScript monorepo managed with pnpm workspaces.
 - Key configuration files at the root include:
   - `package.json`: Defines workspaces and root dependencies. It uses pnpm as a package manager.
-  - `tsconfig.base.json`: Base TypeScript configuration inherited by packages.
-  - `eslint.config.js`: ESLint configuration (typescript-eslint, Prettier compatibility, and `no-console`, so library code logs through the Effect logger).
+  - `tsconfig.base.json`: Base TypeScript configuration inherited by packages. Its `@effect/language-service` plugin entry sets the severity of each Effect check.
+  - `eslint.config.js`: ESLint configuration (typescript-eslint, Prettier compatibility, `no-console`, so library code logs through the Effect logger, and `no-restricted-imports` for the roots of the Effect packages).
   - `.prettierrc.cjs`: Prettier code formatting rules.
   - `README.md`: Project overview for gRPC Protobuf capabilities for Effect ecosystem.
 
@@ -90,7 +90,13 @@ When developing new features or making changes, follow this iterative process:
     ```
     If errors occur during the full build, identify the package(s) causing the issues. Return to step 1 for each problematic package, applying the development workflow (steps 1-7) to resolve the errors package by package.
 
-**Only proceed once the individual package builds, its type tests pass, the code style is correct, AND the entire monorepo builds successfully.** This comprehensive process ensures code quality, correctness, and proper integration before finalizing changes.
+10. **Run the Effect Diagnostics:** With every package built, run the Effect language service's checks from the **root directory**:
+    ```bash
+    pnpm run lint:effect
+    ```
+    It needs the build, because the example and e2e projects import generated code. See [Effect Diagnostics](#effect-diagnostics).
+
+**Only proceed once the individual package builds, its type tests pass, the code style is correct, the entire monorepo builds successfully, AND the Effect diagnostics pass.** This comprehensive process ensures code quality, correctness, and proper integration before finalizing changes.
 
 ### Code Style
 
@@ -100,6 +106,7 @@ IMPORTANT: refer to the best practices and coding standards described in @agents
 - Document all public exports with JSDoc comments: add comprehensive examples of usage when needed 
 - Add file name (with path from the repo-root) at the beginning of each file 
 - Follow Effect library patterns and conventions
+- Import Effect modules by submodule path, as in `import * as Effect from "effect/Effect"`. Never import from the root of `effect`, `@effect/opentelemetry`, `@effect/platform` or `@effect/platform-node`. `pnpm run lint` fails on it for every file under `packages/*/src`, and JSDoc examples are not imports.
 - Use immutable data structures
 - Prefer pure functions
 - Use Effect's error handling mechanisms
@@ -114,6 +121,11 @@ IMPORTANT: refer to the best practices and coding standards described in @agents
   ```
 - The library's runtime unit tests live in `packages/effect-grpc/src/**/*.test.ts`. The build leaves them out of `dist/`, and CI runs them through `pnpm -r run test`. From another directory, run them with `pnpm --dir <checkout>/packages/effect-grpc run test`.
 - The README check generates code from the README's own `.proto` blocks and type-checks every block fenced `ts` or `typescript` in `README.md` against it, except the excerpts of generated code. Run it after `build:recur` with `pnpm --dir <checkout> run test:readme`. `pnpm -r run test:types` runs it too, as `packages/e2e-tests`'s `test:types`, so CI and every gate run it. Its rules are in the header of `packages/e2e-tests/readme/check-readme.mjs`: a block whose first line is a path comment becomes that file, a block whose path is under `src/generated/` must match the generated declarations, and every other TypeScript block is its own module that imports what it uses and declares what it does not build. A block fenced as `js`, `jsx` or `tsx` fails, so fence README code as `typescript`. `packages/e2e-tests/src/readme-check.test.ts` checks that the check still fails on its fixtures. Declare a package that README examples import but no workspace installs in `packages/e2e-tests/readme/modules.d.ts`.
+
+### Effect Diagnostics
+- `pnpm run lint:effect` runs the Effect language service's checks from the command line in every package, as `effect-language-service diagnostics --project tsconfig.json`. CI runs it in the `build` job after the build. Errors fail it. Warnings and suggestions print and do not.
+- The checks and their severities are the `@effect/language-service` plugin entry in `tsconfig.base.json`. `deterministicKeys` is an error there. For example, the key of a `Context.Tag` class must be `<package name>/<file name>/<class name>`, and a different key fails the command.
+- The command reads the files of each package's own `tsconfig.json`. It skips the library's `*.test.ts` and `*.test-d.ts` files, which that config excludes, and it crashes when pointed at `tsconfig.test-d.json`. Keep the script on `tsconfig.json`.
 
 ### GitHub Workflows
 - After changing `.github/workflows` or `.github/scripts`, run both checks from the root. Each must pass:

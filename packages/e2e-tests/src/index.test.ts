@@ -1,5 +1,11 @@
 // packages/e2e-tests/src/index.test.ts
-import { Cause, Effect, Exit, Layer, LogLevel, Logger, Option } from "effect";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as LogLevel from "effect/LogLevel";
+import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
 
 import { describe, expect, it } from "@effect/vitest";
 

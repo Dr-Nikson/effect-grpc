@@ -1,4 +1,5 @@
-import { Effect, Runtime } from "effect";
+import * as Effect from "effect/Effect";
+import * as Runtime from "effect/Runtime";
 
 import type { DescMessage, MessageInitShape, MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";

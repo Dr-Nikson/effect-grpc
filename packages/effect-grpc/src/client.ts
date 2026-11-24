@@ -1,6 +1,10 @@
 // packages/effect-grpc/src/client.ts
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
+import * as Types from "effect/Types";
 import type * as http2 from "node:http2";
-import { Context, Effect, Layer, Scope, Types } from "effect";
 
 import type { BinaryReadOptions, BinaryWriteOptions } from "@bufbuild/protobuf";
 import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";

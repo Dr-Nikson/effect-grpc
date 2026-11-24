@@ -1,6 +1,8 @@
 // packages/e2e-tests/src/generated-api.test-d.ts
-import { Effect } from "effect";
-import type { Context, Layer, Scope } from "effect";
+import type * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import type * as Layer from "effect/Layer";
+import type * as Scope from "effect/Scope";
 import { describe, expectTypeOf, test } from "vitest";
 
 import type { MessageInitShape } from "@bufbuild/protobuf";

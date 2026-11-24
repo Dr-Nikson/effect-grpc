@@ -1,7 +1,11 @@
 // packages/e2e-tests/src/tracing.test.ts
-import { Context, Effect, Layer, LogLevel, Logger } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as LogLevel from "effect/LogLevel";
+import * as Logger from "effect/Logger";
 
-import { NodeSdk } from "@effect/opentelemetry";
+import * as NodeSdk from "@effect/opentelemetry/NodeSdk";
 import { describe, expect, it } from "@effect/vitest";
 import { InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
 

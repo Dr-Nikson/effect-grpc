@@ -1,5 +1,6 @@
 // packages/e2e-tests/src/raw-unary.ts
-import { Effect, Scope } from "effect";
+import * as Effect from "effect/Effect";
+import * as Scope from "effect/Scope";
 import http2 from "node:http2";
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";

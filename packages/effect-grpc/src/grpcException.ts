@@ -1,5 +1,5 @@
 // packages/effect-grpc/src/grpcException.ts
-import { Data } from "effect";
+import * as Data from "effect/Data";
 
 import type { Code, ConnectError } from "@connectrpc/connect";
 

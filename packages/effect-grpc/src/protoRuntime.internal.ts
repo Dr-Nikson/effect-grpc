@@ -1,10 +1,14 @@
 // packages/effect-grpc/src/protoRuntime.internal.ts
-import { Cause, Effect, Exit, Option, Runtime } from "effect";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
+import * as Runtime from "effect/Runtime";
 import type { ExternalSpan } from "effect/Tracer";
 
+import * as Tracer from "@effect/opentelemetry/Tracer";
 import { Code, ConnectError } from "@connectrpc/connect";
 import type { HandlerContext } from "@connectrpc/connect";
-import { Tracer } from "@effect/opentelemetry";
 import { ROOT_CONTEXT, type TextMapGetter, trace } from "@opentelemetry/api";
 import { W3CTraceContextPropagator } from "@opentelemetry/core";
 
