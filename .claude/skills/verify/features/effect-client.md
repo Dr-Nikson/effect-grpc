@@ -4,10 +4,10 @@ A user calls the server through the generated client. They provide `helloWorldAP
 
 ## Sub-features
 
-- `cli-example` is the README example client (`node dist/client.js`). It builds its client on a typed tag from `makeHelloWorldAPIClientTag`, logs the greeting, then fails on `FaceTheError` with `failed_precondition`.
+- `cli-example` is the README example client (`node dist/client.js`). It builds its client on a typed tag from `makeHelloWorldAPIClientTag`, logs the greeting, then fails on `FaceTheError` with the `GrpcException` that the handler sent, code `failed_precondition`.
 - `cli-localhost` is the README pairing: a client with base URL `http://127.0.0.1:<port>` reaches a server started with `host: "127.0.0.1"` on that port. The README uses port 8000. The ID keeps its name from when that pairing used `localhost`, because issue #60 and the verification lanes look it up by that name.
 - `cli-default-tag` is a client built on the default `HelloWorldAPIClientTag`. It gets the greeting over gRPC.
-- `cli-error` is the delivery of `FaceTheError` to the caller as `ConnectError: [failed_precondition] Face the consequences!`, as a defect.
+- `cli-error` is the delivery of `FaceTheError` to the caller as a typed failure in Effect's error channel: a `GrpcException` with code 9 (`failed_precondition`), the message `Face the consequences!` and the handler's data `{"name":<name>,"consequences":["no greeting"]}`. It is never a defect.
 - `cli-ipv6` is a client on the default tag with base URL `http://[::1]:<port>`, against a server bound to `::1`. It gets the greeting, although Node's HTTP/2 client sends the call's authority as `::1:<port>`, without brackets.
 
 ## How to get to it (user POV)
@@ -22,9 +22,9 @@ Preconditions:
 
 - The first four journeys run on one plain launch: `.claude/skills/verify/scripts/control-example launch`. `cli-ipv6` needs its own launch on `::1`.
 
-- **Example client.** Run `.claude/skills/verify/scripts/control-example client`. Pass: stdout shows `Got some response from gRPC: Hey there! Your name is Meowucher, right?`, then the `failed_precondition` failure, and the exit code is 1. The server-log section has one `getGreeting called` line and one `faceTheError called` line.
+- **Example client.** Run `.claude/skills/verify/scripts/control-example client`. Pass: stdout shows `Got some response from gRPC: Hey there! Your name is Meowucher, right?`, then an ERROR line `@dr_nikson/effect-grpc/grpcException/GrpcException: Face the consequences!` whose `[cause]` is `ConnectError: [failed_precondition] Face the consequences!`, and the exit code is 1. The server-log section has one `getGreeting called` line and one `faceTheError called` line.
 - **README pairing and default tag.** Run `.claude/skills/verify/scripts/control-example probe getGreeting Ada`. The probe dials the instance's URL, `http://127.0.0.1:<port>` on the port the server bound. Pass: the last stdout line is `{"url":"http://127.0.0.1:<port>","method":"getGreeting","ok":true,"response":{…"greeting":"Hey there! Your name is Ada, right?"}}`, and the server-log section has the handler line. One pass proves both `cli-localhost` and `cli-default-tag`.
-- **Default tag, error.** Run `.claude/skills/verify/scripts/control-example probe faceTheError Ada`. The result is exit code 1, with the last line `{"url":"http://127.0.0.1:<port>","method":"faceTheError","ok":false,"kind":"defect","code":9,"error":"ConnectError: [failed_precondition] Face the consequences!"}`. The server-log section has the `faceTheError called` line.
+- **Default tag, error.** Run `.claude/skills/verify/scripts/control-example probe faceTheError Ada`. The result is exit code 1, with the last line `{"url":"http://127.0.0.1:<port>","method":"faceTheError","ok":false,"kind":"failure","tag":"@dr_nikson/effect-grpc/grpcException/GrpcException","code":9,"message":"Face the consequences!","data":{"name":"Ada","consequences":["no greeting"]},"error":"[9] Face the consequences!"}`. The server-log section has the `faceTheError called` line.
 - **IPv6 literal.** Run `.claude/skills/verify/scripts/control-example launch --host ::1`, then `.claude/skills/verify/scripts/control-example probe getGreeting Ada`, then `.claude/skills/verify/scripts/control-example cleanup`. Pass: the last stdout line is `{"url":"http://[::1]:<port>","method":"getGreeting","ok":true,"response":{…"greeting":"Hey there! Your name is Ada, right?"}}`, and the server-log section has the handler line.
 
 ## Gotchas
@@ -33,3 +33,5 @@ Preconditions:
 - On a base without the fix for issue #61, `cli-ipv6` stops the server: the probe gets `[aborted] read ECONNRESET`, and the server log shows `TypeError: Invalid URL` with base `http://::1:<port>` (see `srv-hostile-authority` in [server-lifecycle.md](./server-lifecycle.md)).
 - The probe imports the compiled `packages/example/dist/generated` module and the built library. After you change client code, run `.claude/skills/verify/scripts/control-example build`. `.claude/skills/verify/scripts/control-example doctor` reports a stale `dist/`.
 - The result is always the last stdout line of the probe.
+- On a base without typed client failures (issue #27), `cli-error` prints `"kind":"defect"` with `"error":"ConnectError: [failed_precondition] Face the consequences!"` and no `data`, and `cli-example` logs that `ConnectError` as its failure.
+- The generated client speaks gRPC only. To see the data over gRPC-web and Connect, use `call grpc-web` and `call connect` in [error-mapping.md](./error-mapping.md).

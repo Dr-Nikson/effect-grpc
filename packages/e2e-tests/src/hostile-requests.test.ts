@@ -438,16 +438,13 @@ describe("Hostile requests (issue #61)", () => {
       const generated = yield* Effect.gen(function* () {
         const client = yield* effectProto.HelloWorldAPIClientTag;
         const atLimit = yield* client.getGreeting({ name: expand(nameAtLimit) }, {});
-        const justOverLimit = yield* Effect.exit(
+        const justOverLimit = yield* Effect.flip(
           client.getGreeting({ name: expand(nameJustOverLimit) }, {}),
         );
         const next = yield* client.getGreeting({ name: "next" }, {});
         return {
           atLimit: atLimit.greeting,
-          justOverLimit:
-            Exit.isFailure(justOverLimit) ?
-              ConnectError.from(Cause.squash(justOverLimit.cause)).code
-            : undefined,
+          justOverLimit: justOverLimit.code,
           next: next.greeting,
         };
       }).pipe(Effect.provide(clientAt(baseUrl)), Effect.scoped, Effect.timeout("10 seconds"));
@@ -570,10 +567,9 @@ describe("Hostile requests (issue #61)", () => {
         effectProto.HelloWorldAPIClientTag,
       );
       const refusals = {
-        generated: Exit.match(yield* Effect.exit(generated.getGreeting({ name }, {})), {
-          onFailure: (cause) => Code[ConnectError.from(Cause.squash(cause)).code],
-          onSuccess: () => "served",
-        }),
+        generated: yield* generated
+          .getGreeting({ name }, {})
+          .pipe(Effect.match({ onFailure: ({ code }) => Code[code], onSuccess: () => "served" })),
         ...(yield* overEachProtocol(baseUrl, (transport) =>
           Effect.promise(() =>
             createClient(HelloWorldAPI, transport)

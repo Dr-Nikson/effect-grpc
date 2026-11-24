@@ -6,6 +6,7 @@ import type { Message, MessageInitShape } from "@bufbuild/protobuf";
 import type { GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 
 import * as Client from "./client.js";
+import type * as GrpcException from "./grpcException.js";
 
 type GreetRequest = Message<"effect_grpc_test.GreetRequest"> & { name: string };
 type GreetReply = Message<"effect_grpc_test.GreetReply"> & { greeting: string };
@@ -63,16 +64,20 @@ test("makeExecutor, called the way generated code calls it, gives one Effect fun
   });
 
   expectTypeOf(program).toEqualTypeOf<
-    Effect.Effect<readonly [GreetReply, GreetReply], never, Client.GrpcClientRuntime | Scope.Scope>
+    Effect.Effect<
+      readonly [GreetReply, GreetReply],
+      GrpcException.GrpcException,
+      Client.GrpcClientRuntime | Scope.Scope
+    >
   >();
 });
 
-test("an executor method takes the request's init shape and an optional RequestMeta, and has no error channel", () => {
+test("an executor method takes the request's init shape and an optional RequestMeta, and fails with GrpcException", () => {
   expectTypeOf<Client.ClientExecutor<GreeterMethods>["greet"]>().toEqualTypeOf<
     (
       request: MessageInitShape<GreetRequestSchema>,
       meta?: Client.RequestMeta,
-    ) => Effect.Effect<GreetReply>
+    ) => Effect.Effect<GreetReply, GrpcException.GrpcException>
   >();
 });
 

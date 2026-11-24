@@ -247,8 +247,11 @@ do_call() {
     connect) cmd=(curl -sS --http2-prior-knowledge -H 'content-type: application/json' --data "$json" -o OUT -w '%{http_code}' "$BASE_URL/$SVC/$method") ;;
     http1) cmd=(curl -sS -H 'content-type: application/json' --data "$json" -o OUT -w '%{http_code}' "$BASE_URL/$SVC/$method") ;;
     grpc) cmd=("$EXAMPLE/node_modules/.bin/buf" curl --http2-prior-knowledge --protocol grpc --schema "$EXAMPLE/proto" -d "$json" "$BASE_URL/$SVC/$method") ;;
-    *) die "call: protocol must be connect, grpc or http1" ;;
+    grpc-web) cmd=("$EXAMPLE/node_modules/.bin/buf" curl --http2-prior-knowledge --protocol grpcweb --schema "$EXAMPLE/proto" -d "$json" "$BASE_URL/$SVC/$method") ;;
+    *) die "call: protocol must be connect, grpc, grpc-web or http1" ;;
   esac
+  local buf_curl=no
+  case $proto in grpc | grpc-web) buf_curl=yes ;; esac
   f=$(next_evidence "$r" "$slug")
   DO_CALL_EVIDENCE=$f
   off=$(log_size "$log")
@@ -256,7 +259,7 @@ do_call() {
   err=$(mktemp)
   local run=("${cmd[@]/#OUT/$out}")
   local shown=("${cmd[@]/#OUT/<body below>}")
-  if [ "$proto" = grpc ]; then
+  if [ "$buf_curl" = yes ]; then
     timeout 30 "${run[@]}" >"$out" 2>"$err" || rc=$?
   else
     status=$(timeout 30 "${run[@]}" 2>"$err") || rc=$?
@@ -269,7 +272,7 @@ do_call() {
     echo
     echo "exit_code=$rc"
     if [ -n "$status" ]; then echo "http_status=$status"; fi
-    if [ "$proto" = grpc ] && [ "$rc" -ne 0 ] && [ $((rc % 8)) -eq 0 ]; then echo "grpc_status_code=$((rc / 8))"; fi
+    if [ "$buf_curl" = yes ] && [ "$rc" -ne 0 ] && [ $((rc % 8)) -eq 0 ]; then echo "grpc_status_code=$((rc / 8))"; fi
     echo "--- response (stdout / body)"
     cat "$out"
     echo
@@ -476,7 +479,7 @@ cmd_doctor() {
 
 cmd_call() {
   local proto=${1:-} method=${2:-} json=${3:-'{"name":"verify"}'}
-  [ -n "$proto" ] && [ -n "$method" ] || die "usage: control-example call <connect|grpc|http1> <Method> [json]"
+  [ -n "$proto" ] && [ -n "$method" ] || die "usage: control-example call <connect|grpc|grpc-web|http1> <Method> [json]"
   require_live
   do_call "$RUN" "$proto" "$method" "$json"
 }
@@ -681,7 +684,8 @@ Usage: control-example <command> [arguments] [--port <n>] [--host <address>] [--
   build                                      pnpm install --frozen-lockfile, then pnpm -r run build
   launch                                     start `node dist/server.js` on <host>, detached; wait until it serves an RPC
   doctor                                     read-only check of this checkout's instance
-  call <connect|grpc|http1> <Method> [json]  one unary call; records the response and the server log lines
+  call <connect|grpc|grpc-web|http1> <Method> [json]
+                                             one unary call; records the response and the server log lines
   client                                     run the README example client (`node dist/client.js`) against the instance
   probe <getGreeting|faceTheError> [name]    call the instance through the generated Effect client
   deadline                                   call GetGreetingSlowly with a 200 ms deadline over gRPC, gRPC-web and

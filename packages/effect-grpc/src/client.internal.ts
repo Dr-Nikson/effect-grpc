@@ -5,12 +5,13 @@ import type { Span } from "effect/Tracer";
 import type { DescMessage, MessageInitShape, MessageShape } from "@bufbuild/protobuf";
 import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
 import type { CallOptions, Client, Transport } from "@connectrpc/connect";
-import { createClient, createContextValues } from "@connectrpc/connect";
+import { Code, createClient, createContextValues } from "@connectrpc/connect";
 import { Http2SessionManager, createGrpcTransport } from "@connectrpc/connect-node";
 import { ROOT_CONTEXT, type TextMapSetter, TraceFlags, trace } from "@opentelemetry/api";
 import { W3CTraceContextPropagator } from "@opentelemetry/core";
 
 import type * as T from "./client.js";
+import * as GrpcException from "./grpcException.js";
 import * as protoRuntime from "./protoRuntime.js";
 
 /**
@@ -172,17 +173,21 @@ function makeExecutorMethod<Shape extends GenServiceMethods>(
         const span = yield* Effect.orDie(Effect.currentSpan);
         const headers = injectTraceContext(span, baseHeaders);
 
-        return yield* Effect.promise((signal) => {
-          const clientMethod = client[methodName].bind(client) as UnaryFn<any, any>;
+        const clientMethod = client[methodName].bind(client) as UnaryFn<any, any>;
 
-          return clientMethod(req, {
-            // timeoutMs: null,
-            headers,
-            signal,
-            // onHeader: null,
-            // onTrailer: null,
-            contextValues: createContextValues(),
-          } as CallOptions);
+        return yield* Effect.tryPromise({
+          try: (signal) =>
+            clientMethod(req, {
+              // timeoutMs: null,
+              headers,
+              signal,
+              // onHeader: null,
+              // onTrailer: null,
+              contextValues: createContextValues(),
+            } as CallOptions),
+          // Connect rejects with a ConnectError, whose code `from` keeps. Code.Unknown only covers
+          // a rejection of another kind.
+          catch: (error) => GrpcException.from(Code.Unknown, error),
         });
       });
 

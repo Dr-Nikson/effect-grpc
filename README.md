@@ -702,12 +702,12 @@ export interface UserServiceClient<Meta> {
   getUser(
     request: MessageInitShape<typeof GetUserRequestSchema>,
     meta: Meta
-  ): Effect.Effect<GetUserResponse>;
+  ): Effect.Effect<GetUserResponse, GrpcException.GrpcException>;
 
   listUsers(
     request: MessageInitShape<typeof ListUsersRequestSchema>,
     meta: Meta
-  ): Effect.Effect<ListUsersResponse>;
+  ): Effect.Effect<ListUsersResponse, GrpcException.GrpcException>;
 }
 ```
 
@@ -829,7 +829,7 @@ const configLayer = Layer.succeed(
 
 ### Error Handling with GrpcException
 
-effect-grpc provides `GrpcException`, a typed error that extends Effect's `Data.TaggedError` for handling gRPC errors. All generated service methods return `Effect<Success, GrpcException>`.
+effect-grpc provides `GrpcException`, a typed error that extends Effect's `Data.TaggedError` for handling gRPC errors. All generated service methods return `Effect<Success, GrpcException>`, and every generated client method fails with it (see [Handling Errors on the Client](#handling-errors-on-the-client)).
 
 ```typescript
 import { Effect } from "effect";
@@ -878,15 +878,83 @@ const UserServiceLive: effectProto.UserService = {
 **GrpcException API:**
 - `GrpcException.create(code, message, cause?)` - Create a new exception
 - `GrpcException.from(code, cause)` - Convert any error to GrpcException
-- `GrpcException.withDescription(error, desc)` - Add context description
+- `GrpcException.withDescription(error, desc)` - Add context description, which stays on the server
+- `GrpcException.withData(error, data)` - Attach JSON data, which the client receives. It also works in a pipe: `GrpcException.create(code, message).pipe(GrpcException.withData(data))`
 
 **What the client receives.** The server sends one status for each call:
-- A typed failure sends its code and message, also when a finalizer dies after it.
+- A typed failure sends its code, its message and its data, also when a finalizer dies after it.
 - A defect, such as `Effect.die`, a throw or `Effect.orDie`, sends `INTERNAL` with the message `Internal server error`. The defect stays on the server. When a second defect, such as a dying finalizer, follows a `GrpcException` that `Effect.die` or `Effect.orDie` turned into a defect, the server sends the exception's code and message. Effect 4 gives that cause the same shape as a typed failure whose finalizer died. `GrpcException.from` copies an error's message, so in that case the wrapped error's message reaches the client.
 - A deadline that passes while the handler waits on something asynchronous, such as a promise or a timer, interrupts the handler and sends `DEADLINE_EXCEEDED`. A handler that runs synchronous code past its deadline and then finishes answers normally.
 - A client that cancels the call interrupts the handler, and the client reads nothing more.
 
 For gRPC status codes and error handling best practices, see [Connect RPC Error Handling](https://connectrpc.com/docs/node/errors).
+
+### Handling Errors on the Client
+
+A generated client method fails with `GrpcException`, so a failed call reaches your code through Effect's error channel, never as a defect. Handle it with `Effect.catch`, `Effect.catchTag`, `Effect.retry` and the other error operators.
+
+| The call ends with | The method fails with |
+| --- | --- |
+| a status that is not OK, such as a handler's `GrpcException` | the status's code and message, and the handler's data in `data` |
+| no connection, such as a closed port | `Unavailable` |
+| the deadline from `defaultTimeoutMs` | `DeadlineExceeded` |
+| an interruption of the calling fiber | no failure. The call ends interrupted, and the server sees it canceled |
+
+The exception's `data` is an `Option` of JSON, empty when the server sent none, and its `cause` is Connect's `ConnectError`, with any metadata and details the server sent. A handler fails with data like this:
+
+```typescript
+import { Effect } from "effect";
+import { GrpcException } from "@dr_nikson/effect-grpc";
+import { Code } from "@connectrpc/connect";
+
+import type * as effectProto from "./generated/com/example/v1/user_effect.js";
+import type * as proto from "./generated/com/example/v1/user_pb.js";
+
+const UserServiceLive: effectProto.UserService = {
+  getUser(request: proto.GetUserRequest) {
+    return Effect.fail(
+      GrpcException.create(Code.NotFound, "User not found").pipe(
+        GrpcException.withData({ userId: request.userId, searched: ["primary", "replica"] })
+      )
+    );
+  },
+  listUsers() {
+    return Effect.succeed({ users: [] });
+  }
+};
+```
+
+The client retries a call that found no server, then reads the data of `NotFound` with a schema:
+
+```typescript
+import { Effect, Option, Schedule, Schema } from "effect";
+import { Code } from "@connectrpc/connect";
+
+import * as effectProto from "./generated/com/example/v1/user_effect.js";
+
+const NotFoundData = Schema.Struct({ userId: Schema.String, searched: Schema.Array(Schema.String) });
+
+const userName = (userId: string) =>
+  Effect.gen(function* () {
+    const client = yield* effectProto.UserServiceClientTag;
+    const response = yield* client.getUser({ userId }, {});
+    return response.user?.name ?? "";
+  }).pipe(
+    Effect.retry({ schedule: Schedule.recurs(2), while: (error) => error.code === Code.Unavailable }),
+    Effect.catch((error) => {
+      if (error.code !== Code.NotFound) {
+        return Effect.fail(error);
+      }
+      const searched = Option.flatMap(error.data, Schema.decodeUnknownOption(NotFoundData)).pipe(
+        Option.map((data) => data.searched.join(", ")),
+        Option.getOrElse(() => "nowhere")
+      );
+      return Effect.succeed(`unknown user, searched ${searched}`);
+    })
+  );
+```
+
+The data travels as one `google.protobuf.Value` in the standard gRPC status details, so your `.proto` files stay as they are. The server sends it over gRPC, gRPC-web and Connect, and any client can read it. `buf curl` prints it under `details[].debug` on all three protocols, and so does the JSON error body of a Connect call. A Connect client in Node turns its `ConnectError` into the same `GrpcException`, data included, with `GrpcException.from(Code.Unknown, error)`. The client gets what `JSON.stringify` writes, so `NaN` arrives as `null`. Keep the data small. Over gRPC the details travel in a trailer, and a status past HTTP/2's header limit fails the call with `INTERNAL`. In a test with Connect 2.3, 32 KiB of data passed and 63 KiB failed.
 
 ### Dependency Injection
 
