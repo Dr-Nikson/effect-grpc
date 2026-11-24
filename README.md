@@ -947,8 +947,8 @@ const mockDatabaseLayer = Layer.succeed(DatabaseService, {
 
 // Compose all layers together
 const appLayer = Layer.empty.pipe(
-  Layer.provideMerge(mockDatabaseLayer),
-  Layer.provideMerge(userServiceLayer)
+  Layer.provideMerge(userServiceLayer),
+  Layer.provideMerge(mockDatabaseLayer)
 );
 
 const grpcServerLayer = Layer.effectDiscard(
