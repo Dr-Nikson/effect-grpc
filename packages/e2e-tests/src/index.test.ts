@@ -35,6 +35,22 @@ describe("E2E gRPC Client-Server Tests", () => {
     ),
   );
 
+  it.scopedLive(
+    "returns the greeting for an empty name when getGreeting gets an empty request (#28)",
+    () =>
+      Effect.gen(function* () {
+        const server = yield* createServer();
+        const address = yield* server.listen({ host: "127.0.0.1", port: 0 });
+
+        const result = yield* Effect.gen(function* () {
+          const client = yield* effectProto.HelloWorldAPIClientTag;
+          return yield* client.getGreeting({}, {});
+        }).pipe(Effect.provide(clientLayer(address)), Effect.scoped);
+
+        expect(result.greeting).toBe("Hello, ! This is an E2E test.");
+      }).pipe(Effect.provide(serverServiceLayer)),
+  );
+
   it.scopedLive("should handle error from faceTheError RPC", () =>
     Effect.gen(function* () {
       // Create and start server
