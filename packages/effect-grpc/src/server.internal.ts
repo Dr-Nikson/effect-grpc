@@ -1,5 +1,5 @@
 // packages/effect-grpc/src/server.internal.ts
-import { Effect, ExecutionStrategy, Exit, Predicate, Scope, Types } from "effect";
+import { Effect, ExecutionStrategy, Exit, Option, Predicate, Record, Scope, Types } from "effect";
 import http2 from "node:http2";
 
 import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
@@ -48,7 +48,7 @@ type ListenOptions = Parameters<T.GrpcServer<unknown>["listen"]>[0];
 const authorityOf = (host: string, port: number): string =>
   `${host.includes(":") ? `[${host}]` : host}:${port}`;
 
-const bindReasons: Partial<Record<string, T.GrpcServerBindError["reason"]>> = {
+const bindReasons: Record.ReadonlyRecord<string, T.GrpcServerBindError["reason"]> = {
   EADDRINUSE: { _tag: "AddressInUse" },
   EACCES: { _tag: "PermissionDenied" },
   EPERM: { _tag: "PermissionDenied" },
@@ -59,15 +59,18 @@ const bindReasons: Partial<Record<string, T.GrpcServerBindError["reason"]>> = {
  * `instanceof Error` is false for Node's own errors when the library runs in another realm, as under
  * Jest or Vitest's VM pools, so this and `bindErrorMessage` read the cause's fields as properties.
  */
-const bindError = (options: ListenOptions, cause: unknown): T.GrpcServerBindError => {
-  const code = Predicate.hasProperty(cause, "code") ? cause.code : undefined;
-  return new T.GrpcServerBindError({
+const bindError = (options: ListenOptions, cause: unknown): T.GrpcServerBindError =>
+  new T.GrpcServerBindError({
     host: options.host,
     port: options.port,
-    reason: (typeof code === "string" && bindReasons[code]) || { _tag: "Other" },
+    reason: Option.liftPredicate(cause, Predicate.hasProperty("code")).pipe(
+      Option.map(({ code }) => code),
+      Option.filter(Predicate.isString),
+      Option.flatMap((code) => Record.get(bindReasons, code)),
+      Option.getOrElse(() => ({ _tag: "Other" }) as const),
+    ),
     cause,
   });
-};
 
 /**
  * @internal
@@ -82,13 +85,19 @@ export const bindErrorMessage = (error: T.GrpcServerBindError): string => {
 
 const boundAddress = (server: http2.Http2Server): Effect.Effect<T.GrpcServerAddress> => {
   const address = server.address();
-  return address !== null && typeof address === "object" ?
-      Effect.succeed({
-        host: address.address,
-        port: address.port,
-        url: `http://${authorityOf(address.address, address.port)}`,
-      })
-    : Effect.dieMessage(`the gRPC server listens on ${String(address)}, not on a TCP port`);
+  return Option.fromNullable(address).pipe(
+    Option.filter((bound) => typeof bound === "object"),
+    Option.match({
+      onNone: () =>
+        Effect.dieMessage(`the gRPC server listens on ${String(address)}, not on a TCP port`),
+      onSome: (bound) =>
+        Effect.succeed({
+          host: bound.address,
+          port: bound.port,
+          url: `http://${authorityOf(bound.address, bound.port)}`,
+        }),
+    }),
+  );
 };
 
 /**
