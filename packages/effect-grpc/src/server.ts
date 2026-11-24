@@ -63,21 +63,23 @@ export interface GrpcServer<in Services> {
  * ```
  */
 export interface GrpcServerAddress {
-  /** The IP address the server bound, without brackets: `127.0.0.1`, `::1`, `0.0.0.0` or `::`. */
+  /** The bound IP address, without brackets, such as `127.0.0.1`, `::1`, `0.0.0.0` or `::`. */
   readonly host: string;
 
   /** The port the server bound. When `listen` was given port 0, it is the port the OS picked. */
   readonly port: number;
 
-  /** `http://<host>:<port>`, with brackets around an IPv6 host, as the ready line prints it. */
+  /**
+   * `http://<host>:<port>`, with brackets around an IPv6 host, as the ready line prints it. After a
+   * wildcard bind (`0.0.0.0` or `::`) it names the wildcard, so a client on another machine dials
+   * the server's own host name with `port` instead.
+   */
   readonly url: string;
 }
 
 /**
  * `listen` could not start listening. `host` and `port` are the ones `listen` was given, and
  * `cause` is the error Node reported.
- *
- * `reason` is an object with a `_tag`, so Effect 4's `Effect.catchReason` can match it.
  *
  * @example
  * ```typescript
@@ -105,7 +107,7 @@ export class GrpcServerBindError extends Data.TaggedError(
   /**
    * - `AddressInUse`: another socket holds the port (EADDRINUSE).
    * - `PermissionDenied`: the process may not bind the port (EACCES or EPERM).
-   * - `InvalidPort`: the port is outside 0-65535.
+   * - `InvalidPort`: the port is not a whole number from 0 to 65535.
    * - `Other`: anything else, such as a host name that does not resolve. See `cause`.
    */
   readonly reason:

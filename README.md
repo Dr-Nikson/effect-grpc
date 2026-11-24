@@ -274,11 +274,11 @@ const program = Effect.scoped(
 The address a listening server bound, as the OS reports it:
 - `host` - the IP address, without brackets, such as `127.0.0.1` or `::1`
 - `port` - the port, which is the one the OS picked when `listen` was given port 0
-- `url` - `http://<host>:<port>` with brackets around an IPv6 host, such as `http://[::1]:41234`, as the ready line prints it
+- `url` - `http://<host>:<port>` with brackets around an IPv6 host, such as `http://[::1]:41234`, as the ready line prints it. After a wildcard bind (`0.0.0.0` or `::`) it names the wildcard, so a client on another machine dials the server's own host name with `port` instead.
 
 ##### `GrpcServerBindError`
 
-The error `listen` fails with when the server cannot listen. `host` and `port` are the ones `listen` was given, `cause` is the error Node reported, and `reason._tag` names the cause: `"AddressInUse"` (EADDRINUSE), `"PermissionDenied"` (EACCES or EPERM), `"InvalidPort"` (a port outside 0-65535), or `"Other"`.
+The error `listen` fails with when the server cannot listen. `host` and `port` are the ones `listen` was given, `cause` is the error Node reported, and `reason._tag` names the cause: `"AddressInUse"` (EADDRINUSE), `"PermissionDenied"` (EACCES or EPERM), `"InvalidPort"` (a port that is not a whole number from 0 to 65535), or `"Other"`.
 
 ```typescript
 // Fall back to a free port when 8000 is taken

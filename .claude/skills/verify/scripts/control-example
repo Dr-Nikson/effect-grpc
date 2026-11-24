@@ -12,7 +12,6 @@ EXAMPLE=$REPO/packages/example
 E2E=$REPO/packages/e2e-tests
 FIXTURES=$E2E/src/fixtures/hostile-requests.json
 DEFAULT_HOST=127.0.0.1
-# The example's own default. A launch without --port asks for port 0 and records the port the server bound.
 EXAMPLE_DEFAULT_PORT=8000
 HOST_ENV=EFFECT_GRPC_EXAMPLE_HOST
 PORT_ENV=EFFECT_GRPC_EXAMPLE_PORT
@@ -114,7 +113,7 @@ authority_for() {
 
 url_for() { echo "http://$(authority_for "$1" "$2")"; }
 
-split_authority() { # split_authority <host:port or [v6]:port> -> "<host> <port>", without brackets
+split_authority() {
   local host=${1%:*}
   host=${host#[}
   echo "${host%]} ${1##*:}"

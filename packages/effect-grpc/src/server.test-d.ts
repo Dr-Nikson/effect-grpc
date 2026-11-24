@@ -114,8 +114,7 @@ test("GrpcServer#listen succeeds with the bound address, fails with GrpcServerBi
   expectTypeOf<Server.GrpcServerBindError["reason"]["_tag"]>().toEqualTypeOf<
     "AddressInUse" | "PermissionDenied" | "InvalidPort" | "Other"
   >();
-  // @ts-expect-error - run, which never returned, is gone, so its old callers fail to compile
-  assertType<unknown>(server.run);
+  expectTypeOf(server).not.toHaveProperty("run");
   expectTypeOf<
     Server.GrpcServerBindError["_tag"]
   >().toEqualTypeOf<"@dr_nikson/effect-grpc/server/GrpcServerBindError">();

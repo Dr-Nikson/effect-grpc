@@ -108,10 +108,29 @@ const lowPortsArePrivileged = (() => {
   }
 })();
 
-type LookupAllCallback = (
+type LookupCallback = (
   error: NodeJS.ErrnoException | null,
-  addresses: Array<dns.LookupAddress>,
+  address: string | Array<dns.LookupAddress>,
+  family?: number,
 ) => void;
+
+/**
+ * Holds the next `dns.lookup` call. Node 24's `listen` passes `{ all: true }` and reads an array of
+ * addresses, while earlier Node 22 releases pass only a callback that reads one address.
+ */
+const holdNextLookup = Effect.gen(function* () {
+  const held = yield* Deferred.make<() => void>();
+  vi.spyOn(dns, "lookup").mockImplementationOnce((...args: Array<unknown>) => {
+    const callback = args[args.length - 1] as LookupCallback;
+    const options = args.length > 2 ? (args[1] as dns.LookupOptions) : {};
+    const answer = () =>
+      options.all === true ?
+        callback(null, [{ address: "127.0.0.1", family: 4 }])
+      : callback(null, "127.0.0.1", 4);
+    Deferred.unsafeDone(held, Effect.succeed(answer));
+  });
+  return Deferred.await(held);
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -223,17 +242,14 @@ describe("GrpcServer.listen", () => {
   it("ends startup when interrupted during a host lookup that never returns, and binds nothing later", () =>
     Effect.gen(function* () {
       const port = yield* freePort;
-      const pendingLookup = yield* Deferred.make<LookupAllCallback>();
-      vi.spyOn(dns, "lookup").mockImplementationOnce((...args: Array<unknown>) => {
-        Deferred.unsafeDone(pendingLookup, Effect.succeed(args[2] as LookupAllCallback));
-      });
+      const lookupHeld = yield* holdNextLookup;
 
       const startup = yield* Effect.fork(server.listen({ host: "grpc-server.test", port }));
-      const finishLookup = yield* Deferred.await(pendingLookup);
+      const answerLookup = yield* lookupHeld;
       const exit = yield* Fiber.interrupt(startup);
 
       expect(Exit.isInterrupted(exit)).toBe(true);
-      finishLookup(null, [{ address: "127.0.0.1", family: 4 }]);
+      answerLookup();
       expect(yield* acceptsConnections(port)).toBe(false);
     }).pipe(Effect.scoped, Effect.runPromise));
 
@@ -241,10 +257,7 @@ describe("GrpcServer.listen", () => {
     Effect.gen(function* () {
       const { messages, layer } = captureLogs();
       const port = yield* freePort;
-      const pendingLookup = yield* Deferred.make<LookupAllCallback>();
-      vi.spyOn(dns, "lookup").mockImplementationOnce((...args: Array<unknown>) => {
-        Deferred.unsafeDone(pendingLookup, Effect.succeed(args[2] as LookupAllCallback));
-      });
+      const lookupHeld = yield* holdNextLookup;
       const scope = yield* Scope.make();
 
       const startup = yield* Effect.forkDaemon(
@@ -252,12 +265,12 @@ describe("GrpcServer.listen", () => {
           .listen({ host: "grpc-server.test", port })
           .pipe(Scope.extend(scope), Effect.provide(layer)),
       );
-      const finishLookup = yield* Deferred.await(pendingLookup);
+      const answerLookup = yield* lookupHeld;
       yield* Scope.close(scope, Exit.void);
       const exit = yield* Fiber.await(startup);
 
       expect(Exit.isInterrupted(exit)).toBe(true);
-      finishLookup(null, [{ address: "127.0.0.1", family: 4 }]);
+      answerLookup();
       expect(yield* acceptsConnections(port)).toBe(false);
       expect(messages.filter((message) => message.startsWith("gRPC server"))).toEqual([]);
     }).pipe(Effect.runPromise));
