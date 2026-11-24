@@ -1,7 +1,7 @@
 // .github/scripts/workflow-guards.test.mjs
 import { load } from "js-yaml";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { test } from "node:test";
 
 import { Evaluator, Lexer, Parser, data } from "@actions/expressions";
@@ -11,6 +11,9 @@ const readJson = (path) => JSON.parse(readFileSync(new URL(path, import.meta.url
 const readWorkflow = (name) =>
   load(readFileSync(new URL(`../workflows/${name}`, import.meta.url), "utf8"));
 
+const workflows = readdirSync(new URL("../workflows/", import.meta.url))
+  .filter((file) => file.endsWith(".yml"))
+  .map((file) => [file, readWorkflow(file)]);
 const release = readWorkflow("release.yml");
 const snapshot = readWorkflow("snapshot-release.yml");
 const events = readJson("./fixtures/workflow-events.json");
@@ -154,6 +157,30 @@ test("every snapshot job that uses npm-publish waits for validation to allow the
   for (const kind of ["allowed", "refused", "ignored", ""]) {
     assert.equal(runs(job.if, { needs: { validate: { outputs: { kind } } } }), kind === "allowed");
   }
+});
+
+const grantsIdToken = (permissions) =>
+  permissions === "write-all" || permissions?.["id-token"] === "write";
+
+test("only the two publishing jobs can request an OIDC token, and both wait for the npm-publish approval", () => {
+  const minting = [];
+  for (const [file, workflow] of workflows) {
+    for (const [id, job] of Object.entries(workflow.jobs)) {
+      if (!grantsIdToken(job.permissions ?? workflow.permissions)) continue;
+      minting.push(`${file} ${id}`);
+      assert.equal(job.environment?.name, "npm-publish", `${file} ${id}`);
+    }
+  }
+  assert.deepEqual(minting.sort(), ["release.yml publish", "snapshot-release.yml snapshot"]);
+});
+
+test("the validate job checks out the event's own ref, so a comment runs the default branch's scripts", () => {
+  const checkouts = snapshot.jobs.validate.steps.filter((step) =>
+    step.uses?.startsWith("actions/checkout@"),
+  );
+  assert.equal(checkouts.length, 1);
+  assert.equal(checkouts[0].with.ref, undefined);
+  assert.equal(checkouts[0].with.repository, undefined);
 });
 
 test("snapshot-release.yml replies on the pull request only for a comment request", () => {
