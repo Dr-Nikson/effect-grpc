@@ -1,5 +1,5 @@
 // packages/effect-grpc/src/server.internal.ts
-import { Effect, Scope, Types } from "effect";
+import { Effect, Option, Scope, Types } from "effect";
 import http2 from "node:http2";
 
 import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
@@ -62,13 +62,13 @@ const addressAndPort = /^(.+):(\d+)$/;
  * sends `::1:8000` for `http://[::1]:8000`. `::1:8000` is also a complete IPv6 address, but a
  * valid authority must bracket an IPv6 address, and Node's client always appends the port.
  */
-const readAuthority = (authority: string): string | undefined => {
-  if (URL.canParse(`http://${authority}`)) return authority;
-  const match = addressAndPort.exec(authority);
-  if (match === null) return undefined;
-  const bracketed = `[${match[1]}]:${match[2]}`;
-  return URL.canParse(`http://${bracketed}`) ? bracketed : undefined;
-};
+const readAuthority = (authority: string): Option.Option<string> =>
+  URL.canParse(`http://${authority}`) ?
+    Option.some(authority)
+  : Option.fromNullable(addressAndPort.exec(authority)).pipe(
+      Option.map((match) => `[${match[1]}]:${match[2]}`),
+      Option.filter((bracketed) => URL.canParse(`http://${bracketed}`)),
+    );
 
 const grpcContentType =
   /^application\/grpc(?:-web(?:-text)?)?(?:\+(?:json(?:; ?charset=utf-?8)?|proto))?$/i;
@@ -82,12 +82,14 @@ const refuseMalformedAuthority = (
   res: http2.Http2ServerResponse,
 ): void => {
   const message = "malformed request authority";
-  const contentType = req.headers["content-type"];
-  if (contentType !== undefined && grpcContentType.test(contentType)) {
+  const grpc = Option.fromNullable(req.headers["content-type"]).pipe(
+    Option.filter((contentType) => grpcContentType.test(contentType)),
+  );
+  if (Option.isSome(grpc)) {
     // Headers set before end() leave in one HEADERS frame that ends the stream, which is a gRPC
     // trailers-only response. writeHead() would send them without END_STREAM.
     res.statusCode = 200;
-    res.setHeader("content-type", contentType);
+    res.setHeader("content-type", grpc.value);
     res.setHeader("grpc-status", String(Code.InvalidArgument));
     res.setHeader("grpc-message", encodeURIComponent(message));
     res.end();
@@ -133,22 +135,25 @@ const makeRequestListener = (options: {
   return (req, res) => {
     const resetStream = () => res.stream.close(http2.constants.NGHTTP2_INTERNAL_ERROR);
     try {
-      const handler = handlers.get(req.url.split("?", 1)[0] ?? "");
-      const sendsOneMessage =
-        handler?.method.methodKind === "unary" || handler?.method.methodKind === "server_streaming";
+      const handler = Option.fromNullable(handlers.get(req.url.split("?", 1)[0] ?? ""));
+      const sendsOneMessage = Option.exists(
+        handler,
+        ({ method }) => method.methodKind === "unary" || method.methodKind === "server_streaming",
+      );
       const answer = (send: () => unknown): void => {
         void (sendsOneMessage ? uploadEnded(req.stream) : Promise.resolve())
           .then(send)
           .catch(resetStream);
       };
-      const authority = readAuthority(req.authority);
-      if (authority === undefined) {
+      // Node types it as a string, but its getter returns undefined without :authority and host.
+      const authority = Option.fromNullable(req.authority).pipe(Option.flatMap(readAuthority));
+      if (Option.isNone(authority)) {
         answer(() => refuseMalformedAuthority(req, res));
         return;
       }
       // Connect reads req.authority, and Node's getter returns this header first.
-      if (authority !== req.authority) req.headers[":authority"] = authority;
-      if (handler === undefined) {
+      if (authority.value !== req.authority) req.headers[":authority"] = authority.value;
+      if (Option.isNone(handler)) {
         res.writeHead(404);
         res.end();
         return;
@@ -159,7 +164,8 @@ const makeRequestListener = (options: {
         undefined,
         options.contextValues(req),
       );
-      void handler(request)
+      void handler
+        .value(request)
         .then((response) => answer(() => universalResponseToNodeResponse(response, res)))
         .catch(resetStream);
     } catch {
