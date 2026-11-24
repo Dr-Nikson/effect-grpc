@@ -249,9 +249,12 @@ const streamingAnswerOf = (
   { method, messages }: StreamingCall,
 ) =>
   Effect.promise(async (signal) => {
-    const { oversized, normal } = fixtures.streamingClient;
+    const { oversized, overLimit, normal } = fixtures.streamingClient;
     const chunks = messages.map((message) => ({
-      data: message === "oversized" ? expand(oversized) : normal,
+      data:
+        message === "oversized" ? expand(oversized)
+        : message === "overLimit" ? expand(overLimit)
+        : normal,
     }));
     const first = Option.getOrThrow(Option.fromNullable(chunks[0]));
     const replies: Array<string> = [];

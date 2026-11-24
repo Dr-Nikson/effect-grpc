@@ -78,8 +78,9 @@
     "calls": ["oversized", "normal", "oversized", "normal", "normal", "oversized", "normal"]
   },
   "streamingClient": {
-    "case": "one client connection per protocol that sends messages of three times the limit to each method kind between normal calls, including a bidi client that waits for each reply before it writes again",
+    "case": "one client connection per protocol that sends messages of three times the limit to each method kind between normal calls, including a bidi client that waits for each reply before it writes again. A bidi call that gets a reply while its large message is still being sent uses a message under the client's 10 MB session memory, because a Node client rejects that reply otherwise, with or without a limit",
     "oversized": { "repeat": "x", "times": 12582912 },
+    "overLimit": { "repeat": "x", "times": 5242880 },
     "normal": "next",
     "calls": [
       { "method": "clientStream", "messages": ["oversized"], "answer": ["ResourceExhausted"] },
@@ -98,7 +99,7 @@
       },
       {
         "method": "bidi",
-        "messages": ["normal", "oversized", "normal"],
+        "messages": ["normal", "overLimit", "normal"],
         "answer": ["bidi 4", "ResourceExhausted"]
       },
       { "method": "unary", "messages": ["normal"], "answer": ["unary 4"] }
