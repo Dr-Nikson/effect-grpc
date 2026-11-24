@@ -100,6 +100,21 @@ const captureLogs = () => {
   return { messages, layer: Logger.replace(Logger.defaultLogger, logger) };
 };
 
+/**
+ * A failed listen's socket handle closes on a later turn of the event loop and points at its server
+ * until then, so the loop turns before the heap is read.
+ */
+const heapUsedAfterGc = Effect.gen(function* () {
+  const { gc } = globalThis;
+  if (gc === undefined) {
+    return yield* Effect.dieMessage("the tests need --expose-gc, which vitest.config.ts passes");
+  }
+  yield* Effect.sleep("20 millis");
+  gc();
+  gc();
+  return process.memoryUsage().heapUsed;
+});
+
 const lowPortsArePrivileged = (() => {
   try {
     const start = readFileSync("/proc/sys/net/ipv4/ip_unprivileged_port_start", "utf8");
@@ -194,6 +209,25 @@ describe("GrpcServer.listen", () => {
       expect(elapsed).toBeLessThan(1000);
       const reply = yield* ping(first);
       expect(reply.$typeName).toBe("google.protobuf.Empty");
+    }).pipe(Effect.scoped, Effect.runPromise));
+
+  it("keeps nothing from a failed attempt in the caller's scope, so a retry loop holds no memory", () =>
+    Effect.gen(function* () {
+      const taken = yield* server.listen({ host: "127.0.0.1", port: 0 });
+      const serverErrorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const scope = yield* Scope.make();
+
+      yield* Effect.flip(server.listen({ host: "127.0.0.1", port: taken.port })).pipe(
+        Scope.extend(scope),
+        Effect.replicateEffect(500, { discard: true }),
+      );
+      // A logged Node error keeps its server alive until its stack is read, and the spy keeps it.
+      serverErrorLog.mockClear();
+      const heldWhileOpen = yield* heapUsedAfterGc;
+      yield* Scope.close(scope, Exit.void);
+      const releasedOnClose = heldWhileOpen - (yield* heapUsedAfterGc);
+
+      expect(releasedOnClose).toBeLessThan(2_000_000);
     }).pipe(Effect.scoped, Effect.runPromise));
 
   it("fails with PermissionDenied when listen reports EACCES", () =>
