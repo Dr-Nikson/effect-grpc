@@ -98,7 +98,7 @@ Create a PR as usual. The changeset file will be reviewed along with your code.
 
 ### Move `latest` after the first 4.x publish
 
-The repository is in pre mode with the tag `alpha` (see `.changeset/pre.json`), so `changeset publish` publishes each version under `alpha` and does not move `latest`. `latest` points to `3.0.0-alpha.5`, the Effect 3 build, until someone moves it. The install line in `README.md` names the package without a version, so npm installs the version that `latest` points to.
+The repository is in pre mode with the tag `alpha` (see `.changeset/pre.json`), so `changeset publish` publishes each version under `alpha` and does not move `latest`. `latest` points to `3.0.0-alpha.5`, the Effect 3 build, until someone moves it. The install line in `README.md` names the package without a version, so npm resolves the version that `latest` points to.
 
 After the release workflow publishes `4.0.0-alpha.0`, move `latest` to it:
 
