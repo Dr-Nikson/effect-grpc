@@ -44,9 +44,6 @@ function createTestTracingLayer() {
 
 const HandlerLogs = Context.Service<Array<Record<string, unknown>>>("HandlerLogs");
 
-/**
- * Keeps the annotations of each `getGreeting called in E2E test` line, which the handler logs.
- */
 function captureHandlerLogsLayer() {
   const annotations: Array<Record<string, unknown>> = [];
   const logger = Logger.make(({ message, fiber }) => {

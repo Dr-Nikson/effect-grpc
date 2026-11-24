@@ -157,7 +157,7 @@ The evidence stays where it was.
 
 ## Known failures on this base
 
-None. Every journey passed on 2026-11-24 on branch `v4/p15-effect-v4`, on Effect 4.1.5, in this devcontainer (Node 24, where `localhost` resolves to `::1` first). When a journey fails on a base, list it here with the date, the branch and the symptom, and keep its correct expected result. Do not edit a journey to match a bug.
+None. Every journey passed on 2026-11-24 on branch `v4/p20-failure-mapping`, on Effect 4.1.5, in this devcontainer (Node 24, where `localhost` resolves to `::1` first). When a journey fails on a base, list it here with the date, the branch and the symptom, and keep its correct expected result. Do not edit a journey to match a bug.
 
 ## Helpers
 

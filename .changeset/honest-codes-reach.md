@@ -6,8 +6,8 @@ Send the right gRPC status for deadlines, cancels and dying finalizers, give eac
 
 What a client of the server sees:
 
-- A call whose deadline passes while its handler runs gets `DEADLINE_EXCEEDED` with the message `the operation timed out`. It got `ABORTED` with `Request was canceled`, which is HTTP 409 on Connect where it is now 504. A client that enforces its own deadline, such as the generated client, already reported `DEADLINE_EXCEEDED` and sees no change.
-- A client that cancels a call stops the handler as before. The server now ends the call with `CANCELLED`, not `ABORTED`. The client reads nothing more from the stream either way.
+- A call whose deadline passes while its handler runs gets `DEADLINE_EXCEEDED` with the message `the operation timed out`. It got `ABORTED` with `Request was canceled`, which is HTTP 409 on Connect where it is now 504. A client that enforces the deadline with its own timer, as the generated client does, reports `DEADLINE_EXCEEDED` from that timer, as before.
+- A client that cancels a call stops the handler as before. The status the server hands Connect for the call is now `CANCELLED`, not `ABORTED`. The client reads nothing more from the stream either way.
 - A handler that fails with a `GrpcException` and also has a finalizer that dies sends the exception's code and message. It sent `INTERNAL` with `Internal server error; Internal server error`, because Effect 4 reports such a failure as a defect.
 - A deadline or a cancel that interrupts a handler whose finalizer dies sends `DEADLINE_EXCEEDED` or `CANCELLED`. A defect next to a dying finalizer sends `INTERNAL` with `Internal server error` once. Both joined two messages before.
 - A cause that holds two typed failures sends the first one's code and message. It sent `INTERNAL` with both messages joined by `; `.
