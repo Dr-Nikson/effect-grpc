@@ -70,6 +70,10 @@ function generateEffectService(
   const serviceLiveLayerSymbol = safeIdentifier(serviceNameLower + "LiveLayer");
   const makeTagSymbol = safeIdentifier("make" + serviceName + "Tag");
   const makeLiveLayerSymbol = safeIdentifier("make" + serviceName + "LiveLayer");
+  // Not Context.Tag.Identifier<Tag>: Effect 4 renames it to Context.Service.Identifier, which turns
+  // the `any` of an erased overload check into `unknown`, so the client layer's two overloads fail
+  // with TS2322. The indexed access is the same type on Effect 3 and Effect 4.
+  const providedType = 'Tag["Identifier"]';
 
   f.print("/**");
   f.print(" * Unique identifier for the ", service.name, " gRPC service.");
@@ -161,7 +165,7 @@ function generateEffectService(
   f.print("  <Tag extends ", serviceTagSymbol, "<Ctx>, Ctx>(");
   f.print("    tag: Tag,");
   f.print("    service: ", serviceSymbol, "<Ctx>,");
-  f.print("  ): ", importLayer, ".Layer<", importContext, ".Tag.Identifier<Tag>>;");
+  f.print("  ): ", importLayer, ".Layer<", providedType, ">;");
   f.print("} = ", makeLiveLayerSymbol, ";");
 
   f.print();
@@ -212,70 +216,99 @@ function generateEffectService(
   f.print();
 
   f.print("/**");
-  f.print(" * Context.Tag for identifying the ", service.name, " service implementation.");
+  f.print(
+    " * The default Context tag of the ",
+    service.name,
+    " service, for an implementation that does not read `ctx`.",
+  );
+  f.print(" * Its key is `", service.typeName, "/Service`.");
   f.print(" *");
-  f.print(" * This tag is used to provide and retrieve the service from the Effect context.");
-  f.print(" * It supports both default (any) context and typed context via the function overload.");
+  f.print(
+    " * For an implementation that reads a typed `ctx`, make a tag with {@link ",
+    makeTagSymbol,
+    "}.",
+  );
   f.print(" *");
   f.print(" * @example");
   f.print(" * ```typescript");
-  f.print(' * import * as Effect from "effect/Effect";');
   f.print(' * import * as effectProto from "./' + fileBasename + '_effect.js";');
   f.print(" *");
-  f.print(" * // Use default context tag");
-  f.print(" * const myService = {");
-  if (service.methods.length > 0 && service.methods[0] !== undefined) {
-    const firstMethod = service.methods[0];
-    f.print(" *   ", firstMethod.localName, ": (request) => Effect.succeed({})");
-  }
-  f.print(" * };");
+  f.print(" * declare const service: effectProto.", serviceSymbol, ";");
+  f.print(" *");
   f.print(
     " * const ServiceLayer = effectProto.",
     serviceLiveLayerSymbol,
     "(effectProto.",
     serviceTagSymbol,
-    ", myService);",
+    ", service);",
   );
-  f.print(" * ```");
-  f.print(" *");
-  f.print(" * @example");
-  f.print(" * ```typescript");
-  f.print(' * import * as Effect from "effect/Effect";');
-  f.print(' * import * as effectProto from "./' + fileBasename + '_effect.js";');
-  f.print(" *");
-  f.print(" * // Create a typed context tag");
-  f.print(" * interface MyContext {");
-  f.print(" *   userId: string;");
-  f.print(" * }");
-  f.print(" *");
-  f.print(" * const TypedServiceTag = effectProto.", serviceTagSymbol, '<MyContext>("MyContext");');
   f.print(" * ```");
   f.print(" *");
   f.print(" * @generated from service ", service.typeName);
   f.print(" */");
-  f.print(f.export("const", serviceTagSymbol), ": ", serviceTagSymbol, " & {");
-  f.print("  <Ctx>(ctxKey: string): ", serviceTagSymbol, "<Ctx>;");
-  f.print("} = Object.assign(", makeTagSymbol, "(), ", makeTagSymbol, ");");
+  f.print(
+    f.export("const", serviceTagSymbol),
+    ": ",
+    serviceTagSymbol,
+    " = ",
+    importContext,
+    ".GenericTag<",
+    grpcServiceSymbol,
+    ">(`${",
+    serviceIdSymbol,
+    "}/Service`);",
+  );
 
   f.print();
 
+  f.print("/**");
   f.print(
-    "function ",
-    makeTagSymbol,
-    "<Ctx = any>(ctxKey: string = ",
-    f.string("any"),
-    "): ",
-    serviceTagSymbol,
-    "<Ctx> {",
+    " * Makes a Context tag for a ",
+    service.name,
+    " service implementation that reads a typed `ctx`.",
   );
+  f.print(" *");
+  f.print(
+    " * The tag's key is `",
+    service.typeName,
+    "/Service<key>`, so it never equals the default tag's key.",
+  );
+  f.print(" * The key is the tag's identity: tags made with the same key share one Context slot,");
+  f.print(
+    " * whatever their type argument. Name the key after the context type. A server that serves",
+  );
+  f.print(" * the service needs a context transformer that produces `Ctx`.");
+  f.print(" *");
+  f.print(" * @example");
+  f.print(" * ```typescript");
+  f.print(' * import type { HandlerContext } from "@connectrpc/connect";');
+  f.print(' * import * as effectProto from "./' + fileBasename + '_effect.js";');
+  f.print(" *");
+  f.print(" * declare const service: effectProto.", serviceSymbol, "<HandlerContext>;");
+  f.print(" *");
+  f.print(
+    " * const HandlerContextTag = effectProto.",
+    makeTagSymbol,
+    '<HandlerContext>("HandlerContext");',
+  );
+  f.print(
+    " * const ServiceLayer = effectProto.",
+    serviceLiveLayerSymbol,
+    "(HandlerContextTag, service);",
+  );
+  f.print(" * ```");
+  f.print(" *");
+  f.print(" * @generated from service ", service.typeName);
+  f.print(" */");
+  f.print(f.export("function", makeTagSymbol), "<Ctx>(key: string): ", serviceTagSymbol, "<Ctx> {");
   f.print(
     "  return ",
     importContext,
     ".GenericTag<",
     grpcServiceSymbol,
-    "<Ctx>>(`",
-    service.typeName,
-    "<${ctxKey}>`);",
+    "<Ctx>>(`${",
+    serviceIdSymbol,
+    "}/Service<${key}>`);",
   );
   f.print("}");
 
@@ -283,7 +316,7 @@ function generateEffectService(
   f.print("function ", makeLiveLayerSymbol, "<Tag extends ", serviceTagSymbol, "<Ctx>, Ctx>(");
   f.print("  tag: Tag,");
   f.print("  service: ", serviceSymbol, "<Ctx>,");
-  f.print("): ", importLayer, ".Layer<", importContext, ".Tag.Identifier<Tag>> {");
+  f.print("): ", importLayer, ".Layer<", providedType, "> {");
   f.print(
     "  const instance: ",
     grpcServiceSymbol,
@@ -388,21 +421,25 @@ function generateEffectService(
   f.print();
 
   f.print("/**");
-  f.print(" * Context.Tag for identifying the ", service.name, " client.");
-  f.print(" *");
-  f.print(" * This tag is used to provide and retrieve the gRPC client from the Effect context.");
   f.print(
-    " * It supports both default (any) metadata and typed metadata via the function overload.",
+    " * The default Context tag of the ",
+    service.name,
+    " client. Its key is `",
+    service.typeName,
+    "/Client`.",
+  );
+  f.print(" *");
+  f.print(
+    " * For a client with typed metadata, make a tag with {@link ",
+    makeClientTagSymbol,
+    "}.",
   );
   f.print(" *");
   f.print(" * @example");
   f.print(" * ```typescript");
   f.print(' * import * as Effect from "effect/Effect";');
-  f.print(' * import * as Layer from "effect/Layer";');
   f.print(' * import * as effectProto from "./' + fileBasename + '_effect.js";');
-  f.print(' * import { EffectGrpcClient } from "@dr_nikson/effect-grpc";');
   f.print(" *");
-  f.print(" * // Use default metadata type");
   f.print(
     " * const ClientLayer = effectProto.",
     clientLiveLayerSymbol,
@@ -411,7 +448,6 @@ function generateEffectService(
     ");",
   );
   f.print(" *");
-  f.print(" * // Use the client");
   f.print(" * const program = Effect.gen(function* () {");
   f.print(" *   const client = yield* effectProto.", clientTagSymbol, ";");
   if (service.methods.length > 0 && service.methods[0] !== undefined) {
@@ -421,38 +457,80 @@ function generateEffectService(
   f.print(" * });");
   f.print(" * ```");
   f.print(" *");
-  f.print(" * @example");
-  f.print(" * ```typescript");
-  f.print(' * import * as Effect from "effect/Effect";');
-  f.print(' * import * as Layer from "effect/Layer";');
-  f.print(' * import * as effectProto from "./' + fileBasename + '_effect.js";');
-  f.print(" *");
-  f.print(" * // Create a typed metadata tag");
-  f.print(" * interface RequestMeta {");
-  f.print(" *   userId: string;");
-  f.print(" *   traceId: string;");
-  f.print(" * }");
+  f.print(" * @generated from service ", service.typeName);
+  f.print(" */");
+  f.print(
+    f.export("const", clientTagSymbol),
+    ": ",
+    clientTagSymbol,
+    " = ",
+    importContext,
+    ".GenericTag<",
+    clientSymbol,
+    "<any>>(`${",
+    serviceIdSymbol,
+    "}/Client`);",
+  );
+
+  f.print();
+
+  f.print("/**");
+  f.print(
+    " * Makes a Context tag for a ",
+    service.name,
+    " client whose calls take metadata of type `Meta`.",
+  );
   f.print(" *");
   f.print(
-    " * const TypedClientTag = effectProto.",
-    clientTagSymbol,
-    '<RequestMeta>("RequestMeta");',
+    " * The tag's key is `",
+    service.typeName,
+    "/Client<key>`, so it never equals the default tag's key.",
   );
+  f.print(" * The key is the tag's identity: tags made with the same key share one Context slot,");
+  f.print(
+    " * whatever their type argument. Name the key after the metadata type. Build the client",
+  );
+  f.print(
+    " * with the two-argument {@link ",
+    clientLiveLayerSymbol,
+    "}, whose `transformMeta` turns `Meta` into request headers.",
+  );
+  f.print(" *");
+  f.print(" * @example");
+  f.print(" * ```typescript");
+  f.print(' * import * as effectProto from "./' + fileBasename + '_effect.js";');
+  f.print(" *");
+  f.print(" * interface AuthMeta {");
+  f.print(" *   readonly token: string;");
+  f.print(" * }");
+  f.print(" *");
+  f.print(" * const AuthClientTag = effectProto.", makeClientTagSymbol, '<AuthMeta>("AuthMeta");');
+  f.print(" * const ClientLayer = effectProto.", clientLiveLayerSymbol, "(");
+  f.print(
+    " *   (meta: AuthMeta) => ({ headers: new Headers({ authorization: `Bearer ${meta.token}` }) }),",
+  );
+  f.print(" *   AuthClientTag,");
+  f.print(" * );");
   f.print(" * ```");
   f.print(" *");
   f.print(" * @generated from service ", service.typeName);
   f.print(" */");
-  f.print(f.export("const", clientTagSymbol), ": ", clientTagSymbol, " & {");
-  f.print("  <Meta>(metaKey: string): ", clientTagSymbol, "<Meta>;");
   f.print(
-    "} = Object.assign(",
-    makeClientTagSymbol,
-    "<any>(",
-    f.string("any"),
-    "), ",
-    makeClientTagSymbol,
-    ");",
+    f.export("function", makeClientTagSymbol),
+    "<Meta>(key: string): ",
+    clientTagSymbol,
+    "<Meta> {",
   );
+  f.print(
+    "  return ",
+    importContext,
+    ".GenericTag<",
+    clientSymbol,
+    "<Meta>>(`${",
+    serviceIdSymbol,
+    "}/Client<${key}>`);",
+  );
+  f.print("}");
 
   f.print();
 
@@ -502,7 +580,7 @@ function generateEffectService(
   f.print(" *   authToken: string;");
   f.print(" * }");
   f.print(" *");
-  f.print(" * const AppClientTag = effectProto.", clientTagSymbol, '<AppMeta>("AppMeta");');
+  f.print(" * const AppClientTag = effectProto.", makeClientTagSymbol, '<AppMeta>("AppMeta");');
   f.print(" *");
   f.print(" * // Transform app metadata to gRPC headers");
   f.print(" * const ClientLayer = effectProto.", clientLiveLayerSymbol, "(");
@@ -523,7 +601,7 @@ function generateEffectService(
   f.print("    transformMeta: (meta: Meta) => ", importEffectGrpcClient, ".RequestMeta,");
   f.print("    tag: Tag,");
   f.print("  ): ", importLayer, ".Layer<");
-  f.print("    ", importContext, ".Tag.Identifier<Tag>,");
+  f.print("    ", providedType, ",");
   f.print("    never,");
   f.print(
     "    ",
@@ -537,7 +615,7 @@ function generateEffectService(
   f.print("  <Tag extends ", clientTagSymbol, ">(");
   f.print("    tag: Tag,");
   f.print("  ): ", importLayer, ".Layer<");
-  f.print("    ", importContext, ".Tag.Identifier<Tag>,");
+  f.print("    ", providedType, ",");
   f.print("    never,");
   f.print(
     "    ",
@@ -607,26 +685,6 @@ function generateEffectService(
     serviceIdSymbol,
     ");",
   );
-
-  f.print();
-
-  f.print(
-    "function ",
-    makeClientTagSymbol,
-    "<Meta>(metaKey: string): ",
-    clientTagSymbol,
-    "<Meta> {",
-  );
-  f.print(
-    "  return ",
-    importContext,
-    ".GenericTag<",
-    clientSymbol,
-    "<Meta>>(`${",
-    serviceIdSymbol,
-    "}<${metaKey}>`);",
-  );
-  f.print("}");
 
   f.print();
 
