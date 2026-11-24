@@ -6,7 +6,6 @@ plugins:
   - local: protoc-gen-es
     opt: target=ts,import_extension=js
     out: src/generated
-    # Run the plugin with tsx
   - local: protoc-gen-effect
     opt: target=ts,import_extension=js
     out: src/generated
