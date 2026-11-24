@@ -40,7 +40,7 @@ Keep implementation details out of the map. Name only user paths, stable handles
 
 ## Features
 
-- [Code generation](./codegen.md) covers `protoc-gen-effect` output: files, export names, the no-duplicate-suffix rule, compilation, and the typed-tag factories.
+- [Code generation](./codegen.md) covers `protoc-gen-effect` output: files, export names, the no-duplicate-suffix rule, compilation, and the default and typed tags.
 - [Server lifecycle](./server-lifecycle.md) covers startup, readiness, HTTP/2-only transport, unknown methods, CONNECT requests, graceful shutdown, hostile `:authority` values, and the 4 MiB message limit.
 - [Unary RPC](./unary-rpc.md) covers `GetGreeting` over gRPC and Connect, with the handler's server-side effect.
 - [Error mapping](./error-mapping.md) covers `GrpcException` to gRPC status and Connect HTTP status, and keeping the server up afterwards.

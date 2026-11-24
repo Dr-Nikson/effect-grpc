@@ -105,7 +105,7 @@ Run doctor first whenever anything looks off. If doctor reports FAIL on a stale 
 | `.claude/skills/verify/scripts/control-example call http1 GetGreeting` | the same curl request without HTTP/2 | rejected: `Received HTTP/0.9 when not allowed` |
 | `.claude/skills/verify/scripts/control-example client` | the README client, `node dist/client.js` | stdout, stderr and exit code |
 | `.claude/skills/verify/scripts/control-example probe getGreeting Ada` | the generated Effect client on its default tag ([effect-client-probe.mjs](scripts/effect-client-probe.mjs)), against the instance's URL | last stdout line: `{"ok":…,"response":…}` or `{"ok":false,"kind":…,"error":…}` |
-| `.claude/skills/verify/scripts/control-example codegen` | `pnpm -r run build`, then lists the generated files, their exports, and the `typeof` of the tag factories | export names; `typeof … = function` |
+| `.claude/skills/verify/scripts/control-example codegen` | `pnpm -r run build`, then lists the generated files and their exports, and uses the generated tags from one Context through [typed-tags-probe.mjs](scripts/typed-tags-probe.mjs) | export names; `verdict=PASS` and `typed_tags_exit_code=0` |
 | `.claude/skills/verify/scripts/control-example hostile-authority` | the authority cases in `packages/e2e-tests/src/fixtures/hostile-requests.json`, over gRPC and Connect, through [hostile-requests.mjs](scripts/hostile-requests.mjs) | `verdict=PASS` when every check passes and the server survives |
 | `.claude/skills/verify/scripts/control-example message-limit` | messages of 4 MiB, 4 MiB + 1 byte and 5 MiB from the same fixture, then the fixture's oversized and normal calls on one long-lived gRPC, gRPC-web, Connect and generated client | `verdict=PASS` when every check passes and the server survives |
 | `.claude/skills/verify/scripts/control-example connect-method` | an HTTP/2 CONNECT request, then a normal call over each protocol, through [hostile-requests.mjs](scripts/hostile-requests.mjs) | `verdict=PASS` when the reply is 405 with an ended stream and the next calls are served |
@@ -158,12 +158,11 @@ The evidence stays where it was.
 
 ## Known failures on this base
 
-This failure was recorded on 2026-11-24 on branch `v4/p02-authority-guard-size-cap` (PR #84, on top of PR #83), in this devcontainer (Node 24, where `localhost` resolves to `::1` first). Its journeys keep the correct expected result. Do not edit a journey to match a bug.
-
-- **Generated typed-tag factories are not callable** (`typeof … = object`). Because of this, the README client exits with `TypeError: effectProto.HelloWorldAPIClientTag is not a function` before it dials the server. See [codegen.md](features/codegen.md) and [effect-client.md](features/effect-client.md).
+None. Every journey passed on 2026-11-24 on branch `v4/p06-typed-tags` (PR #89), in this devcontainer (Node 24, where `localhost` resolves to `::1` first). When a journey fails on a base, list it here with the date, the branch and the symptom, and keep its correct expected result. Do not edit a journey to match a bug.
 
 ## Helpers
 
 - `scripts/control-example` runs every command above. Its `help` command prints the usage.
 - `scripts/hostile-requests.mjs` runs through `hostile-authority`, `message-limit` and `connect-method`. Those commands feed the file to `node --input-type=module` from `packages/e2e-tests`, so its imports resolve there, including `@connectrpc/connect-node`, which `packages/example` does not depend on. It reads the env vars `HOSTILE_URL`, `HOSTILE_FIXTURES` and `HOSTILE_MODE`, sends each fixture case with Node's HTTP/2 client or with connect-node's clients, and prints one JSON line per check and a verdict line last.
+- `scripts/typed-tags-probe.mjs` runs through `codegen`, which feeds it to `node --input-type=module` from `packages/example`. It resolves the default and the `make…Tag` tags of the service and the client from one Context, through the compiled module, and dials nothing. Its optional arguments name another generated module and library entry, so the same file can check another tree.
 - `scripts/effect-client-probe.mjs` runs through `probe`. `probe` feeds the file to `node --input-type=module` from `packages/example`, so its imports resolve there. It reads the env vars `PROBE_URL`, `PROBE_METHOD` and `PROBE_NAME`, and refuses to run without `PROBE_URL`.
