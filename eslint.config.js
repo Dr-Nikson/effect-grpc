@@ -73,6 +73,24 @@ export default tseslint.config(
     rules: { "local/require-internal-tag": "error" },
   },
   {
+    files: ["packages/effect-grpc/src/**/*.ts"],
+    ignores: ["**/*.test.ts", "**/*.test-d.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@effect/opentelemetry",
+              message:
+                "Import one of its modules, such as @effect/opentelemetry/OtelTracer. The package root loads OpenTelemetry packages that are optional peers, so a consumer without them could not import the library.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     ignores: ["**/src/generated/**"],
   },
   {

@@ -2,8 +2,6 @@
 import { Array as Arr, Cause, Context, Effect, Exit, Option } from "effect";
 import type { ExternalSpan } from "effect/Tracer";
 
-// The package's root also loads its logging, metrics and resource modules, which import
-// OpenTelemetry packages that are optional peers. This module needs @opentelemetry/api only.
 import * as OtelTracer from "@effect/opentelemetry/OtelTracer";
 import { Code, ConnectError } from "@connectrpc/connect";
 import type { HandlerContext } from "@connectrpc/connect";
@@ -43,12 +41,6 @@ const reasonToConnectError = (reason: Cause.Reason<GrpcException.GrpcException>)
   }
 };
 
-/**
- * A cause is a flat list of reasons, with no record of whether they happened in sequence or in
- * parallel, so one separator joins their messages. It is "; " because that is what clients have
- * always received for the usual cause with several reasons, a failure followed by a finalizer's
- * defect.
- */
 const causeToConnectError = (cause: Cause.Cause<GrpcException.GrpcException>): ConnectError =>
   Arr.match(cause.reasons.map(reasonToConnectError), {
     onEmpty: () => new ConnectError("Unknown error", Code.Unknown),
@@ -60,8 +52,6 @@ const causeToConnectError = (cause: Cause.Cause<GrpcException.GrpcException>): C
 
 /**
  * @internal
- * Live implementation of the Executor interface. It runs each handler as its own fiber, with the
- * Effect context that `listen` captured.
  */
 export class ServerExecutorLive implements T.ServerExecutor<any> {
   constructor(public readonly context: Context.Context<never>) {}

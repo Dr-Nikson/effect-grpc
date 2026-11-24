@@ -147,7 +147,7 @@ const program = Effect.gen(function* () {
   return yield* Effect.never;
 });
 
-// Provide dependencies and run. Effect.scoped gives listen its scope and closes it on shutdown.
+// Provide dependencies and run
 const layer = Layer.empty.pipe(
   Layer.provideMerge(helloServiceLayer),
   Layer.provideMerge(Layer.succeed(References.MinimumLogLevel, "Info"))
@@ -160,7 +160,7 @@ The server binds `127.0.0.1` instead of `localhost`. Node can bind `localhost` t
 
 `listen` succeeds with the address the server bound. Pass `port: 0` to let the OS pick a free port, and read it from the result. The server also logs it, as in `gRPC server listening on http://127.0.0.1:41234`.
 
-Ctrl+C or SIGTERM interrupts the program. The scope closes, the server stops, and the process exits with code 130, which is the code `runMain` of Effect 4 gives a program that a signal stopped. To exit with another code, pass `teardown` to `runMain`.
+`Effect.scoped` gives `listen` its scope. Ctrl+C or SIGTERM interrupts the program, so the scope closes and the server stops. The process then exits with code 130, which is the code `runMain` of Effect 4 gives a program that a signal stopped. To exit with another code, pass `teardown` to `runMain`.
 
 ### 5. Implement the Client
 
@@ -1022,7 +1022,7 @@ When you make a gRPC call, trace context automatically flows from client to serv
 
 ```bash
 # The OpenTelemetry SDK packages that NodeSdk of @effect/opentelemetry loads.
-# @effect/opentelemetry 4.1 works with the 2.x line of the SDK, which is 0.2xx for the logs packages.
+# @effect/opentelemetry 4.1 accepts versions 2.x of the SDK packages, and 0.203 to 0.299 of the logs packages.
 npm install @opentelemetry/sdk-trace-node@2 @opentelemetry/sdk-trace-base@2 @opentelemetry/sdk-metrics@2 @opentelemetry/resources@2 @opentelemetry/sdk-logs@0.223 @opentelemetry/api-logs@0.223
 # Plus your preferred exporter, from the same line
 npm install @opentelemetry/exporter-trace-otlp-http@0.223
