@@ -877,8 +877,8 @@ const UserServiceLive: effectProto.UserService = {
 
 **What the client receives.** The server sends one status for each call:
 - A typed failure sends its code and message, also when a finalizer dies after it.
-- A defect, such as `Effect.die`, a throw or `Effect.orDie`, sends `INTERNAL` with the message `Internal server error`. The defect stays on the server.
-- A deadline that passes while the handler runs interrupts the handler and sends `DEADLINE_EXCEEDED`.
+- A defect, such as `Effect.die`, a throw or `Effect.orDie`, sends `INTERNAL` with the message `Internal server error`. The defect stays on the server. When a second defect, such as a dying finalizer, follows a `GrpcException` that `Effect.die` or `Effect.orDie` turned into a defect, the server sends the exception's code and message. Effect 4 gives that cause the same shape as a typed failure whose finalizer died. `GrpcException.from` copies an error's message, so in that case the wrapped error's message reaches the client.
+- A deadline that passes while the handler waits on something asynchronous, such as a promise or a timer, interrupts the handler and sends `DEADLINE_EXCEEDED`. A handler that runs synchronous code past its deadline and then finishes answers normally.
 - A client that cancels the call interrupts the handler, and the client reads nothing more.
 
 For gRPC status codes and error handling best practices, see [Connect RPC Error Handling](https://connectrpc.com/docs/node/errors).
