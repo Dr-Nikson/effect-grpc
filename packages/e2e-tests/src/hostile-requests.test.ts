@@ -101,7 +101,7 @@ const answerOf = (call: Effect.Effect<{ readonly greeting: string }, unknown>) =
         onSuccess: ({ greeting }) => greeting,
         onFailure: (cause) => {
           const error = Cause.squash(cause);
-          return Cause.isTimeoutException(error) ?
+          return Cause.isTimeoutError(error) ?
               "no answer within 10 seconds"
             : ConnectError.from(error).code;
         },
@@ -301,7 +301,7 @@ const streamingAnswerOf = (
   );
 
 describe("Hostile requests (issue #61)", () => {
-  it.scopedLive("reads each served authority as the host the fixture names", () =>
+  it.live("reads each served authority as the host the fixture names", () =>
     Effect.gen(function* () {
       const port = yield* serve("127.0.0.1");
       const session = yield* raw.connect(`http://127.0.0.1:${port}`);
@@ -316,7 +316,7 @@ describe("Hostile requests (issue #61)", () => {
     }),
   );
 
-  it.scopedLive.skipIf(!ipv6LoopbackBinds)(
+  it.live.skipIf(!ipv6LoopbackBinds)(
     "serves the generated client at an IPv6 literal address (needs an IPv6 loopback address)",
     () =>
       Effect.gen(function* () {
@@ -338,7 +338,7 @@ describe("Hostile requests (issue #61)", () => {
       }),
   );
 
-  it.scopedLive("answers each rejected authority with INVALID_ARGUMENT and keeps serving", () =>
+  it.live("answers each rejected authority with INVALID_ARGUMENT and keeps serving", () =>
     Effect.gen(function* () {
       const port = yield* serve("127.0.0.1");
       const session = yield* raw.connect(`http://127.0.0.1:${port}`);
@@ -350,7 +350,7 @@ describe("Hostile requests (issue #61)", () => {
     }),
   );
 
-  it.scopedLive("reads the authority from host when :authority is absent", () =>
+  it.live("reads the authority from host when :authority is absent", () =>
     Effect.gen(function* () {
       const port = yield* serve("127.0.0.1");
       const session = yield* raw.connect(`http://127.0.0.1:${port}`);
@@ -368,7 +368,7 @@ describe("Hostile requests (issue #61)", () => {
     }),
   );
 
-  it.scopedLive("keeps serving after a 10 KiB authority", () =>
+  it.live("keeps serving after a 10 KiB authority", () =>
     Effect.gen(function* () {
       const port = yield* serve("127.0.0.1");
       const session = yield* raw.connect(`http://127.0.0.1:${port}`);
@@ -388,7 +388,7 @@ describe("Hostile requests (issue #61)", () => {
     }),
   );
 
-  it.scopedLive("an empty authority is reset by HTTP/2 before the server sees it", () =>
+  it.live("an empty authority is reset by HTTP/2 before the server sees it", () =>
     Effect.gen(function* () {
       const port = yield* serve("127.0.0.1");
       const session = yield* raw.connect(`http://127.0.0.1:${port}`);
@@ -403,7 +403,7 @@ describe("Hostile requests (issue #61)", () => {
     }),
   );
 
-  it.scopedLive("limits each request message to 4 MiB and keeps serving", () =>
+  it.live("limits each request message to 4 MiB and keeps serving", () =>
     Effect.gen(function* () {
       const port = yield* serve("127.0.0.1");
       const baseUrl = `http://127.0.0.1:${port}`;
@@ -456,7 +456,7 @@ describe("Hostile requests (issue #61)", () => {
     }),
   );
 
-  it.scopedLive("keeps a long-lived client usable after its oversized messages are refused", () =>
+  it.live("keeps a long-lived client usable after its oversized messages are refused", () =>
     Effect.gen(function* () {
       const port = yield* serve("127.0.0.1");
       const baseUrl = `http://127.0.0.1:${port}`;

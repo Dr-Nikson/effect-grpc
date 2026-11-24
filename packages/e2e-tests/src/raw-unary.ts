@@ -72,7 +72,7 @@ export const getGreeting = (
   contentType: string = protocol === "grpc" ? "application/grpc" : "application/json",
   authorityHeader: ":authority" | "host" = ":authority",
 ): Effect.Effect<RawReply> =>
-  Effect.async<RawReply>((resume) => {
+  Effect.callback<RawReply>((resume) => {
     const message = toBinary(GetGreetingRequestSchema, create(GetGreetingRequestSchema, { name }));
     const stream = session.request({
       ":method": "POST",

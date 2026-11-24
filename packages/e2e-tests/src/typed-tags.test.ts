@@ -26,7 +26,7 @@ describe("generated service and client tags (#55)", () => {
     expectTypeOf(effectProto.HelloWorldAPIClientTag).not.toBeFunction();
   });
 
-  it.scopedLive(
+  it.live(
     "one Context holds the default service and the default client, each under its own key",
     () =>
       Effect.gen(function* () {
@@ -49,7 +49,7 @@ describe("generated service and client tags (#55)", () => {
       }).pipe(Effect.provide(serverServiceLayer)),
   );
 
-  it.scopedLive(
+  it.live(
     "factory tags resolve to their own values beside the default tags, and a typed client sends its meta",
     () => {
       const AuthServiceTag = effectProto.makeHelloWorldAPIServiceTag<AuthContext>("AuthContext");
