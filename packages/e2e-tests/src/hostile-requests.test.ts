@@ -697,7 +697,7 @@ describe("Hostile requests (issue #61)", () => {
     }),
   );
 
-  it.scopedLive("sends a client-streaming answer that is ready before the request ends", () =>
+  it.live("sends a client-streaming answer that is ready before the request ends", () =>
     Effect.gen(function* () {
       const port = yield* serveStreaming({
         ...streamingTestService,
@@ -726,7 +726,7 @@ describe("Hostile requests (issue #61)", () => {
     }),
   );
 
-  it.scopedLive("stops a bidi handler when its client cancels the call", () =>
+  it.live("stops a bidi handler when its client cancels the call", () =>
     Effect.gen(function* () {
       const { replyEveryMs, replies: expectedReplies } = fixtures.cancelledBidi;
       const running = { handlers: 0 };
