@@ -68,6 +68,12 @@
   "messageLimit": {
     "limitBytes": 4194304,
     "nameAtLimit": { "repeat": "x", "times": 4194299 },
+    "nameJustOverLimit": { "repeat": "x", "times": 4194300 },
     "nameOverLimit": { "repeat": "x", "times": 5242880 }
+  },
+  "longLivedClient": {
+    "case": "one client connection that sends messages of three times the limit between normal calls",
+    "nameOversized": { "repeat": "x", "times": 12582912 },
+    "calls": ["oversized", "normal", "oversized", "normal", "normal", "oversized", "normal"]
   }
 }
