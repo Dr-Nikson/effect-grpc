@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import semver from "semver";
 
 import { REFUSAL_MESSAGES, decideSnapshot, runSnapshotValidation } from "./snapshot-request.mjs";
 
@@ -81,6 +82,32 @@ for (const tag of tags.invalid) {
     assert.deepEqual(lookups, []);
   });
 }
+
+function* everyString(alphabet, maxLength) {
+  let level = [""];
+  for (let length = 1; length <= maxLength; length++) {
+    level = level.flatMap((prefix) => Array.from(alphabet, (character) => prefix + character));
+    yield* level;
+  }
+}
+
+test("npm accepts every tag that passes validation as a dist-tag", async () => {
+  const greenEvidence = {
+    pullRequestHead: async () => GREEN.pullRequest,
+    pushRuns: async () => GREEN.runs,
+    artifacts: async (runId) => GREEN.artifacts[runId] ?? [],
+  };
+  const offenders = [];
+  let accepted = 0;
+  for (const tag of everyString("vxX019-.", 6)) {
+    const decision = await decideSnapshot(dispatch(tag), greenEvidence);
+    if (decision.kind !== "allowed") continue;
+    accepted += 1;
+    if (semver.validRange(tag) !== null) offenders.push(tag);
+  }
+  assert.deepEqual(offenders.slice(0, 20), []);
+  assert.ok(accepted > 0);
+});
 
 for (const tag of tags.valid) {
   test(`/snapshot ${tag} on a pull request asks for tag ${JSON.stringify(tag)}`, async () => {
