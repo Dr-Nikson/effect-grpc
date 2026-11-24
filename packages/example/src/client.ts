@@ -12,7 +12,6 @@ type HelloWorldAPIClientTag = typeof HelloWorldAPIClientTag;
 
 const debugApiClientLayer = effectProto.helloWorldAPIClientLiveLayer(HelloWorldAPIClientTag).pipe(
   Layer.provideMerge(
-    // We provide config for local deployment: the address the example server binds
     Layer.effect(
       effectProto.HelloWorldAPIConfigTag,
       Effect.map(address.port, (port) =>

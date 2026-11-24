@@ -4,8 +4,6 @@
 // generated JSDoc's first example does. Prints one JSON line as its last line of stdout.
 // Run it through `control-example probe`, which feeds this file to `node --input-type=module`
 // from packages/example so `effect`, `@dr_nikson/effect-grpc` and ./dist resolve there.
-// Env: PROBE_URL (required; control-example sets it to the instance's URL), PROBE_METHOD
-// (getGreeting | faceTheError), PROBE_NAME.
 import console from "node:console";
 import process from "node:process";
 import { URL } from "node:url";

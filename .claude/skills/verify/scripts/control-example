@@ -2,28 +2,7 @@
 # .claude/skills/verify/scripts/control-example
 #
 # Drives packages/example, the effect-grpc example gRPC server, for verification runs.
-# Each checkout runs at most one instance. Instances in different checkouts run side by side on different ports.
-#
-# Usage: control-example <command> [arguments] [--port <n>] [--root <path>]
-#   build                                      pnpm install --frozen-lockfile, then pnpm -r run build
-#   launch                                     start `node dist/server.js` on 127.0.0.1:<port>, detached; wait until it serves an RPC
-#   doctor                                     read-only check of this checkout's instance
-#   call <connect|grpc|http1> <Method> [json]  one unary call; records the response and the server log lines
-#   client                                     run the README example client (`node dist/client.js`) against the instance
-#   probe <getGreeting|faceTheError> [name]    call the instance through the generated Effect client
-#   codegen                                    rebuild everything (codegen included) and record generated exports
-#   hostile-authority                          send one request with `Host: ::1:<port>`; passes if the server survives
-#   stop                                       SIGTERM this checkout's instance; record the shutdown
-#   cleanup                                    stop if running, drop instance state, keep evidence
-#   evidence                                   print this checkout's current evidence directory
-#
-#   --port <n>     launch serves on port n (1-65535, default 8000). Every other command refuses
-#                  unless this checkout's instance uses port n.
-#   --root <path>  refuse unless <path> is inside the checkout this script belongs to.
-#   Options may come anywhere after the script path. A refusal exits 2 and changes nothing.
-#
-# The run pointer is <the checkout's git dir>/effect-grpc-verify/current. Runs live under
-# ${EGV_ROOT:-${XDG_STATE_HOME:-~/.local/state}/effect-grpc-verify}/runs/<run-id>/{state,evidence}.
+# `control-example help` prints the commands and options.
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd -P)
@@ -33,7 +12,7 @@ EXAMPLE=$REPO/packages/example
 E2E=$REPO/packages/e2e-tests
 HOST=127.0.0.1
 DEFAULT_PORT=8000
-PORT_ENV=EFFECT_GRPC_EXAMPLE_PORT # read by packages/example/src/address.ts
+PORT_ENV=EFFECT_GRPC_EXAMPLE_PORT
 SVC=com.example.v1.HelloWorldAPI
 EGV_ROOT=${EGV_ROOT:-${XDG_STATE_HOME:-$HOME/.local/state}/effect-grpc-verify}
 # Each worktree has its own git dir, so no two checkouts share a pointer, and `git worktree remove` drops it.
@@ -45,15 +24,12 @@ PORT_ARG=""
 ROOT_ARG=""
 ARGS=()
 CMD=""
-# Bound once by load_instance or cmd_launch: this checkout's run, the port its instance uses, and its URL.
 RUN=""
 PORT=""
 BASE_URL=""
-EVIDENCE_FILE="" # the evidence file do_call wrote last
+DO_CALL_EVIDENCE=""
 
 die() { echo "control-example: $*" >&2; exit 2; }
-
-# ---------- arguments ----------
 
 parse_args() {
   while [ $# -gt 0 ]; do
@@ -84,7 +60,7 @@ parse_args() {
   done
 }
 
-check_root() { # a --root in another checkout is refused, so each revision is driven by its own copy of this skill
+refuse_foreign_root() {
   [ -n "$ROOT_ARG" ] || return 0
   local top
   top=$(git -C "$ROOT_ARG" rev-parse --show-toplevel 2>/dev/null) || die "--root $ROOT_ARG is not inside a git checkout"
@@ -92,7 +68,7 @@ check_root() { # a --root in another checkout is refused, so each revision is dr
   [ "$top" = "$REPO" ] || die "--root is $top, but this script drives $REPO. Nothing was done. Run $top/.claude/skills/verify/scripts/control-example instead."
 }
 
-want_args() { # want_args <min> <max> <args...>: a missing or stray argument is refused, never ignored
+want_args() {
   local min=$1 max=$2
   shift 2
   [ $# -ge "$min" ] && [ $# -le "$max" ] || die "wrong number of arguments for $CMD: ${*:-none}; see: control-example help"
@@ -120,15 +96,18 @@ ensure_run() {
   echo "$r"
 }
 
-load_instance() { # binds RUN, PORT and BASE_URL from this checkout's current run; refuses a --port that disagrees
+load_instance() {
   RUN=$(run_dir)
   if [ -n "$RUN" ] && [ ! -d "$RUN" ]; then RUN=""; fi
   PORT=""
   if [ -n "$RUN" ] && [ -s "$RUN/state/port" ]; then PORT=$(cat "$RUN/state/port"); fi
-  if [ -n "$PORT_ARG" ] && [ -n "$PORT" ] && [ "$PORT_ARG" != "$PORT" ]; then
-    die "this checkout's instance uses port $PORT, not $PORT_ARG. Nothing was done."
-  fi
   BASE_URL=http://$HOST:$PORT
+}
+
+refuse_foreign_port() {
+  if [ -n "$PORT_ARG" ] && [ -n "$PORT" ] && [ "$PORT_ARG" != "$PORT" ]; then
+    die "this checkout's run recorded port $PORT, not $PORT_ARG. Nothing was done."
+  fi
 }
 
 next_evidence() { # next_evidence <run> <slug> -> path of the next numbered evidence file
@@ -164,7 +143,6 @@ instance_alive() { # instance_alive <run>: the recorded pid is alive and is stil
 }
 
 require_live() {
-  load_instance
   [ -n "$RUN" ] && instance_alive "$RUN" || die "no live instance from this skill in $REPO; run: control-example launch"
 }
 
@@ -178,12 +156,12 @@ decode_addr() {
   esac
 }
 
-port_listeners() { # port_listeners <port>: one "<pid|?> <address>" line per LISTEN socket on the port; status 2 when it cannot tell
-  local hex inode addr owner
+port_listeners() {
+  local port=$1 hex inode addr owner
   local files=(/proc/net/tcp)
   [ -r /proc/net/tcp ] || { echo "cannot read /proc/net/tcp" >&2; return 2; }
   [ -r /proc/net/tcp6 ] && files+=(/proc/net/tcp6)
-  hex=$(printf '%04X' "$1")
+  hex=$(printf '%04X' "$port")
   awk -v p=":$hex" 'FNR > 1 && $4 == "0A" { n = length($2); if (substr($2, n - 4) == p) print $10, substr($2, 1, n - 5) }' "${files[@]}" |
     while read -r inode addr; do
       # find exits non-zero on unreadable /proc entries and when head closes the pipe; neither means "free".
@@ -192,10 +170,10 @@ port_listeners() { # port_listeners <port>: one "<pid|?> <address>" line per LIS
     done
 }
 
-ready_address() { # ready_address <run>: the host:port in the first ready line logged since the last launch, or nothing
-  local off
-  off=$(cat "$1/state/log_offset" 2>/dev/null || echo 0)
-  tail -c +"$((off + 1))" "$1/evidence/server.log" | sed -n 's|.*gRPC server listening on http://\([^ "]*\).*|\1|p' | sed -n 1p
+ready_address() {
+  local r=$1 off
+  off=$(cat "$r/state/log_offset" 2>/dev/null || echo 0)
+  tail -c +"$((off + 1))" "$r/evidence/server.log" | sed -n 's|.*gRPC server listening on http://\([^ "]*\).*|\1|p' | sed -n 1p
 }
 
 # ---------- build freshness ----------
@@ -223,13 +201,13 @@ stale_report() { # prints one STALE line per out-of-date artifact; status 1 when
 
 # ---------- drivers ----------
 
-example_env() { # example_env <port> <command...>: run the command as a user would; only a non-default port sets the variable
+with_example_port() {
   local port=$1
   shift
   if [ "$port" = "$DEFAULT_PORT" ]; then env -u "$PORT_ENV" "$@"; else env "$PORT_ENV=$port" "$@"; fi
 }
 
-do_call() { # do_call <run> <connect|grpc|http1> <Method> <json> [slug] -> returns the client's exit code; sets EVIDENCE_FILE
+do_call() {
   local r=$1 proto=$2 method=$3 json=$4 slug=${5:-$2-$3}
   local log=$r/evidence/server.log f off rc=0 status="" out err
   local cmd=()
@@ -240,7 +218,7 @@ do_call() { # do_call <run> <connect|grpc|http1> <Method> <json> [slug] -> retur
     *) die "call: protocol must be connect, grpc or http1" ;;
   esac
   f=$(next_evidence "$r" "$slug")
-  EVIDENCE_FILE=$f
+  DO_CALL_EVIDENCE=$f
   off=$(log_size "$log")
   out=$(mktemp)
   err=$(mktemp)
@@ -273,7 +251,7 @@ do_call() { # do_call <run> <connect|grpc|http1> <Method> <json> [slug] -> retur
   return "$rc"
 }
 
-run_node_driver() { # run_node_driver <run> <slug> <label> <command...>: run a node client in packages/example against this instance
+run_node_driver() {
   local r=$1 slug=$2 label=$3
   shift 3
   local log=$r/evidence/server.log f off rc=0 out err
@@ -281,7 +259,7 @@ run_node_driver() { # run_node_driver <run> <slug> <label> <command...>: run a n
   off=$(log_size "$log")
   out=$(mktemp)
   err=$(mktemp)
-  (cd "$EXAMPLE" && example_env "$PORT" timeout 30 "$@") >"$out" 2>"$err" || rc=$?
+  (cd "$EXAMPLE" && with_example_port "$PORT" timeout 30 "$@") >"$out" 2>"$err" || rc=$?
   sleep 0.3
   {
     echo "# $label at $(date -u +%FT%TZ) port=$PORT"
@@ -330,7 +308,7 @@ cmd_launch() {
   # setsid detaches the server from this shell; the wrapper sh records node's pid and exit code.
   (
     cd "$EXAMPLE"
-    example_env "$PORT" setsid sh -c 'node dist/server.js </dev/null >>"$1" 2>&1 &
+    with_example_port "$PORT" setsid sh -c 'node dist/server.js </dev/null >>"$1" 2>&1 &
 echo $! >"$2"
 wait $!
 echo $? >"$3"' sh "$log" "$st/server.pid" "$st/exit_code" </dev/null >/dev/null 2>&1 &
@@ -370,12 +348,11 @@ echo $? >"$3"' sh "$log" "$st/server.pid" "$st/exit_code" </dev/null >/dev/null 
     exit 1
   fi
 
-  # Ready means usable: one real RPC must reach this instance's own handler before anyone drives it.
   local probe_rc=0
   do_call "$RUN" connect GetGreeting '{"name":"readiness-probe"}' readiness >/dev/null || probe_rc=$?
-  if [ "$probe_rc" -ne 0 ] || ! grep -q '^http_status=200$' "$EVIDENCE_FILE" ||
-    ! grep -q 'Your name is readiness-probe' "$EVIDENCE_FILE" || ! grep -q 'getGreeting called' "$EVIDENCE_FILE"; then
-    echo "control-example: the readiness RPC did not get this instance's greeting; see $EVIDENCE_FILE" >&2
+  if [ "$probe_rc" -ne 0 ] || ! grep -q '^http_status=200$' "$DO_CALL_EVIDENCE" ||
+    ! grep -q 'Your name is readiness-probe' "$DO_CALL_EVIDENCE" || ! grep -q 'getGreeting called' "$DO_CALL_EVIDENCE"; then
+    echo "control-example: the readiness RPC did not get this instance's greeting; see $DO_CALL_EVIDENCE" >&2
     cmd_stop >&2 || true
     exit 1
   fi
@@ -533,7 +510,6 @@ cmd_hostile_authority() {
 
 cmd_stop() {
   local st log pid f off i graceful=yes code
-  load_instance
   [ -n "$RUN" ] || { echo "no current run"; return 0; }
   st=$RUN/state
   log=$RUN/evidence/server.log
@@ -574,7 +550,6 @@ cmd_stop() {
 }
 
 cmd_cleanup() {
-  load_instance
   if [ -z "$RUN" ]; then
     rm -f "$CURRENT"
     echo "nothing to clean up"
@@ -593,17 +568,46 @@ cmd_evidence() {
   ls -1 "$RUN/evidence"
 }
 
-usage() { sed -n '4,26p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() {
+  cat <<'EOF'
+Drives packages/example, the effect-grpc example gRPC server, for verification runs.
+Each checkout runs at most one instance. Instances in different checkouts run side by side on different ports.
+
+Usage: control-example <command> [arguments] [--port <n>] [--root <path>]
+  build                                      pnpm install --frozen-lockfile, then pnpm -r run build
+  launch                                     start `node dist/server.js` on 127.0.0.1:<port>, detached; wait until it serves an RPC
+  doctor                                     read-only check of this checkout's instance
+  call <connect|grpc|http1> <Method> [json]  one unary call; records the response and the server log lines
+  client                                     run the README example client (`node dist/client.js`) against the instance
+  probe <getGreeting|faceTheError> [name]    call the instance through the generated Effect client
+  codegen                                    rebuild everything (codegen included) and record generated exports
+  hostile-authority                          send one request with `Host: ::1:<port>`; passes if the server survives
+  stop                                       SIGTERM this checkout's instance; record the shutdown
+  cleanup                                    stop if running, drop instance state, keep evidence
+  evidence                                   print this checkout's current evidence directory
+
+  --port <n>     launch serves on port n (1-65535, default 8000). Every other command refuses
+                 when this checkout's run recorded a different port.
+  --root <path>  refuse unless <path> is inside the checkout this script belongs to.
+  Options may come anywhere after the script path. A refusal exits 2 and changes nothing.
+
+The run pointer is <the checkout's git dir>/effect-grpc-verify/current. Runs live under
+${EGV_ROOT:-${XDG_STATE_HOME:-~/.local/state}/effect-grpc-verify}/runs/<run-id>/{state,evidence}.
+EOF
+}
 
 main() {
   parse_args "$@"
   set -- "${ARGS[@]}"
   CMD=${1:-help}
   shift || true
-  check_root
+  refuse_foreign_root
   case $CMD in
     launch | help) ;;
-    *) load_instance ;;
+    *)
+      load_instance
+      refuse_foreign_port
+      ;;
   esac
   case $CMD in
     build) want_args 0 0 "$@"; cmd_build ;;
