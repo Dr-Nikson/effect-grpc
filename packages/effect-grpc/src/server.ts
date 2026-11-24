@@ -5,8 +5,10 @@ import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2
 import type { HandlerContext, ServiceImpl } from "@connectrpc/connect";
 
 import * as GrpcException from "./grpcException.js";
-import * as ProtoRuntime from "./protoRuntime.js";
 import * as internal from "./server.internal.js";
+import type { ServerExecutor } from "./protoRuntime.js";
+
+export type { ServerExecutor };
 
 /**
  * Represents a gRPC server that can run multiple services within an Effect environment.
@@ -143,8 +145,8 @@ export class GrpcServerBindError extends Data.TaggedError(
  * // Result: "UserService" | "ProductService" | "OrderService"
  * ```
  */
-export type ConcatServiceTags<S extends GrpcService<any, any, any>, Services> =
-  S extends GrpcService<infer Tag, any, any> ?
+export type ConcatServiceTags<S extends { readonly _Tag: unknown }, Services> =
+  S extends { readonly _Tag: infer Tag } ?
     [Services] extends [never] ?
       Tag
     : Tag | Services
@@ -171,8 +173,8 @@ export type ConcatServiceTags<S extends GrpcService<any, any, any>, Services> =
  * // Result: never (prevents duplicate tags)
  * ```
  */
-export type UniqueTag<S extends GrpcService<any, any, any>, Services> =
-  S extends GrpcService<infer Tag, any, any> ?
+export type UniqueTag<S extends { readonly _Tag: unknown }, Services> =
+  S extends { readonly _Tag: infer Tag } ?
     [Services] extends [never] ?
       S // If Services === never => we allow S with any Tag
     : Tag extends Services ? never
@@ -210,15 +212,12 @@ export type UniqueTag<S extends GrpcService<any, any, any>, Services> =
  * ```
  */
 export interface GrpcServerBuilder<Ctx, Services> {
-  readonly transformCtx: (ctx: HandlerContext) => Effect.Effect<Ctx, GrpcException.GrpcException>;
-  readonly services: Record<string & Services, GrpcService<any, any, Ctx>>;
-
   withContextTransformer<This extends GrpcServerBuilder<Ctx, Services>, Ctx1>(
     this: [Services] extends [never] ? This : never,
     f: (originalCtx: HandlerContext, ctx: Ctx) => Effect.Effect<Ctx1, GrpcException.GrpcException>,
   ): GrpcServerBuilder<Ctx1, never>;
 
-  withService<S extends GrpcService<any, any, Ctx>>(
+  withService<S extends GrpcService<unknown, GenService<GenServiceMethods>, Ctx>>(
     service: UniqueTag<S, Services>,
   ): GrpcServerBuilder<Ctx, ConcatServiceTags<S, Services>>;
 
@@ -318,14 +317,14 @@ export type GrpcServiceTypeId = typeof internal.grpcServiceTypeId;
  *   }))
  * ```
  */
-export interface GrpcService<Tag, Proto extends GenService<any>, Ctx> {
+export interface GrpcService<Tag, Proto extends GenService<GenServiceMethods>, Ctx> {
   readonly Type: GrpcServiceTypeId;
   readonly _Tag: Tag;
   readonly _Ctx: Types.Invariant<Ctx>;
 
   readonly definition: Proto;
 
-  implementation(executor: ProtoRuntime.ServerExecutor<Ctx>): ServiceImpl<Proto>;
+  implementation(executor: ServerExecutor<Ctx>): ServiceImpl<Proto>;
 }
 
 /**
@@ -361,6 +360,6 @@ export const GrpcService: {
     tag: Tag,
     definition: Proto,
   ): <Ctx>(
-    implementation: (exec: ProtoRuntime.ServerExecutor<Ctx>) => ServiceImpl<Proto>,
+    implementation: (exec: ServerExecutor<Ctx>) => ServiceImpl<Proto>,
   ) => GrpcService<Tag, Proto, Ctx>;
 } = internal.makeGrpcService;

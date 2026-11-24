@@ -373,8 +373,7 @@ export class ConnectEsGprcServerBuilder<Ctx, Services>
     return new ConnectEsGprcServerBuilder<unknown, never>(() => Effect.succeed(undefined), {});
   }
 
-  withContextTransformer<This extends T.GrpcServerBuilder<Ctx, Services>, Ctx1>(
-    this: This,
+  withContextTransformer<Ctx1>(
     f: (originalCtx: HandlerContext, ctx: Ctx) => Effect.Effect<Ctx1, GrpcException.GrpcException>,
   ): T.GrpcServerBuilder<Ctx1, never> {
     return new ConnectEsGprcServerBuilder<Ctx1, never>(
@@ -393,10 +392,9 @@ export class ConnectEsGprcServerBuilder<Ctx, Services>
     });
   }
 
-  build<This extends T.GrpcServerBuilder<Ctx, Services>>(
-    this: This,
-    { readMaxBytes = grpcDefaultMaxReceiveMessageBytes }: T.GrpcServerOptions = {},
-  ): T.GrpcServer<Services> {
+  build({
+    readMaxBytes = grpcDefaultMaxReceiveMessageBytes,
+  }: T.GrpcServerOptions = {}): T.GrpcServer<Services> {
     if (!Number.isInteger(readMaxBytes) || readMaxBytes < 1 || readMaxBytes > largestReadMaxBytes) {
       throw new Cause.IllegalArgumentException(
         `readMaxBytes must be an integer from 1 to ${largestReadMaxBytes}, got ${readMaxBytes}`,
