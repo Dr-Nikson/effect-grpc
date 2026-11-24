@@ -4,10 +4,20 @@ import http2 from "node:http2";
 import process from "node:process";
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { createClient } from "@connectrpc/connect";
+import {
+  createConnectTransport,
+  createGrpcTransport,
+  createGrpcWebTransport,
+} from "@connectrpc/connect-node";
+import { EffectGrpcClient } from "@dr_nikson/effect-grpc";
+import { Cause, Effect, Exit, Layer, ManagedRuntime } from "effect";
 
+import * as effectProto from "./dist/generated/com/example/v1/hello_world_api_effect.js";
 import {
   GetGreetingRequestSchema,
   GetGreetingResponseSchema,
+  HelloWorldAPI,
 } from "./dist/generated/com/example/v1/hello_world_api_pb.js";
 
 const { HOSTILE_URL: url, HOSTILE_FIXTURES: fixturesPath, HOSTILE_MODE: mode } = process.env;
@@ -107,6 +117,39 @@ const expectServing = async (after) => {
   }
 };
 
+const getGreetingWith = (client) => async (name) => {
+  try {
+    const reply = await client.getGreeting({ name }, { signal: AbortSignal.timeout(10_000) });
+    return { greeting: reply.greeting };
+  } catch (error) {
+    return { code: error?.code, error: String(error?.message).slice(0, 120) };
+  }
+};
+
+const getGreetingWithGeneratedClient = () => {
+  const runtime = ManagedRuntime.make(
+    effectProto.helloWorldAPIClientLiveLayer(effectProto.HelloWorldAPIClientTag).pipe(
+      Layer.provide(
+        Layer.succeed(
+          effectProto.HelloWorldAPIConfigTag,
+          EffectGrpcClient.GrpcClientConfig({ baseUrl: new URL(url) }),
+        ),
+      ),
+      Layer.provide(EffectGrpcClient.liveGrpcClientRuntimeLayer()),
+    ),
+  );
+  return async (name) => {
+    const exit = await runtime.runPromiseExit(
+      Effect.flatMap(effectProto.HelloWorldAPIClientTag, (client) =>
+        client.getGreeting({ name }, {}),
+      ).pipe(Effect.timeout("10 seconds")),
+    );
+    if (Exit.isSuccess(exit)) return { greeting: exit.value.greeting };
+    const error = Cause.squash(exit.cause);
+    return { code: error?.code, error: String(error).slice(0, 120) };
+  };
+};
+
 if (mode === "authority") {
   const cases = [
     ...fixtures.servedAuthorities.map(({ case: name, authority }) => ({ name, authority, served: true })),
@@ -138,11 +181,17 @@ if (mode === "authority") {
   }
   await expectServing("an empty authority");
 } else {
-  const { nameAtLimit, nameOverLimit } = fixtures.messageLimit;
+  const { nameAtLimit, nameJustOverLimit, nameOverLimit } = fixtures.messageLimit;
   const atLimit = expand(nameAtLimit);
   const overLimit = expand(nameOverLimit);
   const limit = await call("grpc", undefined, atLimit);
   check("a message of exactly 4 MiB over grpc is served", greeted(limit, atLimit), limit);
+  const justOver = await call("grpc", undefined, expand(nameJustOverLimit));
+  check(
+    "a message of 4 MiB + 1 byte over grpc gets RESOURCE_EXHAUSTED",
+    justOver.grpcStatus === "8",
+    justOver,
+  );
   const grpc = await call("grpc", undefined, overLimit);
   check("a 5 MiB message over grpc gets RESOURCE_EXHAUSTED", grpc.grpcStatus === "8", grpc);
   const connect = await call("connect", undefined, overLimit);
@@ -152,6 +201,29 @@ if (mode === "authority") {
     connect,
   );
   await expectServing("the oversized messages");
+
+  const { nameOversized, calls } = fixtures.longLivedClient;
+  const oversized = expand(nameOversized);
+  const longLived = {
+    grpc: getGreetingWith(createClient(HelloWorldAPI, createGrpcTransport({ baseUrl: url }))),
+    "grpc-web": getGreetingWith(
+      createClient(HelloWorldAPI, createGrpcWebTransport({ baseUrl: url, httpVersion: "2" })),
+    ),
+    connect: getGreetingWith(
+      createClient(HelloWorldAPI, createConnectTransport({ baseUrl: url, httpVersion: "2" })),
+    ),
+    "generated Effect": getGreetingWithGeneratedClient(),
+  };
+  for (const [client, getGreeting] of Object.entries(longLived)) {
+    for (const [index, kind] of calls.entries()) {
+      const reply = await getGreeting(kind === "oversized" ? oversized : "next");
+      check(
+        `call ${index + 1} of ${calls.length} (${kind}) on one long-lived ${client} client gets ${kind === "oversized" ? "RESOURCE_EXHAUSTED" : "its greeting"}`,
+        kind === "oversized" ? reply.code === 8 : greeted(reply, "next"),
+        reply,
+      );
+    }
+  }
 }
 
 report();

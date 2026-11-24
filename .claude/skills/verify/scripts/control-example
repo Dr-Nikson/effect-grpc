@@ -221,11 +221,16 @@ stale_report() { # prints one STALE line per out-of-date artifact; status 1 when
 
 # ---------- drivers ----------
 
-with_example_env() {
+example_env() { # sets EXAMPLE_ENV to the env command that gives the example this instance's address and port
   local removed=() assigned=()
   if [ "$HOST" = "$DEFAULT_HOST" ]; then removed+=(-u "$HOST_ENV"); else assigned+=("$HOST_ENV=$HOST"); fi
   if [ "$PORT" = "$DEFAULT_PORT" ]; then removed+=(-u "$PORT_ENV"); else assigned+=("$PORT_ENV=$PORT"); fi
-  env "${removed[@]}" "${assigned[@]}" "$@"
+  EXAMPLE_ENV=(env "${removed[@]}" "${assigned[@]}")
+}
+
+with_example_env() {
+  example_env
+  "${EXAMPLE_ENV[@]}" "$@"
 }
 
 do_call() {
@@ -280,10 +285,15 @@ run_node_driver() {
   off=$(log_size "$log")
   out=$(mktemp)
   err=$(mktemp)
-  (cd "$EXAMPLE" && with_example_env timeout 30 "$@") >"$out" 2>"$err" || rc=$?
+  example_env
+  local cmd=("${EXAMPLE_ENV[@]}" timeout 30 "$@")
+  (cd "$EXAMPLE" && "${cmd[@]}") >"$out" 2>"$err" || rc=$?
   sleep 0.3
   {
     echo "# $label at $(date -u +%FT%TZ) port=$PORT"
+    printf '$ cd %q &&' "$EXAMPLE"
+    printf ' %q' "${cmd[@]}"
+    echo
     echo "exit_code=$rc"
     echo "--- stdout"
     cat "$out"
@@ -466,8 +476,8 @@ cmd_probe() {
   local method=${1:-} name=${2:-verify}
   case $method in getGreeting | faceTheError) ;; *) die "usage: control-example probe <getGreeting|faceTheError> [name]" ;; esac
   require_live
-  export PROBE_URL=$BASE_URL PROBE_METHOD=$method PROBE_NAME=$name
   run_node_driver "$RUN" "probe-$method" "effect client probe: $method name=$name url=$BASE_URL" \
+    env PROBE_URL="$BASE_URL" PROBE_METHOD="$method" PROBE_NAME="$name" \
     sh -c 'node --input-type=module <"$1"' sh "$SCRIPT_DIR/effect-client-probe.mjs"
 }
 
@@ -503,12 +513,16 @@ run_hostile_driver() {
   off=$(log_size "$log")
   out=$(mktemp)
   err=$(mktemp)
-  (cd "$EXAMPLE" && env HOSTILE_URL="$BASE_URL" HOSTILE_FIXTURES="$FIXTURES" HOSTILE_MODE="$mode" \
-    timeout 60 sh -c 'node --input-type=module <"$1"' sh "$SCRIPT_DIR/hostile-requests.mjs") >"$out" 2>"$err" || rc=$?
+  local cmd=(env HOSTILE_URL="$BASE_URL" HOSTILE_FIXTURES="$FIXTURES" HOSTILE_MODE="$mode"
+    timeout 60 sh -c 'node --input-type=module <"$1"' sh "$SCRIPT_DIR/hostile-requests.mjs")
+  (cd "$E2E" && "${cmd[@]}") >"$out" 2>"$err" || rc=$?
   sleep 0.3
   if instance_alive "$r"; then alive=yes; fi
   {
     echo "# $slug at $(date -u +%FT%TZ) url=$BASE_URL port=$PORT: the $mode cases in ${FIXTURES#"$REPO/"}"
+    printf '$ cd %q &&' "$E2E"
+    printf ' %q' "${cmd[@]}"
+    echo
     echo "driver_exit_code=$rc"
     echo "server_alive_after=$alive"
     if [ "$alive" = no ]; then echo "server_exit_code=$(cat "$r/state/exit_code" 2>/dev/null || echo unknown)"; fi
@@ -603,7 +617,8 @@ Usage: control-example <command> [arguments] [--port <n>] [--host <address>] [--
   probe <getGreeting|faceTheError> [name]    call the instance through the generated Effect client
   codegen                                    rebuild everything (codegen included) and record generated exports
   hostile-authority                          send the fixture's authority cases over gRPC and Connect; check each reply
-  message-limit                              send messages at and over the 4 MiB limit; check each reply
+  message-limit                              send messages at and over the 4 MiB limit, then oversized
+                                             messages on one long-lived client per protocol; check each reply
   stop                                       SIGTERM this checkout's instance; record the shutdown
   cleanup                                    stop if running, drop instance state, keep evidence
   evidence                                   print this checkout's current evidence directory

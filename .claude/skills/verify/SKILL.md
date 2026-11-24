@@ -105,7 +105,7 @@ Run doctor first whenever anything looks off. If doctor reports FAIL on a stale 
 | `.claude/skills/verify/scripts/control-example probe getGreeting Ada` | the generated Effect client on its default tag ([effect-client-probe.mjs](scripts/effect-client-probe.mjs)), against the instance's URL | last stdout line: `{"ok":…,"response":…}` or `{"ok":false,"kind":…,"error":…}` |
 | `.claude/skills/verify/scripts/control-example codegen` | `pnpm -r run build`, then lists the generated files, their exports, and the `typeof` of the tag factories | export names; `typeof … = function` |
 | `.claude/skills/verify/scripts/control-example hostile-authority` | the authority cases in `packages/e2e-tests/src/fixtures/hostile-requests.json`, over gRPC and Connect, through [hostile-requests.mjs](scripts/hostile-requests.mjs) | `verdict=PASS` when every check passes and the server survives |
-| `.claude/skills/verify/scripts/control-example message-limit` | messages of 4 MiB and 5 MiB from the same fixture | `verdict=PASS` when every check passes and the server survives |
+| `.claude/skills/verify/scripts/control-example message-limit` | messages of 4 MiB, 4 MiB + 1 byte and 5 MiB from the same fixture, then the fixture's oversized and normal calls on one long-lived gRPC, gRPC-web, Connect and generated client | `verdict=PASS` when every check passes and the server survives |
 
 `call` takes a protocol (`grpc`, `connect` or `http1`), a proto method name on the route `/com.example.v1.HelloWorldAPI/<Method>`, and an optional JSON request that defaults to `{"name":"verify"}`. `probe` takes `getGreeting` or `faceTheError` and an optional name.
 
@@ -122,7 +122,7 @@ Each run writes to `${EGV_ROOT:-${XDG_STATE_HOME:-~/.local/state}/effect-grpc-ve
 `cleanup` prints the same path. Runs accumulate there until you delete them, so the evidence outlives the checkout. The checkout's pointer to its current run lives in its git dir, at `<git dir>/effect-grpc-verify/current`. The evidence directory holds:
 
 - `run.txt`: run id, start time, the checkout, the path of the script that ran, the full git HEAD, and the number of changed paths.
-- `server.log`: all server output, with one `=== launch port=… root=… git=…` banner per instance.
+- `server.log`: all server output, with one `=== launch host=… port=… root=… at … git=…` banner per instance.
 - `NN-<slug>.txt`, one file per action. Each file has the exact command, the port, the exit code, the HTTP or gRPC status, the response, stderr, and the server log lines written during that action. The action and its server-side effect stay together in one file.
 
 Proof standards:
@@ -161,5 +161,5 @@ This failure was recorded on 2026-11-24 on branch `v4/p02-authority-guard-size-c
 ## Helpers
 
 - `scripts/control-example` runs every command above. Its `help` command prints the usage.
-- `scripts/hostile-requests.mjs` runs through `hostile-authority` and `message-limit`. Like `probe`, those commands feed the file to `node --input-type=module` from `packages/example`, so its imports resolve there. It reads the env vars `HOSTILE_URL`, `HOSTILE_FIXTURES` and `HOSTILE_MODE`, sends each fixture case with Node's HTTP/2 client, and prints one JSON line per check and a verdict line last.
+- `scripts/hostile-requests.mjs` runs through `hostile-authority` and `message-limit`. Those commands feed the file to `node --input-type=module` from `packages/e2e-tests`, so its imports resolve there, including `@connectrpc/connect-node`, which `packages/example` does not depend on. It reads the env vars `HOSTILE_URL`, `HOSTILE_FIXTURES` and `HOSTILE_MODE`, sends each fixture case with Node's HTTP/2 client or with connect-node's clients, and prints one JSON line per check and a verdict line last.
 - `scripts/effect-client-probe.mjs` runs through `probe`. `probe` feeds the file to `node --input-type=module` from `packages/example`, so its imports resolve there. It reads the env vars `PROBE_URL`, `PROBE_METHOD` and `PROBE_NAME`, and refuses to run without `PROBE_URL`.
