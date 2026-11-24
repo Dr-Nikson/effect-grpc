@@ -8,12 +8,11 @@
 // so `effect` and the library resolve there. Two optional arguments replace the generated module and
 // the library entry, so the same file can run against another tree. Prints one PASS or FAIL line per
 // check, then `verdict=PASS` or `verdict=FAIL`.
+import { Context, Effect, Layer } from "effect";
 import console from "node:console";
 import { isAbsolute } from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
-
-import { Context, Effect, Layer } from "effect";
 
 const specifier = (path) => (isAbsolute(path) ? pathToFileURL(path).href : path);
 const m = await import(
@@ -159,6 +158,8 @@ for (const [label, check] of checks) {
     console.log(`FAIL ${label}: ${String(error?.message ?? error).split("\n")[0]}`);
   }
 }
-console.log(`keys: service=${m.HelloWorldAPIServiceTag?.key} client=${m.HelloWorldAPIClientTag?.key}`);
+console.log(
+  `keys: service=${m.HelloWorldAPIServiceTag?.key} client=${m.HelloWorldAPIClientTag?.key}`,
+);
 console.log(`verdict=${failed === 0 ? "PASS" : "FAIL"}`);
 process.exitCode = failed === 0 ? 0 : 1;
