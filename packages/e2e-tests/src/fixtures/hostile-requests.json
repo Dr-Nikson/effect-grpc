@@ -65,6 +65,7 @@
     }
   ],
   "emptyAuthority": "",
+  "ipv6Loopback": "::1",
   "messageLimit": {
     "limitBytes": 4194304,
     "nameAtLimit": { "repeat": "x", "times": 4194299 },

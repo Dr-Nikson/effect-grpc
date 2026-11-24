@@ -1,6 +1,7 @@
 // packages/e2e-tests/src/hostile-requests.test.ts
 import { Cause, Effect, Exit, Layer } from "effect";
 import http2 from "node:http2";
+import net from "node:net";
 
 import type { Client, HandlerContext } from "@connectrpc/connect";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
@@ -23,6 +24,18 @@ import { Port, PortLive } from "./test-fixtures.js";
 type Repeated = { readonly repeat: string; readonly times: number };
 
 const expand = ({ repeat, times }: Repeated): string => repeat.repeat(times);
+
+const canListenOn = (host: string): Promise<boolean> =>
+  new Promise((resolve) => {
+    const probe = net.createServer();
+    probe.once("error", () => resolve(false));
+    probe.listen({ host, port: 0 }, () => probe.close(() => resolve(true)));
+  });
+
+const ipv6LoopbackBinds = await canListenOn(fixtures.ipv6Loopback);
+if (!ipv6LoopbackBinds) {
+  console.warn(`The IPv6 cases did not run: this host cannot listen on ${fixtures.ipv6Loopback}.`);
+}
 
 const authorityEcho: effectProto.HelloWorldAPIService<HandlerContext> = {
   getGreeting: (_request, ctx) => Effect.succeed({ greeting: new URL(ctx.url).host }),
@@ -164,23 +177,26 @@ describe("Hostile requests (issue #61)", () => {
     }).pipe(Effect.provide(PortLive)),
   );
 
-  it.scopedLive("serves the generated client at an IPv6 literal address", () =>
-    Effect.gen(function* () {
-      const port = yield* serve("::1");
+  it.scopedLive.skipIf(!ipv6LoopbackBinds)(
+    "serves the generated client at an IPv6 literal address (needs an IPv6 loopback address)",
+    () =>
+      Effect.gen(function* () {
+        const port = yield* serve(fixtures.ipv6Loopback);
+        const literal = `[${fixtures.ipv6Loopback}]:${port}`;
 
-      const greetings = yield* Effect.gen(function* () {
-        const client = yield* effectProto.HelloWorldAPIClientTag;
-        const first = yield* client.getGreeting({ name: "Ada" }, {});
-        const second = yield* client.getGreeting({ name: "Ada" }, {});
-        return [first.greeting, second.greeting];
-      }).pipe(
-        Effect.provide(clientAt(`http://[::1]:${port}`)),
-        Effect.scoped,
-        Effect.timeout("5 seconds"),
-      );
+        const greetings = yield* Effect.gen(function* () {
+          const client = yield* effectProto.HelloWorldAPIClientTag;
+          const first = yield* client.getGreeting({ name: "Ada" }, {});
+          const second = yield* client.getGreeting({ name: "Ada" }, {});
+          return [first.greeting, second.greeting];
+        }).pipe(
+          Effect.provide(clientAt(`http://${literal}`)),
+          Effect.scoped,
+          Effect.timeout("5 seconds"),
+        );
 
-      expect(greetings).toEqual([`[::1]:${port}`, `[::1]:${port}`]);
-    }).pipe(Effect.provide(PortLive)),
+        expect(greetings).toEqual([literal, literal]);
+      }).pipe(Effect.provide(PortLive)),
   );
 
   it.scopedLive("answers each rejected authority with INVALID_ARGUMENT and keeps serving", () =>
