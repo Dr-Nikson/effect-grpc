@@ -26,7 +26,7 @@ import {
   file_google_protobuf_empty,
 } from "@bufbuild/protobuf/wkt";
 import type { ContextValues } from "@connectrpc/connect";
-import { createClient, createContextKey } from "@connectrpc/connect";
+import { Code, ConnectError, createClient, createContextKey } from "@connectrpc/connect";
 import { Http2SessionManager, createGrpcTransport } from "@connectrpc/connect-node";
 
 import * as Server from "./server.js";
@@ -217,35 +217,75 @@ const afterQueuedNodeEvents = Effect.promise(
   () => new Promise<void>((resolve) => setImmediate(resolve)),
 );
 
-const connectHttp2 = (address: Server.GrpcServerAddress) =>
-  Effect.acquireRelease(
-    Effect.sync(() => http2.connect(address.url).on("error", () => {})),
-    (session) => Effect.sync(() => session.destroy()),
-  );
-
-const grpcStatusOfPing = (session: http2.ClientHttp2Session) =>
-  Effect.callback<Option.Option<string>>((resume) => {
+const pingOverHttp2 = (session: http2.ClientHttp2Session) =>
+  Effect.callback<void>((resume) => {
     const stream = session.request({
       ":method": "POST",
       ":path": "/effect_grpc_test.PingService/Ping",
       "content-type": "application/grpc",
       te: "trailers",
     });
-    let status = Option.none<string>();
-    stream.on("trailers", (trailers) => {
-      status = Option.fromNullishOr(trailers["grpc-status"]).pipe(Option.map(String));
-    });
     stream.on("error", () => {});
-    stream.on("close", () => resume(Effect.succeed(status)));
+    stream.on("close", () => resume(Effect.void));
     stream.resume();
     stream.end(Buffer.alloc(5));
   });
+
+class GoawayReportingSessionManager extends Http2SessionManager {
+  constructor(
+    url: string,
+    private readonly onGoaway: () => void,
+  ) {
+    super(url);
+  }
+
+  override async request(
+    ...args: Parameters<Http2SessionManager["request"]>
+  ): Promise<http2.ClientHttp2Stream> {
+    const stream = await super.request(...args);
+    stream.session?.once("goaway", this.onGoaway);
+    return stream;
+  }
+}
+
+const answerOf = (call: () => Promise<unknown>) =>
+  Effect.promise(() =>
+    call().then(
+      () => "OK",
+      (error: unknown) => Code[ConnectError.from(error).code],
+    ),
+  );
+
+const slowPingServer = (
+  handlerStarted: Deferred.Deferred<void>,
+  atTheEnd: Effect.Effect<unknown>,
+) =>
+  Server.GrpcServerBuilder()
+    .withService(
+      Server.GrpcService(
+        "effect_grpc_test.PingService",
+        PingService,
+      )((executor) => ({
+        ping: (request, context) =>
+          executor.unary("effect_grpc_test.PingService/Ping", request, context, () =>
+            Deferred.succeed(handlerStarted, undefined).pipe(
+              Effect.andThen(Effect.sleep("300 millis")),
+              Effect.andThen(atTheEnd),
+              Effect.as({}),
+            ),
+          ),
+      })),
+    )
+    .build();
 
 const idleClients = [
   {
     client: "a Node HTTP/2 client",
     connect: (address: Server.GrpcServerAddress) =>
-      connectHttp2(address).pipe(Effect.flatMap(grpcStatusOfPing), Effect.asVoid),
+      Effect.acquireRelease(
+        Effect.sync(() => http2.connect(address.url).on("error", () => {})),
+        (session) => Effect.sync(() => session.destroy()),
+      ).pipe(Effect.flatMap(pingOverHttp2)),
   },
   {
     client: "a connect-node client",
@@ -658,45 +698,93 @@ describe("GrpcServer at shutdown", () => {
       }).pipe(Effect.scoped, Effect.runPromise),
   );
 
-  it("tells each client at once to send no new calls, lets the call in flight finish, and stops once it ends", () =>
+  it("lets the call in flight finish, refuses the next call once the client reads GOAWAY, and stops when the call ends", () =>
     Effect.gen(function* () {
       const handlerStarted = yield* Deferred.make<void>();
-      const slowServer = Server.GrpcServerBuilder()
-        .withService(
-          Server.GrpcService(
-            "effect_grpc_test.PingService",
-            PingService,
-          )((executor) => ({
-            ping: (request, context) =>
-              executor.unary("effect_grpc_test.PingService/Ping", request, context, () =>
-                Deferred.succeed(handlerStarted, undefined).pipe(
-                  Effect.andThen(Effect.sleep("300 millis")),
-                  Effect.as({}),
-                ),
-              ),
-          })),
-        )
-        .build();
+      const goaway = yield* Deferred.make<void>();
       const serverScope = yield* Scope.make();
-      const address = yield* slowServer
+      const address = yield* slowPingServer(handlerStarted, Effect.void)
         .listen({ host: "127.0.0.1", port: 0 })
         .pipe(Scope.provide(serverScope));
-      const session = yield* connectHttp2(address);
-      const goaway = yield* Deferred.make<void>();
-      session.once("goaway", () => Deferred.doneUnsafe(goaway, Effect.void));
+      const sessionManager = yield* Effect.acquireRelease(
+        Effect.sync(
+          () =>
+            new GoawayReportingSessionManager(address.url, () =>
+              Deferred.doneUnsafe(goaway, Effect.void),
+            ),
+        ),
+        (manager) => Effect.sync(() => manager.abort()),
+      );
+      const client = createClient(
+        PingService,
+        createGrpcTransport({ baseUrl: address.url, sessionManager }),
+      );
 
-      const inFlight = yield* Effect.forkChild(grpcStatusOfPing(session));
+      const inFlight = yield* Effect.forkChild(answerOf(() => client.ping({})));
       yield* Deferred.await(handlerStarted);
       const stopping = yield* Effect.forkDetach(Scope.close(serverScope, Exit.void));
       const toldToStop = yield* Deferred.await(goaway).pipe(Effect.timeoutOption("1 second"));
+      const callAfterGoaway = yield* answerOf(() => client.ping({}));
       const callInFlight = yield* Fiber.join(inFlight);
       const stopped = yield* Fiber.await(stopping).pipe(Effect.timeoutOption("1 second"));
 
       expect(Option.isSome(toldToStop), "the client got GOAWAY within one second").toBe(true);
-      expect(callInFlight, "the grpc-status of the call in flight").toEqual(Option.some("0"));
+      expect({ callInFlight, callAfterGoaway }).toEqual({
+        callInFlight: "OK",
+        callAfterGoaway: "Unavailable",
+      });
       expect(
         Option.isSome(stopped),
         "the server's scope closed within one second of the call's end",
       ).toBe(true);
+    }).pipe(Effect.scoped, Effect.runPromise));
+
+  it("stops, as a launched layer, before it releases the layer that its handlers use", () =>
+    Effect.gen(function* () {
+      const events: Array<string> = [];
+      let resourceOpen = false;
+      const resourceLayer = Layer.effectDiscard(
+        Effect.acquireRelease(
+          Effect.sync(() => {
+            resourceOpen = true;
+          }),
+          () =>
+            Effect.sync(() => {
+              resourceOpen = false;
+              events.push("the resource was released");
+            }),
+        ),
+      );
+      const stopLine = Logger.layer([
+        Logger.make(({ message }) => {
+          const text = (Array.isArray(message) ? message : [message]).map(String).join(" ");
+          if (text === "gRPC server stopped") events.push(text);
+        }),
+      ]);
+      const handlerStarted = yield* Deferred.make<void>();
+      const bound = yield* Deferred.make<Server.GrpcServerAddress>();
+      const serverLayer = Layer.effectDiscard(
+        slowPingServer(
+          handlerStarted,
+          Effect.sync(() => events.push(`the call ended, resource open: ${resourceOpen}`)),
+        )
+          .listen({ host: "127.0.0.1", port: 0 })
+          .pipe(Effect.flatMap((address) => Deferred.succeed(bound, address))),
+      );
+
+      const launched = yield* Effect.forkChild(
+        Layer.launch(serverLayer.pipe(Layer.provide(resourceLayer))).pipe(Effect.provide(stopLine)),
+      );
+      const address = yield* Deferred.await(bound);
+      const call = yield* Effect.forkChild(ping(address));
+      yield* Deferred.await(handlerStarted);
+      yield* Fiber.interrupt(launched);
+
+      expect((yield* Fiber.join(call)).$typeName).toBe("google.protobuf.Empty");
+      expect(events).toEqual([
+        "the call ended, resource open: true",
+        "gRPC server stopped",
+        "the resource was released",
+      ]);
     }).pipe(Effect.scoped, Effect.runPromise));
 });
