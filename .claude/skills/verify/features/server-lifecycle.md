@@ -35,7 +35,7 @@ Preconditions:
 
 - An empty authority never reaches the server. Node's HTTP/2 layer resets that stream with `PROTOCOL_ERROR` (RST_STREAM code 1) before the request listener runs, so the journey checks the reset and the next call, not a gRPC status.
 - On a base without the fix for issue #61, `hostile-authority` stops the server at its first case. The evidence shows `server_alive_after=no`, `server_exit_code=1` and `TypeError: Invalid URL` with base `http://::1:50051`.
-- The server answers a refused unary call only after the client has sent the whole message, so each oversized call takes as long as its upload. A server that answers earlier leaves a long-lived Node client unusable. `message-limit` then fails: the long-lived checks get `"code":13` with `NGHTTP2_ENHANCE_YOUR_CALM`, and the later checks on Node's HTTP/2 client show `"rstCode":11`.
+- The server answers a refused unary call only after the client has sent the whole message, so each oversized call takes as long as its upload. A server that answers a refused call and stops reading its upload leaves a long-lived Node client unusable. `message-limit` then fails: the long-lived checks get `"code":13` with `NGHTTP2_ENHANCE_YOUR_CALM`, and the later checks on Node's HTTP/2 client show `"rstCode":11`.
 - Each checkout runs one instance. `launch` refuses when anything listens on its port. Never stop someone else's process to make room. Launch on another port with `--port` instead.
 - The example binds `127.0.0.1` unless it was launched with `--host ::1`. Direct clients dial the address that the instance reports.
 - The server logs every TCP connection, HTTP/2 session and stream. The helper hides those lines on the terminal and keeps them in evidence. They are not errors.

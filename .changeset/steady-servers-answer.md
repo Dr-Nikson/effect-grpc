@@ -8,4 +8,4 @@ One request could stop the server process. A request whose authority was not a v
 
 The server now rejects a request message larger than 4 MiB, the default limit of other gRPC implementations, with `RESOURCE_EXHAUSTED`. This also applies when the message is compressed and only its decompressed size is too large. Before, the server accepted messages of up to about 4 GiB. Clients that send larger messages now get that error, and a setting to raise the limit is planned.
 
-The server reads the rest of a refused message and throws it away. It answers a unary call only after the client has sent the whole request. A client that keeps one connection open, such as the generated client, keeps working after its oversized messages are refused.
+The server reads the rest of a refused message and throws it away. It answers a unary call only after the client has sent the whole request. A client that keeps one connection open, such as the generated client, keeps working after the server refuses its oversized unary requests.
