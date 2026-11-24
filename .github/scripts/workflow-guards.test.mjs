@@ -3,6 +3,7 @@ import { load } from "js-yaml";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { test } from "node:test";
+import semver from "semver";
 
 import { Evaluator, Lexer, Parser, data } from "@actions/expressions";
 import { truthy } from "@actions/expressions/result";
@@ -16,6 +17,8 @@ const workflows = readdirSync(new URL("../workflows/", import.meta.url))
   .map((file) => [file, readWorkflow(file)]);
 const release = readWorkflow("release.yml");
 const snapshot = readWorkflow("snapshot-release.yml");
+const ci = readWorkflow("typescript-ci.yml");
+const library = readJson("../../packages/effect-grpc/package.json");
 const events = readJson("./fixtures/workflow-events.json");
 const associations = readJson("./fixtures/comment-associations.json");
 
@@ -181,6 +184,14 @@ test("the validate job checks out the event's own ref, so a comment runs the def
   assert.equal(checkouts.length, 1);
   assert.equal(checkouts[0].with.ref, undefined);
   assert.equal(checkouts[0].with.repository, undefined);
+});
+
+test("typescript-ci.yml runs the test job on the oldest Node that the library's engines allow", () => {
+  const floor = semver.minVersion(library.engines.node).version;
+  assert.ok(
+    ci.jobs.test.strategy.matrix["node-version"].includes(floor),
+    `the test job's node-version matrix includes ${floor}, from engines.node ${library.engines.node}`,
+  );
 });
 
 test("snapshot-release.yml replies on the pull request only for a comment request", () => {

@@ -124,7 +124,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The exact floor that engines.node declares, not the newest 22.x.
         node-version: ['22.19.0', '24.x']
 
     steps:
