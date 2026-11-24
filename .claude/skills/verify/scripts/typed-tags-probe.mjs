@@ -13,7 +13,7 @@ import { isAbsolute } from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-import { Effect, Layer } from "effect";
+import { Context, Effect, Layer } from "effect";
 
 const specifier = (path) => (isAbsolute(path) ? pathToFileURL(path).href : path);
 const m = await import(
@@ -52,6 +52,29 @@ const expect = (ok, why) => {
 };
 
 const checks = [
+  [
+    "one Context holds a value under each of the four tags: both default tags and one tag from each factory",
+    () =>
+      Effect.sync(() => {
+        const tags = [
+          m.HelloWorldAPIServiceTag,
+          m.makeHelloWorldAPIServiceTag("Typed"),
+          m.HelloWorldAPIClientTag,
+          m.makeHelloWorldAPIClientTag("Typed"),
+        ];
+        const values = tags.map((_, index) => ({ index }));
+        const context = tags.reduce(
+          (ctx, tag, index) => Context.add(ctx, tag, values[index]),
+          Context.empty(),
+        );
+        tags.forEach((tag, index) =>
+          expect(
+            Context.get(context, tag) === values[index],
+            `the tag with key ${tag.key} resolved to another tag's value`,
+          ),
+        );
+      }),
+  ],
   [
     "one Context holds the default service and the default client, each under its own key",
     () =>
