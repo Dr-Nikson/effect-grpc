@@ -43,7 +43,9 @@ export interface GrpcServer<in Services> {
    *
    * Closing the scope stops the server. It accepts no new connections and tells each client to send
    * no new calls. The calls in flight run to the end, each connection closes once its calls end, an
-   * idle one at once, and then the scope finishes closing.
+   * idle one at once, and then the scope finishes closing. Nothing interrupts a call in flight, so a
+   * handler that never ends keeps the scope open, and so does a client that never reads from its
+   * connection.
    *
    * To serve for the life of the process, run `listen` in `Layer.effectDiscard` and start that layer
    * with `Layer.launch`. Effect releases a layer after the layers that use it, so the server stops
