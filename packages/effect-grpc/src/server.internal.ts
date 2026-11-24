@@ -264,13 +264,34 @@ const awaitListening = (
     });
   });
 
-const stopServer = (server: http2.Http2Server): Effect.Effect<unknown> =>
+interface ServerResource {
+  readonly server: http2.Http2Server;
+  readonly sessions: ReadonlySet<http2.ServerHttp2Session>;
+}
+
+const makeServer = (handler: RequestListener): ServerResource => {
+  const server = http2.createServer(handler);
+  const sessions = new Set<http2.ServerHttp2Session>();
+  server.on("session", (session) => {
+    sessions.add(session);
+    session.once("close", () => sessions.delete(session));
+  });
+  return { server, sessions };
+};
+
+/**
+ * Node 22's `server.close()` waits for every connection and closes none, while Node 24's also
+ * closes each session. `session.close()` sends GOAWAY and ends the connection once its streams
+ * end, and a second call does nothing.
+ */
+const stopServer = ({ server, sessions }: ServerResource): Effect.Effect<unknown> =>
   server.listening ?
     Effect.gen(function* () {
       yield* Effect.logInfo("gRPC server is stopping...");
 
       yield* Effect.callback((resume) => {
         server.close(() => resume(Effect.logInfo("gRPC server stopped")));
+        for (const session of sessions) session.close();
       });
     })
   : Effect.sync(() => server.close());
@@ -317,8 +338,8 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
       };
 
       const startup = Effect.gen(function* () {
-        const server = yield* Effect.acquireRelease(
-          Effect.sync(() => http2.createServer(handler)),
+        const { server } = yield* Effect.acquireRelease(
+          Effect.sync(() => makeServer(handler)),
           stopServer,
         );
         const address = yield* awaitListening(server, options, reportServerError);

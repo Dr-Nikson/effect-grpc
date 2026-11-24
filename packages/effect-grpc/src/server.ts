@@ -39,8 +39,16 @@ export interface GrpcServer<in Services> {
   /**
    * Starts listening on `host` and `port`, and succeeds with the address the server bound once it
    * accepts connections. Port 0 asks the OS for a free port. The server handles requests until the
-   * scope closes, and closing the scope shuts it down. To serve until the process stops, follow
-   * `listen` with `Effect.never`.
+   * scope closes.
+   *
+   * Closing the scope stops the server. It accepts no new connections and tells each client to send
+   * no new calls. The calls in flight run to the end, each connection closes once its calls end, an
+   * idle one at once, and then the scope finishes closing.
+   *
+   * To serve for the life of the process, run `listen` in `Layer.effectDiscard` and start that layer
+   * with `Layer.launch`. Effect releases a layer after the layers that use it, so the server stops
+   * before the layers that its handlers use. A program that runs `listen` itself gets the same order
+   * when `Effect.scoped` sits inside `Effect.provide`.
    *
    * Fails with {@link GrpcServerBindError} when the server cannot listen, for example when the port
    * is taken. Interrupting `listen` before the server listens stops the attempt, and nothing binds
