@@ -16,6 +16,9 @@
   },
   "license": "MIT",
   "author": "dr_nikson",
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "files": [
     "dist",
     "bin"
