@@ -91,6 +91,17 @@ const outcomes: ReadonlyArray<Outcome> = [
     },
   },
   {
+    outcome: "a client cancel with a dying finalizer",
+    call: "cancels once the handler runs",
+    handler: () => Effect.never.pipe(Effect.ensuring(Effect.die(new Error("the finalizer died")))),
+    sends: {
+      kind: "after the cancel",
+      frames: [],
+      handler: "interrupted",
+      handedToConnect: "Canceled",
+    },
+  },
+  {
     outcome: "a deadline expiry",
     call: "sends a 50 ms deadline",
     handler: () => Effect.never,
