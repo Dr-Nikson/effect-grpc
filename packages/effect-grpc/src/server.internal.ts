@@ -116,11 +116,6 @@ const uploadEnded = (upload: http2.ServerHttp2Stream): Promise<void> => {
 /**
  * connect-node builds each request's URL from its authority synchronously inside the listener, and
  * Node turns a throw there into an uncaught exception that stops the process.
- *
- * The listener routes with the functions connectNodeAdapter is built from, so that it can hold an
- * answer. A client of a unary or server-streaming method sends its one message without waiting, and
- * Node's client rejects response headers while too much of its upload is still queued, so those
- * answers leave only after the upload has ended. A streaming client may wait for the answer.
  */
 const makeRequestListener = (options: {
   readonly routes: (router: ConnectRouter) => ConnectRouter;
@@ -136,6 +131,8 @@ const makeRequestListener = (options: {
     const resetStream = () => res.stream.close(http2.constants.NGHTTP2_INTERNAL_ERROR);
     try {
       const handler = Option.fromNullable(handlers.get(req.url.split("?", 1)[0] ?? ""));
+      // A client of a unary or server-streaming method sends its one message without waiting for
+      // the answer. A streaming client may wait for the answer.
       const sendsOneMessage = Option.exists(
         handler,
         ({ method }) => method.methodKind === "unary" || method.methodKind === "server_streaming",
@@ -145,8 +142,7 @@ const makeRequestListener = (options: {
           .then(send)
           .catch(resetStream);
       };
-      // Node types it as a string, but its getter returns undefined without :authority and host.
-      const authority = Option.fromNullable(req.authority).pipe(Option.flatMap(readAuthority));
+      const authority = readAuthority(req.authority);
       if (Option.isNone(authority)) {
         answer(() => refuseMalformedAuthority(req, res));
         return;

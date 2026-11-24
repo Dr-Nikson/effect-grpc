@@ -10,6 +10,5 @@ plugins:
   - local: protoc-gen-effect
     opt: target=ts,import_extension=js
     out: src/generated
-    # protoc-gen-effect generates unary methods only, so the tests implement this service by hand.
     exclude_types:
       - com.example.v1.StreamingTestService
