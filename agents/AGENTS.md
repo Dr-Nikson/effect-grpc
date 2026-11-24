@@ -19,8 +19,8 @@ This file defines the core project structure and coding standards for the Effect
 - Key configuration files at the root include:
   - `package.json`: Defines workspaces and root dependencies. It uses pnpm as a package manager.
   - `tsconfig.base.json`: Base TypeScript configuration inherited by packages.
-  - `eslint.config.mjs`: ESLint configuration with Effect-specific rules.
-  - `.prettierrc.js`: Prettier code formatting rules.
+  - `eslint.config.js`: ESLint configuration (typescript-eslint, Prettier compatibility, and `no-console`, so library code logs through the Effect logger).
+  - `.prettierrc.cjs`: Prettier code formatting rules.
   - `README.md`: Project overview for gRPC Protobuf capabilities for Effect ecosystem.
 
 **Packages Directory (`packages/`):**

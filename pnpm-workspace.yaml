@@ -19,7 +19,6 @@ catalogs:
     '@opentelemetry/sdk-trace-base': 2.0.0
     '@types/node': 24.4.0
     effect: 3.19.15
-    tsx: 4.20.5
     typescript: 5.9.2
     vitest: 3.2.4
     # Peers of @effect/platform-node, declared so pnpm can't keep stale auto-installed versions
