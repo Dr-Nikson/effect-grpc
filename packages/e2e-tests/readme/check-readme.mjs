@@ -15,6 +15,8 @@
 //   without a body matches the generated function's signature.
 // - Any other TypeScript block (`ts` or `typescript`) is its own module next to src/server.ts. It
 //   imports what it uses and writes `declare const` for values it does not build.
+// - A `js`, `javascript`, `jsx`, `tsx`, `mjs` or `cjs` block is a problem: fence README code as
+//   `typescript`, so that no example skips the compiler.
 // - Other blocks are not read. Packages that README examples import but no workspace installs are
 //   declared in modules.d.ts next to this file.
 //
@@ -84,6 +86,7 @@ for (let i = 0, open = null; i < lines.length; i++) {
 }
 
 const isTs = (fence) => fence.lang === "ts" || fence.lang === "typescript";
+const uncheckedScripts = new Set(["js", "javascript", "jsx", "tsx", "mjs", "cjs"]);
 const pathOf = (fence) =>
   /^\s*(?:\/\/|#)\s*([\w.@/-]+\.(?:ts|proto|ya?ml))\s*$/.exec(fence.body[0] ?? "")?.[1];
 
@@ -94,6 +97,16 @@ const at = (fence, bodyLine, column, code, message) =>
 const files = new Map();
 const excerpts = [];
 for (const fence of fences) {
+  if (uncheckedScripts.has(fence.lang)) {
+    at(
+      fence,
+      -1,
+      0,
+      "fence",
+      `fence this ${fence.lang} block as typescript, so the check compiles it`,
+    );
+    continue;
+  }
   const path = pathOf(fence);
   if (isTs(fence) && path?.startsWith("src/generated/")) {
     excerpts.push({ ...fence, path });
