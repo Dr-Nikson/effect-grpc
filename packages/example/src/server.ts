@@ -60,7 +60,7 @@ const prog = Effect.gen(function* () {
 
 const layer = Layer.empty.pipe(
   Layer.provideMerge(debugApiLayer),
-  Layer.provide(Layer.succeed(References.MinimumLogLevel, "Trace")),
+  Layer.provideMerge(Layer.succeed(References.MinimumLogLevel, "Trace")),
 );
 
 NodeRuntime.runMain(Effect.provide(prog, layer).pipe(Effect.scoped));
