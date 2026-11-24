@@ -339,10 +339,6 @@ type UnaryMethodKeys<Proto extends GenService<GenServiceMethods>> = {
  * method needs a handler. Any other method may be left out, and the server answers a call to it with
  * UNIMPLEMENTED on gRPC, gRPC-web and Connect.
  *
- * protoc-gen-effect generates handlers for unary methods only, so the server it generates for a
- * service with streaming methods serves the unary methods and answers each streaming method with
- * UNIMPLEMENTED.
- *
  * @template Proto - The Protocol Buffer service definition generated from .proto files
  *
  * @example
@@ -351,7 +347,6 @@ type UnaryMethodKeys<Proto extends GenService<GenServiceMethods>> = {
  * import { EffectGrpcServer } from "@dr_nikson/effect-grpc"
  * import { ChatService } from "./gen/chat_pb" // Send is unary and Watch is server-streaming
  *
- * // Only Send has a handler, so the server answers a call to Watch with UNIMPLEMENTED
  * const implementation = (
  *   exec: EffectGrpcServer.ServerExecutor<unknown>,
  * ): EffectGrpcServer.GrpcServiceImplementation<typeof ChatService> => ({

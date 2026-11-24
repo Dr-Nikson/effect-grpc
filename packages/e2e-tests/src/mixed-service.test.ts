@@ -45,8 +45,8 @@ const generatedClientAt = (address: EffectGrpcServer.GrpcServerAddress) =>
     );
 
 /**
- * The server's scope closes only after every client session closes, so each session is aborted in
- * a finalizer that runs before the server's.
+ * On Node 22, `server.close()` waits for every open HTTP/2 session, so each client session is
+ * aborted in a finalizer that runs before the server's scope closes (#101).
  */
 const sessionTo = (baseUrl: string) =>
   Effect.acquireRelease(
