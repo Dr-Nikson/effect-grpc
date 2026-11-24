@@ -13,7 +13,7 @@ import {
   FileDescriptorProtoSchema,
   file_google_protobuf_empty,
 } from "@bufbuild/protobuf/wkt";
-import { Code } from "@connectrpc/connect";
+import { Code, ConnectError } from "@connectrpc/connect";
 
 import * as GrpcException from "./grpcException.js";
 import * as Server from "./server.js";
@@ -35,6 +35,11 @@ type Sent =
       readonly kind: "after the cancel";
       readonly frames: ReadonlyArray<string>;
       readonly handler: HandlerEnd;
+      /**
+       * The status of the error the executor hands Connect to send. The cancelled stream carries
+       * nothing more, so this is the only place the server's status for a cancel shows.
+       */
+      readonly handedToConnect: string;
     };
 
 interface Outcome {
@@ -55,17 +60,10 @@ const status = (code: Code, message: string): Sent => ({
 });
 
 /**
- * An Effect 4 cause is a flat list of reasons, with no sequential or parallel structure and no empty
- * node, so four rows send something else than they did on Effect 3:
- * - A deadline expiry sends Aborted "Request was canceled". It sent Internal, with the message
- *   "Unknown error; Request was canceled" five or six times in a row.
- * - A typed failure with a dying finalizer sends Internal "Internal server error; Internal server
- *   error". It sent Internal "typed failure; Internal server error". Effect 4 turns the typed
- *   failure into a defect once the finalizer dies, and the server never sends what a defect holds.
- * - Two typed failures in one cause send Internal "first; second". They sent Internal
- *   "first | second".
- * - A typed failure while concurrent work is interrupted sends its own status, NotFound "first". It
- *   sent Internal "first | Unknown error; Request was canceled".
+ * A call gets one status. A deadline or a client cancel that interrupts the handler gives its own
+ * status, even when a finalizer dies. Otherwise the first typed failure gives its status, also when
+ * a finalizer dies after it, although Effect 4 then reports the failure as a defect. Any other defect
+ * gives Internal with a fixed message.
  */
 const outcomes: ReadonlyArray<Outcome> = [
   {
@@ -85,13 +83,24 @@ const outcomes: ReadonlyArray<Outcome> = [
     outcome: "a client cancel",
     call: "cancels once the handler runs",
     handler: () => Effect.never,
-    sends: { kind: "after the cancel", frames: [], handler: "interrupted" },
+    sends: {
+      kind: "after the cancel",
+      frames: [],
+      handler: "interrupted",
+      handedToConnect: "Canceled",
+    },
   },
   {
     outcome: "a deadline expiry",
     call: "sends a 50 ms deadline",
     handler: () => Effect.never,
-    sends: status(Code.Aborted, "Request was canceled"),
+    sends: status(Code.DeadlineExceeded, "the operation timed out"),
+  },
+  {
+    outcome: "a deadline expiry with a dying finalizer",
+    call: "sends a 50 ms deadline",
+    handler: () => Effect.never.pipe(Effect.ensuring(Effect.die(new Error("the finalizer died")))),
+    sends: status(Code.DeadlineExceeded, "the operation timed out"),
   },
   {
     outcome: "a typed failure with a dying finalizer",
@@ -100,7 +109,22 @@ const outcomes: ReadonlyArray<Outcome> = [
       Effect.fail(GrpcException.create(Code.NotFound, "typed failure")).pipe(
         Effect.ensuring(Effect.die(new Error("the finalizer died"))),
       ),
-    sends: status(Code.Internal, "Internal server error; Internal server error"),
+    sends: status(Code.NotFound, "typed failure"),
+  },
+  {
+    outcome: "a defect with a dying finalizer",
+    call: "waits for the reply",
+    handler: () =>
+      Effect.die(new Error("the handler died")).pipe(
+        Effect.ensuring(Effect.die(new Error("the finalizer died"))),
+      ),
+    sends: status(Code.Internal, "Internal server error"),
+  },
+  {
+    outcome: "a defect that is a GrpcException",
+    call: "waits for the reply",
+    handler: () => Effect.die(GrpcException.create(Code.NotFound, "typed failure")),
+    sends: status(Code.Internal, "Internal server error"),
   },
   {
     outcome: "a throw inside a context transformer",
@@ -142,7 +166,7 @@ const outcomes: ReadonlyArray<Outcome> = [
           Cause.fail(GrpcException.create(Code.AlreadyExists, "second")),
         ),
       ),
-    sends: status(Code.Internal, "first; second"),
+    sends: status(Code.NotFound, "first"),
   },
   {
     outcome: "a typed failure while concurrent work is interrupted",
@@ -188,13 +212,28 @@ if (outcomeFile === undefined) {
 type EmptyUnary = { methodKind: "unary"; input: typeof EmptySchema; output: typeof EmptySchema };
 const OutcomeService = serviceDesc<{ run: EmptyUnary; ping: EmptyUnary }>(outcomeFile, 0);
 
-const serve = (row: Outcome, handler: Handler) => {
+const serve = (row: Outcome, handler: Handler, handedToConnect: Deferred.Deferred<string>) => {
   const service = Server.GrpcService(
     "effect_grpc_test.OutcomeService",
     OutcomeService,
   )((executor) => ({
-    run: (request, context) =>
-      executor.unary("effect_grpc_test.OutcomeService/Run", request, context, handler),
+    run: (request, context) => {
+      const reply = executor.unary(
+        "effect_grpc_test.OutcomeService/Run",
+        request,
+        context,
+        handler,
+      );
+      reply.then(
+        () => Deferred.doneUnsafe(handedToConnect, Effect.succeed("a reply")),
+        (error: unknown) =>
+          Deferred.doneUnsafe(
+            handedToConnect,
+            Effect.succeed(codeName(ConnectError.from(error).code)),
+          ),
+      );
+      return reply;
+    },
     ping: (request, context) =>
       executor.unary("effect_grpc_test.OutcomeService/Ping", request, context, () =>
         Effect.succeed({}),
@@ -334,13 +373,17 @@ const observeCancel = (row: Outcome) =>
   Effect.gen(function* () {
     const started = yield* Deferred.make<void>();
     const ended = yield* Deferred.make<HandlerEnd>();
-    const address = yield* serve(row, () =>
-      Deferred.succeed(started, undefined).pipe(
-        Effect.andThen(row.handler()),
-        Effect.onExit((exit) =>
-          Deferred.succeed(ended, Exit.hasInterrupts(exit) ? "interrupted" : "ended another way"),
+    const handedToConnect = yield* Deferred.make<string>();
+    const address = yield* serve(
+      row,
+      () =>
+        Deferred.succeed(started, undefined).pipe(
+          Effect.andThen(row.handler()),
+          Effect.onExit((exit) =>
+            Deferred.succeed(ended, Exit.hasInterrupts(exit) ? "interrupted" : "ended another way"),
+          ),
         ),
-      ),
+      handedToConnect,
     );
     const tap = yield* frameTap(address.port);
     const session = yield* connect(tap.url);
@@ -356,6 +399,9 @@ const observeCancel = (row: Outcome) =>
         orElse: () => Effect.succeed<HandlerEnd>("still running"),
       }),
     );
+    const handed = yield* Deferred.await(handedToConnect).pipe(
+      Effect.timeoutOrElse({ duration: "2 seconds", orElse: () => Effect.succeed("nothing") }),
+    );
     const ping = yield* call(session, "Ping");
     session.close();
     yield* tap.allServerFramesSeen;
@@ -366,6 +412,7 @@ const observeCancel = (row: Outcome) =>
       kind: "after the cancel",
       frames: tap.framesOn(cancelledStream),
       handler,
+      handedToConnect: handed,
     } satisfies Sent;
   });
 
@@ -373,7 +420,7 @@ const observe = (row: Outcome): Effect.Effect<Sent, Server.GrpcServerBindError, 
   row.call === "cancels once the handler runs" ?
     observeCancel(row)
   : Effect.gen(function* () {
-      const address = yield* serve(row, row.handler);
+      const address = yield* serve(row, row.handler, yield* Deferred.make<string>());
       const session = yield* connect(address.url);
       const reply = yield* call(
         session,

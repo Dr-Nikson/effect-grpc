@@ -490,6 +490,40 @@ describe("GrpcServer while it serves", () => {
       ]);
     }).pipe(Effect.scoped, Effect.runPromise));
 
+  it("applies two chained context transformers in order, each with the call's HandlerContext", () =>
+    Effect.gen(function* () {
+      const contextsSeen: Array<Array<string>> = [];
+      const chained = Server.GrpcServerBuilder()
+        .withContextTransformer((handlerContext) =>
+          Effect.succeed([`first saw ${handlerContext.method.name}`]),
+        )
+        .withContextTransformer((handlerContext, steps) =>
+          Effect.succeed([...steps, `second saw ${handlerContext.protocolName}`]),
+        )
+        .withService(
+          Server.GrpcService(
+            "effect_grpc_test.PingService",
+            PingService,
+          )((executor: Server.ServerExecutor<Array<string>>) => ({
+            ping: (request, context) =>
+              executor.unary("effect_grpc_test.PingService/Ping", request, context, (_, steps) =>
+                Effect.sync(() => {
+                  contextsSeen.push(steps);
+                  return {};
+                }),
+              ),
+          })),
+        )
+        .build();
+
+      const address = yield* chained.listen({ host: "127.0.0.1", port: 0 });
+      yield* ping(address);
+
+      expect(contextsSeen, "the context the handler received").toEqual([
+        ["first saw Ping", "second saw grpc"],
+      ]);
+    }).pipe(Effect.scoped, Effect.runPromise));
+
   it("writes nothing to the console for a call, a rejected HTTP/1.1 client, a closed connection or a shutdown", () =>
     Effect.gen(function* () {
       const consoleCalls = (["debug", "error", "info", "log", "warn"] as const).map((method) =>
