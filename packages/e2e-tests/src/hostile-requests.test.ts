@@ -1,9 +1,9 @@
 // packages/e2e-tests/src/hostile-requests.test.ts
-import { Cause, Effect, Exit, Layer } from "effect";
+import { Cause, Effect, Exit, Layer, Option } from "effect";
 import http2 from "node:http2";
 import net from "node:net";
 
-import type { Client, HandlerContext } from "@connectrpc/connect";
+import type { Client, HandlerContext, ServiceImpl, Transport } from "@connectrpc/connect";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import {
   Http2SessionManager,
@@ -12,6 +12,7 @@ import {
   createGrpcTransport,
   createGrpcWebTransport,
 } from "@connectrpc/connect-node";
+import { createWritableIterable } from "@connectrpc/connect/protocol";
 import { EffectGrpcClient, EffectGrpcServer } from "@dr_nikson/effect-grpc";
 import { describe, expect, it } from "@effect/vitest";
 
@@ -19,6 +20,7 @@ import * as effectProto from "./generated/com/example/v1/hello_world_api_effect.
 import * as raw from "./raw-unary.js";
 import fixtures from "./fixtures/hostile-requests.json" with { type: "json" };
 import { HelloWorldAPI } from "./generated/com/example/v1/hello_world_api_pb.js";
+import { StreamingTestService } from "./generated/com/example/v1/streaming_test_service_pb.js";
 import { Port, PortLive } from "./test-fixtures.js";
 
 type Repeated = { readonly repeat: string; readonly times: number };
@@ -159,6 +161,118 @@ const expectInvalidAuthority = (
       `${name} over Connect`,
     ).toEqual({ httpStatus: 400, connectCode: "invalid_argument" });
   });
+
+const streamingTestService: ServiceImpl<typeof StreamingTestService> = {
+  unary: (request) => ({ data: `unary ${request.data.length}` }),
+  serverStream: async function* (request) {
+    yield { data: `server ${request.data.length}` };
+    yield { data: `server ${request.data.length}` };
+  },
+  clientStream: async (requests) => {
+    let count = 0;
+    let length = 0;
+    for await (const request of requests) {
+      count += 1;
+      length += request.data.length;
+    }
+    return { data: `client ${count} ${length}` };
+  },
+  bidi: async function* (requests) {
+    for await (const request of requests) yield { data: `bidi ${request.data.length}` };
+  },
+};
+
+const serveStreaming = Effect.gen(function* () {
+  const port = yield* Port;
+  const service = EffectGrpcServer.GrpcService(
+    "StreamingTestService",
+    StreamingTestService,
+  )(() => streamingTestService);
+  const server = EffectGrpcServer.GrpcServerBuilder().withService(service).build();
+  yield* Effect.forkScoped(server.run({ host: "127.0.0.1", port }));
+  yield* Effect.sleep("1 second");
+  return port;
+});
+
+class RecordingSessionManager extends Http2SessionManager {
+  readonly sessions = new Set<http2.ClientHttp2Stream["session"]>();
+
+  override async request(
+    ...args: Parameters<Http2SessionManager["request"]>
+  ): Promise<http2.ClientHttp2Stream> {
+    const stream = await super.request(...args);
+    this.sessions.add(stream.session);
+    return stream;
+  }
+}
+
+const recordingSessionTo = (baseUrl: string) =>
+  Effect.acquireRelease(
+    Effect.sync(() => new RecordingSessionManager(baseUrl)),
+    (sessionManager) => Effect.sync(() => sessionManager.abort()),
+  );
+
+type Chunk = { readonly data: string };
+type StreamingCall = (typeof fixtures.streamingClient.calls)[number];
+
+async function* streamOf(chunks: ReadonlyArray<Chunk>): AsyncIterable<Chunk> {
+  yield* chunks;
+}
+
+const pingPong = async (
+  client: Client<typeof StreamingTestService>,
+  chunks: ReadonlyArray<Chunk>,
+  signal: AbortSignal,
+  replies: Array<string>,
+) => {
+  const requests = createWritableIterable<Chunk>();
+  const responses = client.bidi(requests, { signal })[Symbol.asyncIterator]();
+  try {
+    for (const chunk of chunks) {
+      await requests.write(chunk);
+      const response = await responses.next();
+      if (response.done === true) return;
+      replies.push(response.value.data);
+    }
+  } finally {
+    requests.close();
+  }
+  let response = await responses.next();
+  while (response.done !== true) {
+    replies.push(response.value.data);
+    response = await responses.next();
+  }
+};
+
+const streamingAnswerOf = (
+  client: Client<typeof StreamingTestService>,
+  { method, messages }: StreamingCall,
+) =>
+  Effect.promise(async (signal) => {
+    const { oversized, normal } = fixtures.streamingClient;
+    const chunks = messages.map((message) => ({
+      data: message === "oversized" ? expand(oversized) : normal,
+    }));
+    const first = Option.getOrThrow(Option.fromNullable(chunks[0]));
+    const replies: Array<string> = [];
+    const collect = async (responses: AsyncIterable<Chunk>) => {
+      for await (const response of responses) replies.push(response.data);
+    };
+    try {
+      if (method === "unary") replies.push((await client.unary(first, { signal })).data);
+      else if (method === "serverStream") await collect(client.serverStream(first, { signal }));
+      else if (method === "clientStream")
+        replies.push((await client.clientStream(streamOf(chunks), { signal })).data);
+      else if (method === "bidi") await collect(client.bidi(streamOf(chunks), { signal }));
+      else await pingPong(client, chunks, signal, replies);
+    } catch (error) {
+      replies.push(Code[ConnectError.from(error).code]);
+    }
+    return replies;
+  }).pipe(
+    Effect.timeout("10 seconds"),
+    Effect.catchTag("TimeoutException", () => Effect.succeed(["no answer within 10 seconds"])),
+  );
 
 describe("Hostile requests (issue #61)", () => {
   it.scopedLive("reads each served authority as the host the fixture names", () =>
@@ -362,5 +476,49 @@ describe("Hostile requests (issue #61)", () => {
         generatedClient: expected,
       });
     }).pipe(Effect.provide(PortLive)),
+  );
+
+  it.scopedLive(
+    "keeps a long-lived client usable after oversized messages to every method kind",
+    () =>
+      Effect.gen(function* () {
+        const port = yield* serveStreaming;
+        const baseUrl = `http://127.0.0.1:${port}`;
+        const sessions = {
+          grpc: yield* recordingSessionTo(baseUrl),
+          grpcWeb: yield* recordingSessionTo(baseUrl),
+          connect: yield* recordingSessionTo(baseUrl),
+        };
+        const answersOver = (transport: Transport) => {
+          const client = createClient(StreamingTestService, transport);
+          return Effect.forEach(fixtures.streamingClient.calls, (call) =>
+            streamingAnswerOf(client, call),
+          );
+        };
+        const answers = {
+          grpc: yield* answersOver(createGrpcTransport({ baseUrl, sessionManager: sessions.grpc })),
+          grpcWeb: yield* answersOver(
+            createGrpcWebTransport({ baseUrl, httpVersion: "2", sessionManager: sessions.grpcWeb }),
+          ),
+          connect: yield* answersOver(
+            createConnectTransport({ baseUrl, httpVersion: "2", sessionManager: sessions.connect }),
+          ),
+        };
+
+        const expected = fixtures.streamingClient.calls.map(({ answer }) => answer);
+        expect(answers, "each call's answer, one client connection per protocol").toEqual({
+          grpc: expected,
+          grpcWeb: expected,
+          connect: expected,
+        });
+        expect(
+          {
+            grpc: sessions.grpc.sessions.size,
+            grpcWeb: sessions.grpcWeb.sessions.size,
+            connect: sessions.connect.sessions.size,
+          },
+          "HTTP/2 connections each protocol's client used",
+        ).toEqual({ grpc: 1, grpcWeb: 1, connect: 1 });
+      }).pipe(Effect.provide(PortLive)),
   );
 });

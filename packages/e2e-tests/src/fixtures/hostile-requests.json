@@ -76,5 +76,32 @@
     "case": "one client connection that sends messages of three times the limit between normal calls",
     "nameOversized": { "repeat": "x", "times": 12582912 },
     "calls": ["oversized", "normal", "oversized", "normal", "normal", "oversized", "normal"]
+  },
+  "streamingClient": {
+    "case": "one client connection per protocol that sends messages of three times the limit to each method kind between normal calls, including a bidi client that waits for each reply before it writes again",
+    "oversized": { "repeat": "x", "times": 12582912 },
+    "normal": "next",
+    "calls": [
+      { "method": "clientStream", "messages": ["oversized"], "answer": ["ResourceExhausted"] },
+      { "method": "unary", "messages": ["normal"], "answer": ["unary 4"] },
+      { "method": "clientStream", "messages": ["normal", "normal"], "answer": ["client 2 8"] },
+      { "method": "bidi", "messages": ["oversized"], "answer": ["ResourceExhausted"] },
+      { "method": "bidi", "messages": ["normal", "normal"], "answer": ["bidi 4", "bidi 4"] },
+      { "method": "pingPong", "messages": ["normal", "oversized"], "answer": ["bidi 4", "ResourceExhausted"] },
+      { "method": "pingPong", "messages": ["normal", "normal"], "answer": ["bidi 4", "bidi 4"] },
+      { "method": "serverStream", "messages": ["oversized"], "answer": ["ResourceExhausted"] },
+      { "method": "serverStream", "messages": ["normal"], "answer": ["server 4", "server 4"] },
+      {
+        "method": "clientStream",
+        "messages": ["normal", "oversized", "normal"],
+        "answer": ["ResourceExhausted"]
+      },
+      {
+        "method": "bidi",
+        "messages": ["normal", "oversized", "normal"],
+        "answer": ["bidi 4", "ResourceExhausted"]
+      },
+      { "method": "unary", "messages": ["normal"], "answer": ["unary 4"] }
+    ]
   }
 }
