@@ -31,6 +31,5 @@ Preconditions:
 
 - `cli-example` fails on the base recorded in SKILL.md before any network call. It stops with `TypeError: effectProto.HelloWorldAPIClientTag is not a function`, because `client.ts` calls the typed-tag factory (see `gen-typed-tags` in [codegen.md](./codegen.md)). The server-log section stays empty.
 - On a base without the fix for issue #61, `cli-ipv6` stops the server: the probe gets `[aborted] read ECONNRESET`, and the server log shows `TypeError: Invalid URL` with base `http://::1:<port>` (see `srv-hostile-authority` in [server-lifecycle.md](./server-lifecycle.md)).
-- After each probe, the server log shows `ERR_HTTP2_SESSION_ERROR: Session closed with error code 8` when the probe's HTTP/2 session closes, and a later doctor WARNs about those lines. They break no pass condition.
 - The probe imports the compiled `packages/example/dist/generated` module and the built library. After you change client code, run `.claude/skills/verify/scripts/control-example build`. `.claude/skills/verify/scripts/control-example doctor` reports a stale `dist/`.
 - The probe prints the library's `ManagedSessionManager is being released...` log before its result. The result is always the last stdout line.

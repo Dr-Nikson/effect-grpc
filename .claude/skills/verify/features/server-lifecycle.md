@@ -1,13 +1,14 @@
 # Server lifecycle
 
-A user builds a server with `EffectGrpcServer.GrpcServerBuilder().withService(…).build()` and calls `listen({ host, port })`, which returns the address the server bound. The server logs when it is ready, serves gRPC and Connect over cleartext HTTP/2, survives hostile requests, fails fast when its port is taken, and shuts down gracefully on SIGTERM or Ctrl+C.
+A user builds a server with `EffectGrpcServer.GrpcServerBuilder().withService(…).build()` and calls `listen({ host, port })`, which returns the address the server bound. The server logs when it is ready, serves gRPC and Connect over cleartext HTTP/2, answers an HTTP/2 CONNECT request with 405, survives hostile requests, fails fast when its port is taken, and shuts down gracefully on SIGTERM or Ctrl+C. It writes nothing to the console for the calls, connections and streams it serves.
 
 ## Sub-features
 
 - `srv-ready` logs `gRPC server listening on http://<host>:<port>` with the port it bound, which for port 0 is the port the OS picked, and brackets an IPv6 host, as in `http://[::1]:<port>`. Then it answers RPCs on that port.
 - `srv-taken-port` exits within a few seconds when its port is taken, with an error that names `EADDRINUSE` and the reason `AddressInUse`, and the server that holds the port keeps serving.
-- `srv-h2c` accepts only HTTP/2 with prior knowledge, and rejects HTTP/1.1 clients.
+- `srv-h2c` accepts only HTTP/2 with prior knowledge, and rejects HTTP/1.1 clients without writing a log line.
 - `srv-unknown` answers an unknown method with HTTP 404 over Connect.
+- `srv-connect` answers an HTTP/2 CONNECT request with 405 and ends that stream, and the server keeps serving.
 - `srv-shutdown` responds to SIGTERM: it logs `gRPC server is stopping...` and then `gRPC server stopped`, exits with code 0, and frees its port.
 - `srv-hostile-authority` serves a request whose `:authority` is an IPv6 address and a port without brackets, the form Node's HTTP/2 client sends for `http://[::1]:<port>`. It answers an authority that it still cannot parse with `INVALID_ARGUMENT`, and it keeps running after every case, including a 10 KiB authority.
 - `srv-message-limit` serves a request message of exactly 4 MiB, answers a larger one with `RESOURCE_EXHAUSTED`, and keeps running. A client that keeps one connection open keeps getting its normal answers after its oversized messages are refused.
@@ -25,8 +26,9 @@ Preconditions:
 
 - **Launch.** Run `.claude/skills/verify/scripts/control-example launch`. It prints `launched: pid=<pid> port=<port> listening on: 127.0.0.1`, where `<port>` is the port the OS picked. The evidence `server.log` has the ready line `gRPC server listening on http://127.0.0.1:<port>` with the same port, and `01-readiness.txt` shows `port=<port>`, `http_status=200`, the greeting for `readiness-probe`, and its `getGreeting called` handler line.
 - **Doctor.** Run `.claude/skills/verify/scripts/control-example doctor`. Every line is OK, and the port is reported as ours, listening on `127.0.0.1`.
-- **HTTP/1.1 rejected.** Run `.claude/skills/verify/scripts/control-example call http1 GetGreeting`. The result is `exit_code=1`, `http_status=000` and `curl: (1) Received HTTP/0.9 when not allowed`. The log section shows `Received bad client magic byte string`. A second doctor still reports the instance alive, with one WARN for those error lines.
+- **HTTP/1.1 rejected.** Run `.claude/skills/verify/scripts/control-example call http1 GetGreeting`. The result is `exit_code=1`, `http_status=000` and `curl: (1) Received HTTP/0.9 when not allowed`. The server-log section is empty, because the server writes nothing for a client it rejects. A second doctor reports the instance alive, with no WARN.
 - **Unknown method.** Run `.claude/skills/verify/scripts/control-example call connect Nope '{}'`. The result is `http_status=404` with an empty body.
+- **CONNECT.** Run `.claude/skills/verify/scripts/control-example connect-method`. It sends an HTTP/2 CONNECT request with Node's HTTP/2 client. Pass: `verdict=PASS`, `server_alive_after=yes`, a first check line with `"httpStatus":405` and `"headersEndedStream":true`, and then a normal call over gRPC and over Connect that returns the greeting. The server-log section holds only the two handler lines of those calls.
 - **Message limit.** Run `.claude/skills/verify/scripts/control-example message-limit`. It sends the messages in `packages/e2e-tests/src/fixtures/hostile-requests.json`, first with Node's HTTP/2 client and then with one long-lived connect-node client for each of gRPC, gRPC-web and Connect, and one generated Effect client. Pass: `verdict=PASS`, `server_alive_after=yes`, and a last check line of `{"verdict":"PASS","checks":34,"failed":0}`. The check lines show a 4 MiB message served, a 4 MiB + 1 byte message answered with `"grpcStatus":"8"`, a 5 MiB message answered with `"grpcStatus":"8"` over gRPC and with `"httpStatus":429` and `"connectCode":"resource_exhausted"` over Connect, and a normal call over each protocol afterwards. Then each long-lived client gets `"code":8` for every oversized call and its greeting for every normal call.
 - **Taken port.** Run `.claude/skills/verify/scripts/control-example taken-port`. It starts a second `node dist/server.js` on the instance's host and port. Pass: `verdict=PASS`, a non-zero `second_exit_code` other than 124 or 137, `second_elapsed_ms` under 5000, stderr or stdout naming `EADDRINUSE` and `AddressInUse`, `instance_alive_after=yes`, and a `taken-port-after` call with `http_status=200`.
 - **Shutdown.** Run `.claude/skills/verify/scripts/control-example stop`. The evidence shows `graceful=yes`, `exit_code=0`, `port=<port>`, an empty `port_listeners_after=`, and both shutdown log lines.
@@ -41,5 +43,5 @@ Preconditions:
 - Each checkout runs one instance. `launch` lets the OS pick a free port. With `--port`, it refuses when anything listens on that port. Never stop someone else's process to make room. Launch without `--port` instead.
 - On a base without the fix for issue #57, the second server in `taken-port` never gives up on the taken port. It logs `Server error Error: listen EADDRINUSE` and keeps running until `timeout` stops it, so the evidence shows `second_exit_code=124` or `137` and `verdict=FAIL`.
 - The example binds `127.0.0.1` unless it was launched with `--host ::1`. Direct clients dial the address that the instance reports.
-- The server logs every TCP connection, HTTP/2 session and stream. The helper hides those lines on the terminal and keeps them in evidence. They are not errors.
+- The server writes no line for a connection, an HTTP/2 session, a stream or a request. A server-log section that holds only the handler's lines is the expected result, and any other line there is a regression.
 - If launch fails at once with `ERR_PACKAGE_PATH_NOT_EXPORTED … './RunnerStorage'`, the stale-peer problem in SKILL.md (Launch) is back.

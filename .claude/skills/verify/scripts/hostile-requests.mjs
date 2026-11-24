@@ -21,7 +21,7 @@ import {
 } from "./dist/generated/com/example/v1/hello_world_api_pb.js";
 
 const { HOSTILE_URL: url, HOSTILE_FIXTURES: fixturesPath, HOSTILE_MODE: mode } = process.env;
-if (!url || !fixturesPath || !["authority", "message-limit"].includes(mode)) {
+if (!url || !fixturesPath || !["authority", "message-limit", "connect-method"].includes(mode)) {
   throw new Error(
     "set HOSTILE_URL, HOSTILE_FIXTURES and HOSTILE_MODE; run this file through control-example",
   );
@@ -84,6 +84,24 @@ const call = (protocol, authority, name) =>
     stream.on("error", () => {});
     const message = toBinary(GetGreetingRequestSchema, create(GetGreetingRequestSchema, { name }));
     stream.end(protocol === "grpc" ? envelope(message) : JSON.stringify({ name }));
+  });
+
+const connectRequest = () =>
+  new Promise((resolve) => {
+    const reply = { httpStatus: undefined, headersEndedStream: false };
+    const stream = session.request({ ":method": "CONNECT", ":authority": new URL(url).host });
+    const finish = () => {
+      clearTimeout(timer);
+      stream.close(http2.constants.NGHTTP2_CANCEL);
+      resolve(reply);
+    };
+    const timer = setTimeout(finish, 3000);
+    stream.on("response", (h, flags) => {
+      reply.httpStatus = h[":status"];
+      reply.headersEndedStream = (flags & http2.constants.NGHTTP2_FLAG_END_STREAM) !== 0;
+      finish();
+    });
+    stream.on("error", () => {});
   });
 
 const results = [];
@@ -180,6 +198,14 @@ if (mode === "authority") {
     );
   }
   await expectServing("an empty authority");
+} else if (mode === "connect-method") {
+  const reply = await connectRequest();
+  check(
+    "a CONNECT request gets 405 and its response ends the stream",
+    reply.httpStatus === 405 && reply.headersEndedStream,
+    reply,
+  );
+  await expectServing("a CONNECT request");
 } else {
   const { nameAtLimit, nameJustOverLimit, nameOverLimit } = fixtures.messageLimit;
   const atLimit = expand(nameAtLimit);
