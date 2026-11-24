@@ -59,9 +59,10 @@ const call = (
   authority: string,
   name = "hostile",
   contentType?: string,
+  authorityHeader?: ":authority" | "host",
 ) =>
   raw
-    .getGreeting(session, protocol, authority, name, contentType)
+    .getGreeting(session, protocol, authority, name, contentType, authorityHeader)
     .pipe(Effect.timeout("5 seconds"));
 
 const expectServing = (session: http2.ClientHttp2Session, port: number) =>
@@ -76,10 +77,11 @@ const expectInvalidAuthority = (
   session: http2.ClientHttp2Session,
   authority: string,
   name: string,
+  authorityHeader: ":authority" | "host" = ":authority",
 ) =>
   Effect.gen(function* () {
     for (const contentType of fixtures.grpcContentTypes) {
-      const grpc = yield* call(session, "grpc", authority, "hostile", contentType);
+      const grpc = yield* call(session, "grpc", authority, "hostile", contentType, authorityHeader);
       expect(
         {
           httpStatus: grpc.httpStatus,
@@ -96,7 +98,14 @@ const expectInvalidAuthority = (
       });
     }
 
-    const connect = yield* call(session, "connect", authority);
+    const connect = yield* call(
+      session,
+      "connect",
+      authority,
+      "hostile",
+      undefined,
+      authorityHeader,
+    );
     expect(
       { httpStatus: connect.httpStatus, connectCode: connect.connectCode },
       `${name} over Connect`,
@@ -145,6 +154,24 @@ describe("Hostile requests (issue #61)", () => {
 
       for (const { case: name, authority } of fixtures.rejectedAuthorities) {
         yield* expectInvalidAuthority(session, authority, name);
+        yield* expectServing(session, port);
+      }
+    }).pipe(Effect.provide(PortLive)),
+  );
+
+  it.scopedLive("reads the authority from host when :authority is absent", () =>
+    Effect.gen(function* () {
+      const port = yield* serve("127.0.0.1");
+      const session = yield* raw.connect(`http://127.0.0.1:${port}`);
+
+      for (const { case: name, authority, urlHost } of fixtures.servedAuthorities) {
+        for (const protocol of raw.protocols) {
+          const reply = yield* call(session, protocol, authority, "hostile", undefined, "host");
+          expect(reply.greeting, `${name} in host over ${protocol}`).toBe(urlHost);
+        }
+      }
+      for (const { case: name, authority } of fixtures.rejectedAuthorities) {
+        yield* expectInvalidAuthority(session, authority, `${name} in host`, "host");
         yield* expectServing(session, port);
       }
     }).pipe(Effect.provide(PortLive)),
