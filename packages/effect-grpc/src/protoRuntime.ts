@@ -92,8 +92,6 @@ export interface ServerExecutor<Ctx> {
 }
 /**
  * @internal
- * The executor of a listening server. `transformCtx` makes each call's context from its
- * `HandlerContext`, and runs inside the call's span.
  */
 export const ServerExecutor: {
   <Ctx>(

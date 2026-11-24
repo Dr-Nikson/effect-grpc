@@ -31,8 +31,8 @@ const headerGetter: TextMapGetter<Headers> = {
 const propagator = new W3CTraceContextPropagator();
 
 /**
- * The name the log annotations and the span give each protocol, and its OpenTelemetry `rpc.system`,
- * by `HandlerContext.protocolName`. OpenTelemetry names gRPC-web `grpc` too.
+ * OpenTelemetry's `rpc.system` values include `grpc` and `connect_rpc` and none for gRPC-web, so a
+ * gRPC-web call reports `grpc`, and its `protocol` attribute tells it apart.
  */
 const protocols: Record.ReadonlyRecord<
   string,
@@ -59,8 +59,7 @@ const abortedCallError = (reason: unknown): ConnectError =>
 
 /**
  * Effect 4 turns each typed failure of a cause into a defect once the cause also holds a defect, as
- * when a finalizer dies, and the failure keeps its place ahead of the finalizer's defect. A cause of
- * defects alone that starts with a GrpcException is such a failure. A lone defect never was one.
+ * when a finalizer dies, and the failure keeps its place ahead of the finalizer's defect.
  */
 const failureTurnedDefect = (
   cause: Cause.Cause<GrpcException.GrpcException>,
@@ -72,11 +71,6 @@ const failureTurnedDefect = (
     )
   : Option.none();
 
-/**
- * The status the server sends for a failed call. An interruption caused by the call's deadline or
- * by the client comes first, then the handler's typed failure, then a defect, whose content never
- * reaches the client.
- */
 const causeToConnectError = (
   cause: Cause.Cause<GrpcException.GrpcException>,
   signal: AbortSignal,
@@ -102,25 +96,6 @@ const causeToConnectError = (
   );
 };
 
-/**
- * Extract W3C Trace Context from incoming gRPC request headers.
- *
- * Uses OpenTelemetry's W3CTraceContextPropagator to properly parse the `traceparent` and
- * `tracestate` headers according to the W3C Trace Context specification. When valid trace
- * context is found, it creates an ExternalSpan that will be used as the parent for the
- * server-side span, enabling distributed tracing.
- *
- * We use `ROOT_CONTEXT` (not `context.active()`) because:
- * 1. Each incoming gRPC request should start with a fresh context
- * 2. We don't want to inherit any ambient context from the Node.js process
- * 3. The only parent context should come from the incoming request headers
- *
- * The extracted OTel span context is then converted to Effect's ExternalSpan format
- * so it can be used with Effect's tracing system via `Effect.withSpan({ parent: ... })`.
- *
- * @param ctx - The gRPC handler context containing request headers
- * @returns Option.Some with the extracted ExternalSpan, or Option.None if no valid context
- */
 const extractTraceContext = (ctx: HandlerContext): Option.Option<ExternalSpan> =>
   Option.fromNullishOr(
     trace.getSpanContext(propagator.extract(ROOT_CONTEXT, ctx.requestHeader, headerGetter)),

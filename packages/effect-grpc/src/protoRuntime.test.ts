@@ -35,10 +35,6 @@ type Sent =
       readonly kind: "after the cancel";
       readonly frames: ReadonlyArray<string>;
       readonly handler: HandlerEnd;
-      /**
-       * The status of the error the executor hands Connect to send. The cancelled stream carries
-       * nothing more, so this is the only place the server's status for a cancel shows.
-       */
       readonly handedToConnect: string;
     };
 
@@ -59,12 +55,6 @@ const status = (code: Code, message: string): Sent => ({
   message,
 });
 
-/**
- * A call gets one status. A deadline or a client cancel that interrupts the handler gives its own
- * status, even when a finalizer dies. Otherwise the first typed failure gives its status, also when
- * a finalizer dies after it, although Effect 4 then reports the failure as a defect. Any other defect
- * gives Internal with a fixed message.
- */
 const outcomes: ReadonlyArray<Outcome> = [
   {
     outcome: "a typed failure",
@@ -136,6 +126,15 @@ const outcomes: ReadonlyArray<Outcome> = [
     call: "waits for the reply",
     handler: () => Effect.die(GrpcException.create(Code.NotFound, "typed failure")),
     sends: status(Code.Internal, "Internal server error"),
+  },
+  {
+    outcome: "a defect that is a GrpcException with a dying finalizer",
+    call: "waits for the reply",
+    handler: () =>
+      Effect.die(GrpcException.create(Code.NotFound, "typed failure")).pipe(
+        Effect.ensuring(Effect.die(new Error("the finalizer died"))),
+      ),
+    sends: status(Code.NotFound, "typed failure"),
   },
   {
     outcome: "a throw inside a context transformer",
