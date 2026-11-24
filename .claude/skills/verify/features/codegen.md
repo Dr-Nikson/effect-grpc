@@ -30,6 +30,6 @@ Preconditions:
 
 ## Gotchas
 
-- A `typeof` check proves nothing about these tags. On Effect 4 every tag is a function, working or broken, and on Effect 3 a working tag is an object. The check uses each tag instead: it builds a layer with it and resolves it from a Context.
+- A `typeof` check proves nothing about these tags. On Effect 4 every tag is a function, working or broken. The check uses each tag instead: it builds a layer with it and resolves it from a Context.
 - After you edit `packages/effect-grpc/src/protocGenPlugin.ts`, regenerate through `.claude/skills/verify/scripts/control-example codegen` or `.claude/skills/verify/scripts/control-example build`. Both rebuild the library first, and both delete `packages/example/src/generated` before buf runs. buf 1.67 and later do not rewrite a file whose content did not change, so its modification time stays old. Running `pnpm run generate:proto` alone uses the old plugin build, and it leaves such files older than the plugin source. With an instance running, `.claude/skills/verify/scripts/control-example doctor` reports that as generated code that is older than the plugin source. Without one, `.claude/skills/verify/scripts/control-example launch` refuses with the same `STALE codegen` line.
 - `src/generated/` is gitignored, so regenerating never shows in `git status`. Use the evidence file as the record.
