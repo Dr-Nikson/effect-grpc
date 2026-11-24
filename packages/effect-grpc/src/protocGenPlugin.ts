@@ -123,7 +123,7 @@ function generateEffectService(
   f.print(" *");
   f.print(" * This function takes your service implementation and wraps it in a Layer that can be");
   f.print(" * composed with other layers to build your application. The returned function accepts");
-  f.print(" * a Context.Tag to identify the service in the Effect context.");
+  f.print(" * a tag to identify the service in the Effect context.");
   f.print(" *");
   f.print(" * @typeParam Ctx - The context type used by your service implementation");
   f.print(" *");
@@ -191,7 +191,7 @@ function generateEffectService(
   f.print();
 
   f.print("/**");
-  f.print(" * Type alias for the service Context.Tag.");
+  f.print(" * Type alias for the service tag.");
   f.print(" *");
   f.print(" * Used to identify and retrieve the service from the Effect context.");
   f.print(" *");
@@ -204,7 +204,7 @@ function generateEffectService(
     "<Ctx = any>",
     " = ",
     importContext,
-    ".Tag<",
+    ".Service<",
     grpcServiceSymbol,
     "<Ctx>, ",
     grpcServiceSymbol,
@@ -249,7 +249,7 @@ function generateEffectService(
     serviceTagSymbol,
     " = ",
     importContext,
-    ".GenericTag<",
+    ".Service<",
     grpcServiceSymbol,
     ">(`${",
     serviceIdSymbol,
@@ -301,7 +301,7 @@ function generateEffectService(
   f.print(
     "  return ",
     importContext,
-    ".GenericTag<",
+    ".Service<",
     grpcServiceSymbol,
     "<Ctx>>(`${",
     serviceIdSymbol,
@@ -396,7 +396,7 @@ function generateEffectService(
   f.print();
 
   f.print("/**");
-  f.print(" * Type alias for the client Context.Tag.");
+  f.print(" * Type alias for the client tag.");
   f.print(" *");
   f.print(" * Used to identify and retrieve the client from the Effect context.");
   f.print(" *");
@@ -409,7 +409,7 @@ function generateEffectService(
     "<Meta = any>",
     " = ",
     importContext,
-    ".Tag<",
+    ".Service<",
     clientSymbol,
     "<Meta>, ",
     clientSymbol,
@@ -462,7 +462,7 @@ function generateEffectService(
     clientTagSymbol,
     " = ",
     importContext,
-    ".GenericTag<",
+    ".Service<",
     clientSymbol,
     "<any>>(`${",
     serviceIdSymbol,
@@ -521,7 +521,7 @@ function generateEffectService(
   f.print(
     "  return ",
     importContext,
-    ".GenericTag<",
+    ".Service<",
     clientSymbol,
     "<Meta>>(`${",
     serviceIdSymbol,
@@ -626,7 +626,7 @@ function generateEffectService(
   f.print();
 
   f.print("/**");
-  f.print(" * Type alias for the client configuration Context.Tag.");
+  f.print(" * Type alias for the client configuration tag.");
   f.print(" *");
   f.print(" * This tag provides the configuration required by the gRPC client,");
   f.print(" * such as the server URL and connection options.");
@@ -637,7 +637,7 @@ function generateEffectService(
     f.export("type", configTagSymbol),
     " = ",
     importContext,
-    ".Tag<",
+    ".Service<",
     importEffectGrpcClient,
     ".GrpcClientConfig<",
     serviceIdSymbol,
@@ -650,7 +650,7 @@ function generateEffectService(
   f.print();
 
   f.print("/**");
-  f.print(" * Context.Tag for the ", service.name, " client configuration.");
+  f.print(" * Tag for the ", service.name, " client configuration.");
   f.print(" *");
   f.print(" * This tag is used to provide the gRPC client configuration, which includes:");
   f.print(' * - baseUrl: The URL of the gRPC server (e.g., "http://localhost:50051")');
@@ -733,7 +733,7 @@ function generateEffectService(
   f.print("    } as ", clientSymbol, "<Meta>;");
   f.print("  });");
   f.print();
-  f.print("  return ", importLayer, ".scoped(tag, prog);");
+  f.print("  return ", importLayer, ".effect(tag, prog);");
   f.print();
   f.print("  function isDefaultMetaArguments(args: unknown): args is readonly [Tag] {");
   f.print("    return Array.isArray(args) && args.length === 1;");
