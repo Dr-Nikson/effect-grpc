@@ -15,7 +15,6 @@ function generateTs(schema: Schema<object>): void {
     const f = schema.generateFile(file.name + "_effect.ts");
     f.preamble(file);
 
-    // Add Effect imports (namespace imports from submodules)
     const effectImports = {
       Context: safeIdentifier("Context"),
       Effect: safeIdentifier("Effect"),
@@ -26,7 +25,6 @@ function generateTs(schema: Schema<object>): void {
     f.print("import * as ", effectImports.Layer, ' from "effect/Layer";');
     f.print();
 
-    // Extract basename from file path for import examples
     const fileBasename = file.name.split("/").pop() || file.name;
     file.services.forEach((service) =>
       generateEffectService(f, service, fileBasename, effectImports),
@@ -55,14 +53,12 @@ function generateEffectService(
   fileBasename: string,
   effectImports: EffectImports,
 ): void {
-  // Effect imports are added manually as namespace imports in generateTs()
   const { Context: importContext, Effect: importEffect, Layer: importLayer } = effectImports;
   const importEffectGrpcService = f.import("EffectGrpcServer", packageJson.name);
   const importGrpcException = f.import("GrpcException", packageJson.name);
 
   const importService = f.importSchema(service);
 
-  // Use appendSuffixIfNeeded to avoid duplicate suffixes (e.g., "HelloWorldServiceService")
   const serviceName = appendSuffixIfNeeded(service.name, "Service");
   const serviceNameLower = serviceName.charAt(0).toLowerCase() + serviceName.slice(1);
 
@@ -75,7 +71,6 @@ function generateEffectService(
   const makeTagSymbol = safeIdentifier("make" + serviceName + "Tag");
   const makeLiveLayerSymbol = safeIdentifier("make" + serviceName + "LiveLayer");
 
-  // Generate service ID constant with JSDoc
   f.print("/**");
   f.print(" * Unique identifier for the ", service.name, " gRPC service.");
   f.print(" *");
@@ -90,7 +85,6 @@ function generateEffectService(
   f.print(f.export("type", serviceIdSymbol), " = typeof ", serviceIdSymbol, ";");
   f.print();
 
-  // Generate comprehensive JSDoc for service interface
   f.print("/**");
   f.print(" * gRPC service interface.");
   f.print(" *");
@@ -123,7 +117,6 @@ function generateEffectService(
   f.print("}");
   f.print();
 
-  // Generate direct exported layer function with JSDoc
   f.print("/**");
   f.print(" * Creates a Layer that provides a gRPC service implementation.");
   f.print(" *");
@@ -173,7 +166,6 @@ function generateEffectService(
 
   f.print();
 
-  // Generate type aliases with JSDoc
   f.print("/**");
   f.print(" * Type alias for the wrapped gRPC service.");
   f.print(" *");
@@ -219,7 +211,6 @@ function generateEffectService(
   );
   f.print();
 
-  // Generate ServiceTag constant with comprehensive JSDoc
   f.print("/**");
   f.print(" * Context.Tag for identifying the ", service.name, " service implementation.");
   f.print(" *");
@@ -289,7 +280,6 @@ function generateEffectService(
   f.print("}");
 
   f.print();
-  // Generate implementation function
   f.print("function ", makeLiveLayerSymbol, "<Tag extends ", serviceTagSymbol, "<Ctx>, Ctx>(");
   f.print("  tag: Tag,");
   f.print("  service: ", serviceSymbol, "<Ctx>,");
@@ -327,7 +317,6 @@ function generateEffectService(
 
   f.print();
 
-  // Use appendSuffixIfNeeded to avoid duplicate suffixes (e.g., "HelloWorldClientClient")
   const clientName = appendSuffixIfNeeded(service.name, "Client");
   const clientNameLower = clientName.charAt(0).toLowerCase() + clientName.slice(1);
 
@@ -339,7 +328,6 @@ function generateEffectService(
   const makeClientTagSymbol = safeIdentifier("make" + clientName + "Tag");
   const makeClientLiveLayerSymbol = safeIdentifier("make" + clientName + "LiveLayer");
 
-  // Generate comprehensive JSDoc for client interface
   f.print("/**");
   f.print(" * Client interface for making gRPC calls to ", service.name, " service.");
   f.print(" *");
@@ -377,7 +365,6 @@ function generateEffectService(
   f.print("}");
   f.print();
 
-  // Generate ClientTag type with JSDoc
   f.print("/**");
   f.print(" * Type alias for the client Context.Tag.");
   f.print(" *");
@@ -400,7 +387,6 @@ function generateEffectService(
   );
   f.print();
 
-  // Generate ClientTag constant with comprehensive JSDoc
   f.print("/**");
   f.print(" * Context.Tag for identifying the ", service.name, " client.");
   f.print(" *");
@@ -470,7 +456,6 @@ function generateEffectService(
 
   f.print();
 
-  // Generate clientLiveLayer function with comprehensive JSDoc
   f.print("/**");
   f.print(" * Creates a Layer that provides a gRPC client for the ", service.name, " service.");
   f.print(" *");
@@ -565,7 +550,6 @@ function generateEffectService(
   f.print("} = ", makeClientLiveLayerSymbol, ";");
   f.print();
 
-  // Generate ConfigTag type with JSDoc
   f.print("/**");
   f.print(" * Type alias for the client configuration Context.Tag.");
   f.print(" *");
@@ -590,7 +574,6 @@ function generateEffectService(
   );
   f.print();
 
-  // Generate ConfigTag constant with comprehensive JSDoc
   f.print("/**");
   f.print(" * Context.Tag for the ", service.name, " client configuration.");
   f.print(" *");
@@ -627,7 +610,6 @@ function generateEffectService(
 
   f.print();
 
-  // Generate makeClientTag helper function
   f.print(
     "function ",
     makeClientTagSymbol,
@@ -648,7 +630,6 @@ function generateEffectService(
 
   f.print();
 
-  // Generate client implementation function with overload handling
   f.print(
     "function ",
     makeClientLiveLayerSymbol,
@@ -671,7 +652,6 @@ function generateEffectService(
   f.print("    const config = yield* ", configTagSymbol, ";");
   f.print("    const grpcRuntime = yield* ", importEffectGrpcClient, ".GrpcClientRuntime;");
 
-  // Collect method names for makeExecutor
   const methodNames = service.methods
     .filter((method) => method.methodKind === "unary")
     .map((method) => `"${method.localName}"`)
