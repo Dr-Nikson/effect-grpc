@@ -1,0 +1,23 @@
+---
+"@dr_nikson/effect-grpc": major
+---
+
+Run on Effect 4 (#71)
+
+**Breaking.** effect-grpc now needs Effect 4. The peer range of `effect` is `^4.1.5` (it was `^3.19.15`), and the peer range of `@effect/opentelemetry` is `^4.1.5` (it was `^0.61.0`). The package now declares `engines.node` as `>=22.19.0`, which Effect 4's platform packages need. On an older Node.js, npm warns with `EBADENGINE`, and an install fails only when `engine-strict` is set. Move your application to Effect 4 in the same change. Effect's guide is `MIGRATION.md` in the Effect repository.
+
+**Breaking.** Run `buf generate` again. `protoc-gen-effect` now emits Effect 4 code, and code that an earlier version generated does not compile against Effect 4. The generated exports keep their names. Their types change with Effect: a tag is a `Context.Service<...>` where it was a `Context.Tag<...>`. The same holds for `GrpcClientRuntime` and for the result of `GrpcClientConfig.makeTag`. In your own types, `Context.Tag.Service<typeof X>` becomes `Context.Service.Shape<typeof X>`, and `Context.Tag.Identifier<typeof X>` becomes `Context.Service.Identifier<typeof X>`.
+
+What else changes for a user:
+
+- A call whose deadline passes while its handler still runs now gets `Code.Aborted` with the message `Request was canceled` from the server, the status of every interrupted handler. The server sent `Code.Internal` before, with `Unknown error; Request was canceled` five or six times in the message. Only a client that sends a deadline and does not enforce it reads this status. The generated client enforces the deadline itself, and its caller sees `DeadlineExceeded` as before.
+- A handler that runs effects concurrently and fails in one of them now sends that failure's own status. One branch of `Effect.all(..., { concurrency: "unbounded" })` that fails with `NotFound` sends `NotFound`. On Effect 3 the server sent `Code.Internal`, with a message such as `first | Unknown error; Request was canceled`, because the interruption of the other branches was part of the cause. Effect 4 keeps the first failure only.
+- When a handler fails with a `GrpcException` and one of its finalizers dies, the status is still `Code.Internal`, and the message is now `Internal server error; Internal server error`. It was the exception's message followed by `; Internal server error`. Effect 4 reports that failure as a defect, and the server never sends what a defect holds.
+- A handler that fails with a cause it built from several typed failures still gets `Code.Internal`, and the messages are now joined by `; `. Failures combined with `Cause.parallel` were joined by ` | `. Effect 4 has one way to combine causes, `Cause.combine`.
+- A handler that fails or dies leaves no line in the server's log at any level. Effect 3 logged `Fiber terminated with an unhandled error` at DEBUG for it, and Effect 4 has no such line. Log failures in the handler until the library logs failed calls itself (#56).
+- A program started with `NodeRuntime.runMain`, as the README's server is, now exits with code 130 after Ctrl+C or SIGTERM. It exited with code 0 on Effect 3. This is Effect 4's convention for a program that a signal stopped. Pass `teardown` to `runMain` to choose another code.
+- Effect 4 shares a layer across nested `Effect.provide` calls. A handler that provides a layer the application also provided above `listen` now gets the application's instance, where Effect 3 built a new one for each call. Wrap the layer in `Layer.fresh`, or pass `{ local: true }` to `Effect.provide`, for one instance per call.
+- `@effect/opentelemetry` 4 makes the OpenTelemetry SDK packages optional peers, so an application that does not export traces no longer installs them. effect-grpc loads only the `OtelTracer` module of `@effect/opentelemetry`, which needs `@opentelemetry/api` alone. To export traces, install the SDK packages yourself and import the SDK layer from its own module, `import * as NodeSdk from "@effect/opentelemetry/NodeSdk"`. The package root no longer exports it. `@effect/opentelemetry` 4.1 works with the 2.x line of the SDK, which is 0.2xx for the logs packages, and the README gives the install lines.
+- A typed call of a generated tag constant, such as `HelloWorldAPIClientTag<Meta>("key")`, still does not compile. In untyped JavaScript the same call now returns `undefined`, where it threw a `TypeError` on Effect 3. Make a typed tag with `makeHelloWorldAPIClientTag<Meta>("key")`.
+
+The `version` field of the package changes from `3.0.0-alpha.5` to `3.0.0` with this change. It is the base that the release tooling computes `4.0.0-alpha.0` from, and no `3.0.0` is published.
