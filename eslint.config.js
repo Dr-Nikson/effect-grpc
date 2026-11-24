@@ -2,6 +2,28 @@ import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 import eslintConfigPrettier from "eslint-config-prettier";
 
+const requireInternalTag = {
+  meta: {
+    type: "problem",
+    schema: [],
+    messages: {
+      missing: "An export of a *.internal.ts file needs a JSDoc comment with an @internal tag.",
+    },
+  },
+  create(context) {
+    return {
+      ExportNamedDeclaration(node) {
+        const jsdoc = context.sourceCode
+          .getCommentsBefore(node)
+          .findLast((comment) => comment.type === "Block" && comment.value.startsWith("*"));
+        if (jsdoc === undefined || !jsdoc.value.includes("@internal")) {
+          context.report({ node, messageId: "missing" });
+        }
+      },
+    };
+  },
+};
+
 export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -40,6 +62,11 @@ export default tseslint.config(
     rules: {
       "@typescript-eslint/explicit-function-return-type": "off",
     },
+  },
+  {
+    files: ["packages/*/src/**/*.internal.ts"],
+    plugins: { local: { rules: { "require-internal-tag": requireInternalTag } } },
+    rules: { "local/require-internal-tag": "error" },
   },
   {
     ignores: ["**/src/generated/**"],
