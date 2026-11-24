@@ -37,4 +37,16 @@ describe("README check", () => {
     expect(stdout).toContain("js-fence.md:3:1 error fence: fence this js block as typescript");
     expect(status).toBe(1);
   });
+
+  // Issue #76: the generated server glue registers the unary rpcs only, so a service that also has
+  // streaming rpcs does not compile. Once the generator handles them, this fixture compiles:
+  // expect "TypeScript blocks compile" and status 0.
+  it("generates one compile error for a service that has streaming rpcs", () => {
+    const { status, stdout } = check("streaming-rpc.md");
+    expect(stdout).toMatch(
+      /error TS2739: src\/generated\/example\/v1\/chat_effect\.ts:\d+:\d+ .* is missing the following properties .*: watch, upload, talk/,
+    );
+    expect(stdout).toContain("streaming-rpc.md: 1 problem(s)");
+    expect(status).toBe(1);
+  });
 });
