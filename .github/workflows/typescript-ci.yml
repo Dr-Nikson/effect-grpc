@@ -121,6 +121,11 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The exact floor that engines.node declares, not the newest 22.x.
+        node-version: ['22.19.0', '24.x']
 
     steps:
       - name: Checkout repository
@@ -136,7 +141,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
-          node-version: '24.x'
+          node-version: ${{ matrix.node-version }}
           cache: 'pnpm'
 
       - name: Install dependencies
