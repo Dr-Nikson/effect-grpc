@@ -5,7 +5,12 @@ import type { ExternalSpan } from "effect/Tracer";
 import * as OtelTracer from "@effect/opentelemetry/OtelTracer";
 import { Code, ConnectError } from "@connectrpc/connect";
 import type { HandlerContext } from "@connectrpc/connect";
-import { ROOT_CONTEXT, type TextMapGetter, trace } from "@opentelemetry/api";
+import {
+  ROOT_CONTEXT,
+  type TextMapGetter,
+  type TextMapPropagator,
+  trace,
+} from "@opentelemetry/api";
 import { W3CTraceContextPropagator } from "@opentelemetry/core";
 
 import * as GrpcException from "./grpcException.js";
@@ -23,12 +28,6 @@ const headerGetter: TextMapGetter<Headers> = {
     return [...carrier.keys()];
   },
 };
-
-/**
- * The global `propagation` API is not used, because its propagator registry may not be initialized
- * when Effect manages tracing.
- */
-const propagator = new W3CTraceContextPropagator();
 
 /**
  * OpenTelemetry's `rpc.system` values include `grpc` and `connect_rpc` and none for gRPC-web, so a
@@ -96,7 +95,10 @@ const causeToConnectError = (
   );
 };
 
-const extractTraceContext = (ctx: HandlerContext): Option.Option<ExternalSpan> =>
+const extractTraceContext = (
+  propagator: TextMapPropagator,
+  ctx: HandlerContext,
+): Option.Option<ExternalSpan> =>
   Option.fromNullishOr(
     trace.getSpanContext(propagator.extract(ROOT_CONTEXT, ctx.requestHeader, headerGetter)),
   ).pipe(Option.filter(trace.isSpanContextValid), Option.map(OtelTracer.makeExternalSpan));
@@ -107,35 +109,41 @@ const extractTraceContext = (ctx: HandlerContext): Option.Option<ExternalSpan> =
 export const makeServerExecutor = <Ctx>(
   context: Context.Context<never>,
   transformCtx: (handlerCtx: HandlerContext) => Effect.Effect<Ctx, GrpcException.GrpcException>,
-): T.ServerExecutor<Ctx> => ({
-  unary<In, Out>(
-    method: string,
-    req: In,
-    handlerCtx: HandlerContext,
-    prog: (req: In, ctx: Ctx) => Effect.Effect<Out, GrpcException.GrpcException>,
-  ): Promise<Out> {
-    const protocol = protocolOf(handlerCtx.protocolName);
-    const traced = Effect.flatMap(transformCtx(handlerCtx), (ctx) => prog(req, ctx)).pipe(
-      Effect.annotateLogs({ method, protocol: protocol.label }),
-      Effect.withSpan(method, {
-        kind: "server",
-        attributes: {
-          "rpc.system": protocol.rpcSystem,
-          "rpc.service": handlerCtx.service.typeName,
-          "rpc.method": handlerCtx.method.name,
-          protocol: protocol.label,
-        },
-        parent: Option.getOrUndefined(extractTraceContext(handlerCtx)),
-      }),
-    );
+): T.ServerExecutor<Ctx> => {
+  // The global `propagation` API is not used, because its propagator registry may not be
+  // initialized when Effect manages tracing.
+  const propagator = new W3CTraceContextPropagator();
 
-    return Effect.runPromiseExitWith(context)(traced, { signal: handlerCtx.signal }).then(
-      Exit.match({
-        onFailure: (cause) => {
-          throw causeToConnectError(cause, handlerCtx.signal);
-        },
-        onSuccess: (value) => value,
-      }),
-    );
-  },
-});
+  return {
+    unary<In, Out>(
+      method: string,
+      req: In,
+      handlerCtx: HandlerContext,
+      prog: (req: In, ctx: Ctx) => Effect.Effect<Out, GrpcException.GrpcException>,
+    ): Promise<Out> {
+      const protocol = protocolOf(handlerCtx.protocolName);
+      const traced = Effect.flatMap(transformCtx(handlerCtx), (ctx) => prog(req, ctx)).pipe(
+        Effect.annotateLogs({ method, protocol: protocol.label }),
+        Effect.withSpan(method, {
+          kind: "server",
+          attributes: {
+            "rpc.system": protocol.rpcSystem,
+            "rpc.service": handlerCtx.service.typeName,
+            "rpc.method": handlerCtx.method.name,
+            protocol: protocol.label,
+          },
+          parent: Option.getOrUndefined(extractTraceContext(propagator, handlerCtx)),
+        }),
+      );
+
+      return Effect.runPromiseExitWith(context)(traced, { signal: handlerCtx.signal }).then(
+        Exit.match({
+          onFailure: (cause) => {
+            throw causeToConnectError(cause, handlerCtx.signal);
+          },
+          onSuccess: (value) => value,
+        }),
+      );
+    },
+  };
+};
