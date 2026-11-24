@@ -36,6 +36,7 @@ export default tseslint.config(
       "@typescript-eslint/no-use-before-define": ["error", { functions: false }],
       "@typescript-eslint/explicit-function-return-type": "error",
       "@typescript-eslint/no-explicit-any": "off",
+      "no-console": "error",
     },
   },
   {

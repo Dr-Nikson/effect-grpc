@@ -19,8 +19,6 @@ SVC=com.example.v1.HelloWorldAPI
 EGV_ROOT=${EGV_ROOT:-${XDG_STATE_HOME:-$HOME/.local/state}/effect-grpc-verify}
 # Each worktree has its own git dir, so no two checkouts share a pointer, and `git worktree remove` drops it.
 CURRENT=$(git -C "$REPO" rev-parse --absolute-git-dir)/effect-grpc-verify/current
-# Per-connection chatter from server.internal.ts; kept in evidence, hidden on the terminal.
-NOISE='^(New TCP connection|TCP connection closed|New HTTP/2 session created|HTTP/2 session closed|New stream on session|Stream closed|HTTP/2 session GOAWAY)'
 
 HOST_ARG=""
 PORT_ARG=""
@@ -146,8 +144,8 @@ next_evidence() { # next_evidence <run> <slug> -> path of the next numbered evid
 
 log_size() { if [ -f "$1" ]; then wc -c <"$1" | tr -d ' '; else echo 0; fi; }
 
-show() { # print an evidence file without the per-connection chatter
-  grep -vE "$NOISE" "$1" || true
+show() {
+  cat "$1"
   echo "evidence: $1"
 }
 
@@ -535,7 +533,7 @@ run_hostile_driver() {
   sleep 0.3
   if instance_alive "$r"; then alive=yes; fi
   {
-    echo "# $slug at $(date -u +%FT%TZ) url=$BASE_URL port=$PORT: the $mode cases in ${FIXTURES#"$REPO/"}"
+    echo "# $slug at $(date -u +%FT%TZ) url=$BASE_URL port=$PORT: the $mode checks of hostile-requests.mjs, with inputs from ${FIXTURES#"$REPO/"}"
     printf '$ cd %q &&' "$E2E"
     printf ' %q' "${cmd[@]}"
     echo
@@ -558,6 +556,8 @@ run_hostile_driver() {
 cmd_hostile_authority() { run_hostile_driver authority hostile-authority; }
 
 cmd_message_limit() { run_hostile_driver message-limit message-limit; }
+
+cmd_connect_method() { run_hostile_driver connect-method connect-method; }
 
 cmd_taken_port() {
   local r log f off out err rc=0 started elapsed alive=no call_rc=0 verdict=FAIL
@@ -679,7 +679,8 @@ Usage: control-example <command> [arguments] [--port <n>] [--host <address>] [--
   codegen                                    rebuild everything (codegen included) and record generated exports
   hostile-authority                          send the fixture's authority cases over gRPC and Connect; check each reply
   message-limit                              send messages at and over the 4 MiB limit; check each reply
-  taken-port                                 start a second example on this instance's port; check it fails fast
+  connect-method                             send an HTTP/2 CONNECT request; check that it gets 405 and the next calls work
+  taken-port                                start a second example on this instance's port; check it fails fast
   stop                                       SIGTERM this checkout's instance; record the shutdown
   cleanup                                    stop if running, drop instance state, keep evidence
   evidence                                   print this checkout's current evidence directory
@@ -720,6 +721,7 @@ main() {
     codegen) want_args 0 0 "$@"; cmd_codegen ;;
     hostile-authority) want_args 0 0 "$@"; cmd_hostile_authority ;;
     message-limit) want_args 0 0 "$@"; cmd_message_limit ;;
+    connect-method) want_args 0 0 "$@"; cmd_connect_method ;;
     taken-port) want_args 0 0 "$@"; cmd_taken_port ;;
     stop) want_args 0 0 "$@"; cmd_stop ;;
     cleanup) want_args 0 0 "$@"; cmd_cleanup ;;

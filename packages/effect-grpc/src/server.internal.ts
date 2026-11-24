@@ -7,19 +7,15 @@ import {
   Option,
   Predicate,
   Record,
+  Runtime,
   Scope,
   Types,
 } from "effect";
 import http2 from "node:http2";
 
 import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
-import type {
-  ConnectRouter,
-  ContextValues,
-  HandlerContext,
-  ServiceImpl,
-} from "@connectrpc/connect";
-import { Code, createContextValues } from "@connectrpc/connect";
+import type { ConnectRouter, HandlerContext, ServiceImpl } from "@connectrpc/connect";
+import { Code } from "@connectrpc/connect";
 import type { ConnectNodeAdapterOptions } from "@connectrpc/connect-node";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 
@@ -130,7 +126,7 @@ const closeUnreadRequest = (stream: http2.ServerHttp2Stream): void => {
  * Node turns a throw there into an uncaught exception that stops the process.
  */
 const makeRequestListener = (
-  options: Pick<ConnectNodeAdapterOptions, "routes" | "interceptors" | "contextValues"> & {
+  options: Pick<ConnectNodeAdapterOptions, "routes" | "interceptors"> & {
     readonly readMaxBytes: number;
   },
 ): RequestListener => {
@@ -214,10 +210,15 @@ const boundAddress = (server: http2.Http2Server): Effect.Effect<T.GrpcServerAddr
 /**
  * Listens outside the acquire step of the server's acquireRelease, so interruption can stop a listen
  * that never completes. Closing the server makes Node drop a pending host lookup instead of binding.
+ *
+ * Once the server listens, `onServerError` takes over its `'error'` event in the same turn. Node
+ * turns an `'error'` event that nobody listens to into an uncaught exception, and a listening server
+ * emits one when it fails to accept a connection.
  */
 const awaitListening = (
   server: http2.Http2Server,
   options: ListenOptions,
+  onServerError: (error: Error) => void,
 ): Effect.Effect<T.GrpcServerAddress, T.GrpcServerBindError> =>
   Effect.async((resume) => {
     function detach() {
@@ -231,6 +232,7 @@ const awaitListening = (
       resume(outcome);
     }
     function onListening() {
+      server.on("error", onServerError);
       settle(boundAddress(server));
     }
     function onError(cause: Error) {
@@ -302,98 +304,24 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
     const { readMaxBytes } = this;
 
     return Effect.gen(function* () {
+      const runtime = yield* Effect.runtime<never>();
       const executor = yield* makeExecutor();
       const handler = yield* Effect.sync(() =>
-        makeRequestListener({
-          routes: routes(executor),
-          interceptors: [],
-          readMaxBytes,
-          contextValues(req): ContextValues {
-            // TODO: implement proper request transformations
-            console.log("Creating context values for request", req.url);
-
-            return createContextValues();
-          },
-        }),
+        makeRequestListener({ routes: routes(executor), interceptors: [], readMaxBytes }),
       );
 
-      // TODO: CORS?
-      // const corsHandler = cors({
-      //     // Reflects the request origin. This should only be used for development.
-      //     // Production should explicitly specify an origin
-      //     origin: true,
-      //     methods: [...connectCors.allowedMethods],
-      //     allowedHeaders: [...connectCors.allowedHeaders],
-      //     exposedHeaders: [...connectCors.exposedHeaders],
-      // })
-      const createServer = Effect.sync(() =>
-        http2
-          .createServer(handler)
-          .addListener("connect", (req, socket, head) => {
-            console.log("Connected to server", req.url, socket, head);
-          })
-          .addListener("connection", (socket) => {
-            console.log("New TCP connection:", socket.remoteAddress, socket.remotePort);
-
-            // Track when TCP socket closes
-            socket.on("close", (hadError: boolean) => {
-              console.log(
-                "TCP connection closed:",
-                socket.remoteAddress,
-                socket.remotePort,
-                hadError ? "(with error)" : "(clean)",
-              );
-            });
-
-            // Track socket errors
-            socket.on("error", (err: Error) => {
-              console.error("TCP socket error:", socket.remoteAddress, err);
-            });
-          })
-          .addListener("sessionError", (err) => {
-            console.error("Session Error", err);
-          })
-          .addListener("session", (session) => {
-            console.log("New HTTP/2 session created");
-
-            // Track when session closes
-            session.on("close", () => {
-              console.log("HTTP/2 session closed");
-            });
-
-            // Track session errors
-            session.on("error", (err) => {
-              console.error("HTTP/2 session error:", err);
-            });
-
-            // Track when session is going away
-            session.on("goaway", (errorCode, lastStreamID) => {
-              console.log("HTTP/2 session GOAWAY:", { errorCode, lastStreamID });
-            });
-
-            // Track individual streams (requests)
-            session.on("stream", (stream, headers) => {
-              console.log("New stream on session:", headers[":path"]);
-
-              stream.on("close", () => {
-                console.log("Stream closed:", headers[":path"]);
-              });
-            });
-          })
-          .addListener("error", (err) => {
-            console.error("Server error", err);
-          })
-          .addListener("clientError", (err) => {
-            console.error("Client error", err);
-          })
-          .addListener("dropRequest", (req, socket) => {
-            console.warn("Dropped request", req.url, socket);
-          }),
-      );
+      const reportServerError = (error: Error): void => {
+        Runtime.runFork(runtime)(Effect.logError("gRPC server error", Cause.die(error)), {
+          immediate: true,
+        });
+      };
 
       const startup = Effect.gen(function* () {
-        const server = yield* Effect.acquireRelease(createServer, stopServer);
-        const address = yield* awaitListening(server, options);
+        const server = yield* Effect.acquireRelease(
+          Effect.sync(() => http2.createServer(handler)),
+          stopServer,
+        );
+        const address = yield* awaitListening(server, options, reportServerError);
         yield* Effect.logInfo(`gRPC server listening on ${address.url}`);
 
         return address;
