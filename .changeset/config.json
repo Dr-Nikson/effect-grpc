@@ -12,7 +12,7 @@
   "updateInternalDependencies": "patch",
   "ignore": ["@dr_nikson/effect-grpc-example", "@dr_nikson/effect-grpc-e2e-tests"],
   "snapshot": {
-    "useCalculatedVersion": true,
+    "useCalculatedVersion": false,
     "prereleaseTemplate": "{tag}-{commit}"
   }
 }

@@ -83,6 +83,9 @@ importers:
 
   .:
     devDependencies:
+      '@actions/expressions':
+        specifier: 0.3.61
+        version: 0.3.61
       '@changesets/changelog-github':
         specifier: ^0.5.1
         version: 0.5.1
@@ -113,6 +116,9 @@ importers:
       eslint-config-prettier:
         specifier: 10.1.8
         version: 10.1.8(eslint@9.35.0)
+      js-yaml:
+        specifier: 4.1.0
+        version: 4.1.0
       prettier:
         specifier: 3.6.2
         version: 3.6.2
@@ -286,6 +292,10 @@ importers:
         version: 3.2.4(@types/node@24.4.0)(tsx@4.20.5)
 
 packages:
+
+  '@actions/expressions@0.3.61':
+    resolution: {integrity: sha512-Ig+tXELvTjlqxQAWBQnLNn2dPpNraLMdSnT+vDzDPmJtbNUhIAH/Z9kVT8pZ8UtJi9vUGs8hwHE8JFJmbOnLEA==}
+    engines: {node: '>= 20'}
 
   '@babel/code-frame@7.27.1':
     resolution: {integrity: sha512-cjQ7ZlQ0Mv3b47hABuTevyTuYN4i+loJKGeV9flcCgIK37cCXRh+L1bd3iBHlynerhQ7BhCkn2BPbQUL+rGqFg==}
@@ -2154,6 +2164,8 @@ packages:
     engines: {node: '>=10'}
 
 snapshots:
+
+  '@actions/expressions@0.3.61': {}
 
   '@babel/code-frame@7.27.1':
     dependencies:
