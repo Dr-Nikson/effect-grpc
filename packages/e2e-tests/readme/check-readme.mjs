@@ -1,9 +1,10 @@
 // packages/e2e-tests/readme/check-readme.mjs
 //
-// Type-checks README.md's code as a reader would run it. Writes the README's fenced blocks into a
-// scratch project, runs `buf generate` with the README's own buf.gen.yaml and protos, compiles every
-// TypeScript block with the repository's compiler options, and checks each excerpt of generated code
-// against the file buf wrote. Every error names a README line.
+// Type-checks the code of one Markdown document, README.md by default, as a reader would run it.
+// Writes the document's fenced blocks into a scratch project, runs `buf generate` with the document's
+// own buf.gen.yaml and protos, compiles every TypeScript block with the repository's compiler options,
+// and checks each excerpt of generated code against the file buf wrote. Every error names a line of
+// the document.
 //
 // The rules, read from each block's info string and first line:
 // - A first-line path comment to a .ts, .proto, .yaml or .yml file (`// src/server.ts`,
@@ -15,15 +16,15 @@
 //   without a body matches the generated function's signature.
 // - Any other TypeScript block (`ts` or `typescript`) is its own module next to src/server.ts. It
 //   imports what it uses and writes `declare const` for values it does not build.
-// - A `js`, `javascript`, `jsx`, `tsx`, `mjs` or `cjs` block is a problem: fence README code as
+// - A `js`, `javascript`, `jsx`, `tsx`, `mjs` or `cjs` block is a problem: fence the code as
 //   `typescript`, so that no example skips the compiler.
-// - Other blocks are not read. Packages that README examples import but no workspace installs are
+// - Other blocks are not read. Packages that the examples import but no workspace installs are
 //   declared in modules.d.ts next to this file.
 //
 // usage: node packages/e2e-tests/readme/check-readme.mjs [README.md] [host package dir] [repository root]
 // The arguments default to the repository's README, packages/e2e-tests and the repository root.
-// Exit code 0: every block compiles. 1: README problems, printed as README.md:<line>:<col>. 2: setup,
-// or `buf generate` failing on the README's protos.
+// Exit code 0: every block compiles. 1: problems in the document, printed as <document>:<line>:<col>.
+// 2: setup, or `buf generate` failing on the document's protos.
 import { spawnSync } from "node:child_process";
 import {
   existsSync,

@@ -1,6 +1,6 @@
 # Typed wire errors
 
-Status: accepted on 2026-11-24 in #72. P24 (#77), P25 (#12, #27) and P30 (#82) build on it.
+Status: proposed on 2026-11-24 for #72, and accepted when the operator merges it. P24 (#77), P25 (#12, #27) and P30 (#82) build on it.
 
 A failed RPC reaches an effect-grpc 4.x client as a typed failure, never as a defect. The failure is `GrpcException`, a port of grpc-java's `StatusException`: a status code, the wire message, application metadata and protobuf details, sent in the status that every gRPC implementation reads. A method can list in a proto option the protobuf messages it fails with. Its handler and its client method then fail with a declared error for each message, and `Effect.catchTag` catches it by the message's full name.
 
@@ -20,7 +20,7 @@ The facts below come from probes on the versions in the lockfile: effect 4.1.5, 
 
 - **Status, metadata and details reach every client.** A handler threw a `ConnectError` with a code, a message, two metadata entries and two details. The Node client received all of them over gRPC, gRPC-web and Connect. `buf curl` printed the code, the message and the details over all three protocols, and the metadata over gRPC and Connect.
 - **Unknown details stay raw.** `ConnectError.findDetails` decodes only the types it is given and skips the others without an error. The skipped details stay in `ConnectError.details` as a type name and bytes.
-- **Connect keeps protocol keys out of error metadata.** The server drops keys such as `grpc-status` and `content-type` that a handler puts in an error's metadata. The client's `ConnectError.metadata` is the union of response headers and trailers, so it holds protocol keys too. Connect's own `mergeNonProtocolHeaders` reduces it to exactly the handler's keys on all three protocols.
+- **Connect keeps protocol keys out of error metadata.** The server drops keys such as `grpc-status` and `content-type` that a handler puts in an error's metadata. The client's `ConnectError.metadata` is the union of response headers and trailers, so it holds protocol keys too. Connect's own `mergeNonProtocolHeaders` reduced it to exactly the handler's three keys, a binary one among them, on all three protocols.
 - **A rethrown wire error loses its metadata.** A handler that rethrows a `ConnectError` from an upstream call relays its code, message and details, but not its metadata.
 - **Failures that never reach a server have a code.** A closed port gives `UNAVAILABLE`, a passed deadline gives `DEADLINE_EXCEEDED`, and an aborted call gives `CANCELLED`.
 - **A large status destroys itself on gRPC.** Over gRPC, a detail of 48,000 bytes arrived. A detail of 64,000 bytes made the client see `INTERNAL` "Stream closed with error code NGHTTP2_FRAME_SIZE_ERROR", so the real code, message and details were lost. gRPC-web carries trailers in the response body and Connect carries details in the JSON body, and both delivered 200,000 bytes.
@@ -29,7 +29,7 @@ The facts below come from probes on the versions in the lockfile: effect 4.1.5, 
 - **An `Option` cause garbles logs.** A `Data.TaggedError` with an `Option` in its `cause` field hands the `Option` to `Error.cause`. `Cause.pretty` then prints `[cause]: Error: some(Error: socket hang up)` without the cause's stack, and `none()` when there is no cause.
 - **protobuf-es reads a method option at run time.** For a `MethodOptions` extension, protoc-gen-es generates a `GenExtension`, and `getOption` reads the option from the descriptor in the generated code.
 - **Generated code imports the options file.** A `_pb.ts` file whose proto imports `effect_grpc/v1/options.proto` imports the generated `options_pb.js` by a relative path.
-- **buf reads protos from an npm package.** A buf v2 workspace that lists `node_modules/@dr_nikson/effect-grpc/proto` as a module compiles a proto that imports the options file. `buf generate` then writes code for both files, with no network.
+- **buf reads protos from a `node_modules` path.** A buf v2 workspace that lists the directory `node_modules/@dr_nikson/effect-grpc/proto` as a module compiles a proto that imports the options file. `buf generate` then writes code for both files, with no network. The probe placed the directory by hand. P30 proves the same with an installed tarball.
 
 ## Decisions
 
@@ -45,11 +45,11 @@ The facts below come from probes on the versions in the lockfile: effect 4.1.5, 
 | `cause` | the standard `Error.cause` | never | 3.x |
 
 - `message` is the text that the peer reads, the field that grpc-java calls the status description. The 3.x `description` field never reached the wire, so 4.x removes it together with `withDescription`. Put the context a caller needs in `message`, and the context for logs in `cause`.
-- `metadata` holds only the application's keys. The client removes the protocol keys with Connect's `mergeNonProtocolHeaders`, which keeps exactly the handler's keys on all three protocols. An empty record means no metadata, so the field is never absent. Read one key as an `Option` with `Record.get`. Metadata that a client received stays with the caller: a server that fails with the same exception sends its code, its message and its details, but not that metadata, as Connect does for a rethrown wire error. To forward metadata, a handler builds a new exception with the keys it chooses.
+- `metadata` holds only the application's keys. The client removes the protocol keys with Connect's `mergeNonProtocolHeaders`, which kept exactly the handler's keys in the probe on all three protocols. Connect marks that function private, so P24 pins its output in a unit test. An empty record means no metadata, so the field is never absent. Read one key as an `Option` with `Record.get`. Metadata that a client received stays with the caller. A server that fails with the same exception sends its code, its message and its details, but not that metadata, as Connect does for a rethrown wire error. P24 keeps track of where an exception's metadata came from to do this. To forward metadata, a handler builds a new exception with the keys it chooses.
 - `details` holds each detail as a `google.protobuf.Any`, the type that `google.rpc.Status` uses on the wire. A detail of a type that nobody registered stays readable, and a server relays it unchanged. `GrpcException.findDetail` decodes the first detail of a type as an `Option`, and protobuf-es's `anyPack` builds a detail for a server.
 - `cause` stays the standard `Error.cause` and never goes on the wire. An `Option` in that slot made `Cause.pretty` print `some(...)` without the cause's stack. Library code reads the cause with `Option.fromNullishOr`, at the boundary where a platform value enters, as `agents/CODING_STANDARDS.md` allows.
 
-`create(code, message, cause?)` stays the short form. The constructor, `new GrpcException.GrpcException({ code, message, metadata, details, cause })`, is the full form, as Effect's own `HttpClientError` does it, and it fills an empty record and an empty list for the fields it is not given. `from(code, cause)` returns a `GrpcException` unchanged. For a `ConnectError` it keeps the code, the raw message, the filtered metadata and the details, with the `ConnectError` as the cause. For another `Error` it uses the error's message and the given code, and for any other value its string. The conversion to a `ConnectError` becomes internal to the server, so no Connect type stays on the public API of `GrpcException`.
+`create(code, message, cause?)` stays the short form. The constructor, `new GrpcException.GrpcException({ code, message, metadata, details, cause })`, is the full form, as Effect's own `HttpClientError` does it, and it fills an empty record and an empty list for the fields it is not given. `from(code, cause)` returns a `GrpcException` unchanged. For a `ConnectError` it keeps the code, the raw message, the filtered metadata and the details, with the `ConnectError` as the cause. For another `Error` it uses the error's message and the given code, and for any other value its string. The conversion to a `ConnectError` becomes internal to the server, so `ConnectError` leaves the public API of `GrpcException`. `Code` stays, as in 3.x.
 
 ### Errors travel in the standard gRPC status
 
@@ -58,12 +58,12 @@ effect-grpc writes no wire format of its own. The server builds a `ConnectError`
 | | gRPC | gRPC-web | Connect |
 |---|---|---|---|
 | Code and message | `grpc-status` and `grpc-message` trailers | the same, in the trailer frame of the response body | the JSON error body: `code`, `message` and the matching HTTP status |
-| Details | `grpc-status-details-bin`, a `google.rpc.Status` whose details are `google.protobuf.Any` | the same, in the trailer frame | the JSON `details`: type name, base64 value and a `debug` JSON copy |
+| Details | `grpc-status-details-bin`, a `google.rpc.Status` whose details are `google.protobuf.Any` | the same, in the trailer frame | the JSON `details`: type name and base64 value, plus a `debug` JSON copy for a detail that the server encodes from its schema |
 | Metadata | trailers | the trailer frame | response headers |
 
-Because the status is the standard one, a gRPC client in any language reads it, and `buf curl` prints the details by type name.
+Because the status is the standard one, `buf curl` printed the details by type name, and gRPC clients in other languages read it with their usual status APIs, which we did not measure.
 
-Over gRPC, metadata and details are HTTP/2 trailers, and a status that is too large reaches the client as `INTERNAL` with nothing of its own. So the server caps what it adds to a status at 4 KiB: the message, the encoded details and the metadata, counted as HTTP/2 counts a header list, with 32 bytes for each entry on top of its name and value. Over the cap, the server drops the parts of least value first: the details that the method does not declare, then the metadata, then the declared detail. It cuts the message last, always keeps the code, and logs a warning that names what it dropped. The cap applies on all three protocols, so a status reads the same on each, and a proxy that turns gRPC-web or Connect into gRPC cannot break it. grpc-java's default limit for a header or trailer block that it receives is 8,192 bytes (`GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE`, read in its source, not measured). The cap leaves half of that for the protocol's own keys and for proxies.
+Over gRPC, metadata and details are HTTP/2 trailers, and a status that is too large reaches the client as `INTERNAL` with nothing of its own. So the server caps what it adds to a status at 4 KiB: the message, the encoded details and the metadata, counted as HTTP/2 counts a header list, with 32 bytes for each entry on top of its name and value. Over the cap, the server drops the parts of least value first: the details that the method does not declare, then the metadata, then the declared detail. It cuts the message last, always keeps the code, and logs a warning that names what it dropped. The cap applies on all three protocols, so a status has the same size on each, also after a proxy turns gRPC-web or Connect into gRPC trailers. The probe measured the failure without a cap, not the cap itself, so P24 tests the drop order at the boundary. grpc-java's default limit for a header or trailer block that it receives is 8,192 bytes (`GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE`, read in its source, not measured). The cap leaves half of that for the protocol's own keys and for proxies.
 
 ### Tags are `"GrpcException"` and a message's full name
 
@@ -114,13 +114,13 @@ Effect 4.1.5 ships `effect/protobuf`, marked experimental. It builds descriptors
 | P24 (#77) | `metadata` and `details` in `GrpcException`, its constructor, `from` and the server's encoder. `findDetail`, the 4 KiB cap, and a `toJSON` that lists the details by type name. | a later 4.x release |
 | P30 (#82) | `options.proto` in the npm package, the plugin's reading of the option, `Declared`, `declared`, `refine`, the generated error unions, and the server's encoding of a declared error. | after 4.0.0 |
 
-P25 does not need P24. Code and message already reach every client, and they are all that `Effect.catchTag` and a check of the code need. P25 makes every breaking change to `GrpcException`, so P24 and P30 only add to the API of the alpha. P24 adds metadata and details to the server and the client in one unit, so no release has a field that the server cannot send. Until P24 lands, a client reaches a `ConnectError`'s metadata and details through `cause`. P25's acceptance lines that assert a description, metadata and a detail move to P24.
+P25 does not need P24. Code and message already reach every client, and they are all that `Effect.catchTag` and a check of the code need. P25 makes every breaking change to `GrpcException`, so code written against the alpha keeps compiling through P24, and through P30 until a method opts in to declared errors. P24 adds metadata and details to the server and the client in one unit, so no release has a field that the server cannot send. Until P24 lands, a client reaches a `ConnectError`'s metadata and details through `cause`. P25's acceptance lines that assert metadata and a detail move to P24, and its assertion of a description becomes an assertion of the message, because 4.x has no description.
 
-The main path also needs the client's `protocol` option. Today the client builds only a gRPC transport, so it cannot call a server over gRPC-web or Connect.
+The main path also needs the client's `protocol` option. Today the client builds only a gRPC transport, so it cannot call a server over gRPC-web or Connect, and P25's own acceptance calls over Connect.
 
 ### Operator decisions
 
-1. **The extension number.** Default: `options.proto` uses 50717 until the operator gets a number from the protobuf global extension registry, and P30 ships with it. Reason: only the operator can ask the registry, with a pull request or an issue on protocolbuffers/protobuf, and P30 comes after 4.0.0. descriptor.proto sets the range from 50000 to 99999 aside for one organization or for experiments, so a published library in that range can collide with a user's own option of the same number. One registry number covers the method option and any later option on another descriptor type, as protovalidate's 1159 does. A change of number changes no `.proto` file of a user, only regenerated code.
+1. **The extension number.** Default: `options.proto` uses 50717, and P30 ships with it unless the operator has a number from the protobuf global extension registry by then. Recommendation: ask the registry, with a pull request or an issue on protocolbuffers/protobuf, before P30 reaches a release. Reason: only the operator can ask, and P30 comes after 4.0.0. descriptor.proto sets the range from 50000 to 99999 aside for one organization or for experiments, so a published library in that range can collide with a user's own option of the same number. One registry number covers the method option and any later option on another descriptor type, as protovalidate's 1159 does on three descriptor types. A later change of number changes no `.proto` file of a user, because a user's proto names the option, not its number. We infer, without a measurement, that it needs only regenerated code, because the plugin reads the option only when it generates code.
 2. **How users import `options.proto`.** Default: the npm package ships `proto/effect_grpc/v1/options.proto`. A buf user lists the package's `proto` directory as a module in `buf.yaml`, as below, and `buf generate` writes `effect_grpc/v1/options_pb.ts` next to the user's code, where the user's generated files import it. A protoc user passes `-I node_modules/@dr_nikson/effect-grpc/proto`, which we did not measure because protoc is not installed here. Reason: this needs no account, no service and no network, and the `options.proto` that a user compiles always matches the plugin of the same package version. A later release can also publish the file to the Buf Schema Registry under the same import path.
 
 ```yaml
@@ -156,7 +156,6 @@ package effect_grpc.v1;
 
 import "google/protobuf/descriptor.proto";
 
-// The options that effect-grpc reads from a method.
 message RpcOptions {
   // The full names of the messages that the method fails with, such as "acme.v1.UserNotFound".
   repeated string errors = 1;
@@ -363,7 +362,7 @@ export const getUser: GetUserHandler = (request) =>
   Effect.fail(GrpcException.declared(Code.NotFound, "no such user", UserNotFoundSchema, { userId: request.userId }));
 
 export const undeclared: GetUserHandler = () =>
-  // @ts-expect-error GetUser does not declare acme.v1.QuotaExceeded.
+  // @ts-expect-error
   Effect.fail(GrpcException.declared(Code.ResourceExhausted, "quota", QuotaExceededSchema, { limit: 3 }));
 
 declare const call: Effect.Effect<UserReply, GrpcException.GrpcException>;
@@ -411,4 +410,4 @@ export const declaredErrors: ReadonlyArray<string> = getOption(UserService.metho
 - A declared error whose message has a 64-bit field holds a `bigint`, which `JSON.stringify` rejects, so P30's `toJSON` renders the detail with protobuf-es's `toJson`.
 - protoc-gen-effect writes an `_effect.ts` file for every proto file, `options.proto` among them. P23's message-only option or P30 skips files without services.
 - `GrpcServerBindError` keeps its long tag. A follow-up can rename it to `"GrpcServerBindError"` under the same rule.
-- The 4 KiB cap trades large details for a status that always arrives. A later builder option can raise it for a deployment whose clients and proxies accept more.
+- The 4 KiB cap trades large details for a status that stays inside the limits we know of. A later builder option can raise it for a deployment whose clients and proxies accept more.

@@ -1,12 +1,4 @@
 // packages/e2e-tests/readme/check-docs.mjs
-//
-// Runs check-readme.mjs on each Markdown document named on the command line, one document at a
-// time, because each one is its own scratch project with its own protos. A directory stands for
-// the .md files directly inside it. With no arguments it checks README.md and docs/adr/, so every
-// decision record that is added there is checked without a change to this script.
-//
-// usage: node packages/e2e-tests/readme/check-docs.mjs [file or directory]...
-// Exit code: the highest exit code of check-readme.mjs over the documents, 2 for a missing path.
 import { spawnSync } from "node:child_process";
 import { readdirSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
