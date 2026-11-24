@@ -6,11 +6,13 @@
 // against the file buf wrote. Every error names a README line.
 //
 // The rules, read from each block's info string and first line:
-// - A first-line path comment (`// src/server.ts`, `// proto/example/v1/hello.proto`, `# buf.gen.yaml`)
-//   makes the block that file of the project, in any language.
+// - A first-line path comment to a .ts, .proto, .yaml or .yml file (`// src/server.ts`,
+//   `// proto/example/v1/hello.proto`, `# buf.gen.yaml`) makes the block that file of the project,
+//   in any language.
 // - A TypeScript block whose path is under src/generated/ is an excerpt: each declaration in it must
 //   equal the generated declaration of the same name, comments and layout aside. An excerpt's
-//   `declare const x: T` matches the type of the generated `const x: T = ...`.
+//   `declare const x: T` matches the type of the generated `const x: T = ...`, and a function
+//   without a body matches the generated function's signature.
 // - Any other TypeScript block (`ts` or `typescript`) is its own module next to src/server.ts. It
 //   imports what it uses and writes `declare const` for values it does not build.
 // - Other blocks are not read. Packages that README examples import but no workspace installs are
@@ -18,7 +20,8 @@
 //
 // usage: node packages/e2e-tests/readme/check-readme.mjs [README.md] [host package dir] [repository root]
 // The arguments default to the repository's README, packages/e2e-tests and the repository root.
-// Exit code 0: every block compiles. 1: README problems, printed as README.md:<line>:<col>. 2: setup.
+// Exit code 0: every block compiles. 1: README problems, printed as README.md:<line>:<col>. 2: setup,
+// or `buf generate` failing on the README's protos.
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
@@ -161,7 +164,6 @@ const { options } = ts.parseJsonConfigFileContent(
   basePath,
 );
 
-// Every .ts file the check wrote is a root, wherever its path comment put it.
 const program = ts.createProgram({ rootNames: tsFiles(project), options });
 const byFile = new Map([...files].map(([path, fence]) => [join(project, path), fence]));
 for (const diagnostic of ts.getPreEmitDiagnostics(program)) {
@@ -197,8 +199,6 @@ const printer = ts.createPrinter({ removeComments: true });
 const flat = (node, file) =>
   printer.printNode(ts.EmitHint.Unspecified, node, file).replace(/\s+/g, " ").trim();
 
-// Each declaration keyed by kind and name. A variable maps to its declarator, so `export const` and
-// `export declare const` compare equal.
 const kindOf = (statement) =>
   ts.isInterfaceDeclaration(statement) ? "interface"
   : ts.isTypeAliasDeclaration(statement) ? "type"
@@ -217,11 +217,12 @@ const declarations = (file) => {
   }
   return found;
 };
-// What an excerpt's declaration is held to: a const without an initializer shows only its type, and a
-// function without a body shows only its signature.
-const compared = (node, file, shown) => {
-  if (ts.isVariableDeclaration(node) && !shown.initializer) return flat(node.type ?? node, file);
-  if (ts.isFunctionDeclaration(node) && !shown.body) {
+
+const asExcerptShows = (node, file, excerptNode) => {
+  if (ts.isVariableDeclaration(node) && !excerptNode.initializer) {
+    return flat(node.type ?? node, file);
+  }
+  if (ts.isFunctionDeclaration(node) && !excerptNode.body) {
     const typeParameters = (node.typeParameters ?? []).map((p) => flat(p, file)).join(", ");
     const parameters = node.parameters.map((p) => flat(p, file)).join(", ");
     return `function ${node.name?.text}<${typeParameters}>(${parameters}): ${node.type ? flat(node.type, file) : "void"}`;
@@ -256,13 +257,13 @@ for (const excerpt of excerpts) {
     const actual = index.get(key);
     if (!actual) {
       at(excerpt, line, character, "excerpt", `\`${key}\` is not declared in ${excerpt.path}`);
-    } else if (compared(actual, generated, node) !== compared(node, shown, node)) {
+    } else if (asExcerptShows(actual, generated, node) !== asExcerptShows(node, shown, node)) {
       at(
         excerpt,
         line,
         character,
         "excerpt",
-        `\`${key}\` differs from ${excerpt.path}, which declares:\n  ${compared(actual, generated, node)}`,
+        `\`${key}\` differs from ${excerpt.path}, which declares:\n  ${asExcerptShows(actual, generated, node)}`,
       );
     }
   }
