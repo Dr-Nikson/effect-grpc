@@ -54,7 +54,8 @@ const prog = Effect.gen(function* () {
   const host = yield* address.host;
   const port = yield* address.port;
 
-  return yield* server.run({ host, port });
+  yield* server.listen({ host, port });
+  return yield* Effect.never;
 });
 
 const layer = Layer.empty.pipe(

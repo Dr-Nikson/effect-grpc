@@ -5,14 +5,7 @@ import { NodeSdk } from "@effect/opentelemetry";
 import { describe, expect, it } from "@effect/vitest";
 import { InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
 
-import {
-  Port,
-  PortLive,
-  clientLayer,
-  createServer,
-  effectProto,
-  serverServiceLayer,
-} from "./test-fixtures.js";
+import { clientLayer, createServer, effectProto, serverServiceLayer } from "./test-fixtures.js";
 
 // InMemorySpanExporter tag for tests
 const SpanExporter = Context.GenericTag<InMemorySpanExporter>("SpanExporter");
@@ -44,22 +37,17 @@ describe("OpenTelemetry Tracing E2E", () => {
   it.scopedLive("server creates span with correct name from gRPC method", () =>
     Effect.gen(function* () {
       const exporter = yield* SpanExporter;
-      const port = yield* Port;
-
-      yield* Effect.logInfo(`Starting test server on port ${port}`);
 
       // Create and start server
       const server = yield* createServer();
-      yield* Effect.forkScoped(server.run({ host: "127.0.0.1", port }));
-
-      // Small delay to ensure server is ready
-      yield* Effect.sleep("500 millis");
+      const address = yield* server.listen({ host: "127.0.0.1", port: 0 });
+      yield* Effect.logInfo(`Test server listening on port ${address.port}`);
 
       // Make the request
       yield* Effect.gen(function* () {
         const client = yield* effectProto.HelloWorldAPIClientTag;
         yield* client.getGreeting({ name: "TracingTest" }, {});
-      }).pipe(Effect.provide(clientLayer), Effect.scoped);
+      }).pipe(Effect.provide(clientLayer(address)), Effect.scoped);
 
       // Wait a bit for spans to be exported
       yield* Effect.sleep("100 millis");
@@ -79,7 +67,6 @@ describe("OpenTelemetry Tracing E2E", () => {
       Effect.provide(
         Layer.empty.pipe(
           Layer.provideMerge(serverServiceLayer),
-          Layer.provideMerge(PortLive),
           Layer.provideMerge(createTestTracingLayer()),
           Layer.provideMerge(Logger.minimumLogLevel(LogLevel.Debug)),
         ),
@@ -90,22 +77,17 @@ describe("OpenTelemetry Tracing E2E", () => {
   it.scopedLive("client creates span that becomes parent of server span", () =>
     Effect.gen(function* () {
       const exporter = yield* SpanExporter;
-      const port = yield* Port;
-
-      yield* Effect.logInfo(`Starting test server on port ${port}`);
 
       // Create and start server
       const server = yield* createServer();
-      yield* Effect.forkScoped(server.run({ host: "127.0.0.1", port }));
-
-      // Small delay to ensure server is ready
-      yield* Effect.sleep("500 millis");
+      const address = yield* server.listen({ host: "127.0.0.1", port: 0 });
+      yield* Effect.logInfo(`Test server listening on port ${address.port}`);
 
       // Make the request without any explicit parent span context
       yield* Effect.gen(function* () {
         const client = yield* effectProto.HelloWorldAPIClientTag;
         yield* client.getGreeting({ name: "ClientSpanTest" }, {});
-      }).pipe(Effect.provide(clientLayer), Effect.scoped);
+      }).pipe(Effect.provide(clientLayer(address)), Effect.scoped);
 
       // Wait a bit for spans to be exported
       yield* Effect.sleep("100 millis");
@@ -130,7 +112,6 @@ describe("OpenTelemetry Tracing E2E", () => {
       Effect.provide(
         Layer.empty.pipe(
           Layer.provideMerge(serverServiceLayer),
-          Layer.provideMerge(PortLive),
           Layer.provideMerge(createTestTracingLayer()),
           Layer.provideMerge(Logger.minimumLogLevel(LogLevel.Debug)),
         ),
@@ -141,23 +122,22 @@ describe("OpenTelemetry Tracing E2E", () => {
   it.scopedLive("trace context propagates through full span hierarchy", () =>
     Effect.gen(function* () {
       const exporter = yield* SpanExporter;
-      const port = yield* Port;
-
-      yield* Effect.logInfo(`Starting test server on port ${port}`);
 
       // Create and start server
       const server = yield* createServer();
-      yield* Effect.forkScoped(server.run({ host: "127.0.0.1", port }));
-
-      // Small delay to ensure server is ready
-      yield* Effect.sleep("500 millis");
+      const address = yield* server.listen({ host: "127.0.0.1", port: 0 });
+      yield* Effect.logInfo(`Test server listening on port ${address.port}`);
 
       // Make the request from within a span context
       // Expected hierarchy: test-span -> client-rpc-span -> server-span
       yield* Effect.gen(function* () {
         const client = yield* effectProto.HelloWorldAPIClientTag;
         yield* client.getGreeting({ name: "TracePropagationTest" }, {});
-      }).pipe(Effect.withSpan("test-parent-span"), Effect.provide(clientLayer), Effect.scoped);
+      }).pipe(
+        Effect.withSpan("test-parent-span"),
+        Effect.provide(clientLayer(address)),
+        Effect.scoped,
+      );
 
       // Wait a bit for spans to be exported
       yield* Effect.sleep("100 millis");
@@ -189,7 +169,6 @@ describe("OpenTelemetry Tracing E2E", () => {
       Effect.provide(
         Layer.empty.pipe(
           Layer.provideMerge(serverServiceLayer),
-          Layer.provideMerge(PortLive),
           Layer.provideMerge(createTestTracingLayer()),
           Layer.provideMerge(Logger.minimumLogLevel(LogLevel.Debug)),
         ),
@@ -200,20 +179,16 @@ describe("OpenTelemetry Tracing E2E", () => {
   it.scopedLive("span names follow {service}/{method} convention", () =>
     Effect.gen(function* () {
       const exporter = yield* SpanExporter;
-      const port = yield* Port;
 
       // Create and start server
       const server = yield* createServer();
-      yield* Effect.forkScoped(server.run({ host: "127.0.0.1", port }));
-
-      // Small delay to ensure server is ready
-      yield* Effect.sleep("500 millis");
+      const address = yield* server.listen({ host: "127.0.0.1", port: 0 });
 
       // Make request
       yield* Effect.gen(function* () {
         const client = yield* effectProto.HelloWorldAPIClientTag;
         yield* client.getGreeting({ name: "NamingTest" }, {});
-      }).pipe(Effect.provide(clientLayer), Effect.scoped);
+      }).pipe(Effect.provide(clientLayer(address)), Effect.scoped);
 
       // Wait a bit for spans to be exported
       yield* Effect.sleep("100 millis");
@@ -230,7 +205,6 @@ describe("OpenTelemetry Tracing E2E", () => {
       Effect.provide(
         Layer.empty.pipe(
           Layer.provideMerge(serverServiceLayer),
-          Layer.provideMerge(PortLive),
           Layer.provideMerge(createTestTracingLayer()),
           Layer.provideMerge(Logger.minimumLogLevel(LogLevel.Debug)),
         ),

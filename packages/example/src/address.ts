@@ -7,7 +7,10 @@ import { Config } from "effect";
  */
 export const host = Config.string("EFFECT_GRPC_EXAMPLE_HOST").pipe(Config.withDefault("127.0.0.1"));
 
-export const port = Config.port("EFFECT_GRPC_EXAMPLE_PORT").pipe(Config.withDefault(8000));
+/**
+ * `Config.port` rejects 0, which asks the OS for a free port. The server reports a port it cannot bind.
+ */
+export const port = Config.integer("EFFECT_GRPC_EXAMPLE_PORT").pipe(Config.withDefault(8000));
 
 export const baseUrl = Config.all([host, port]).pipe(
   Config.map(
