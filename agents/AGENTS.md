@@ -111,6 +111,16 @@ IMPORTANT: refer to the best practices and coding standards described in @agents
   pnpm run test:types # Uses vitest --typecheck.only
   ```
 
+### GitHub Workflows
+- After changing `.github/workflows` or `.github/scripts`, run both checks from the root. Each must pass:
+  ```bash
+  pnpm run test:workflows # fixture tests for the workflow scripts and the workflows' if: guards
+  pnpm run lint:workflows # zizmor over .github/workflows (needs uv); must report no findings
+  ```
+- Values from events, inputs, branch names and step outputs reach `run:` and `script:` through `env:`, never as `${{ }}` inside the script.
+- Pin every action to a full commit SHA with its version in a comment.
+- Hostile test inputs live in `.github/scripts/fixtures/`, never in test code or on a command line.
+
 ### gRPC and Protocol Buffer Integration
 - Use Connect-RPC (@connectrpc/connect) for gRPC communication
 - Use Buf for Protocol Buffer tooling and code generation
