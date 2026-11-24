@@ -152,9 +152,6 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 3.19.15
-      get-port-please:
-        specifier: 3.1.2
-        version: 3.1.2
     devDependencies:
       '@bufbuild/buf':
         specifier: 'catalog:'
@@ -1560,9 +1557,6 @@ packages:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
-
-  get-port-please@3.1.2:
-    resolution: {integrity: sha512-Gxc29eLs1fbn6LQ4jSU4vXjlwyZhF5HsGuMAa7gqBP4Rw4yxxltyDUuF5MBclFzDTXO+ACchGQoeela4DSfzdQ==}
 
   get-tsconfig@4.10.1:
     resolution: {integrity: sha512-auHyJ4AgMz7vgS8Hp3N6HXSmlMdUyhSUrfBF16w153rxtLIEOE+HGqaBppczZvnHLqQJfiHotCYpNhl0lUROFQ==}
@@ -3438,8 +3432,6 @@ snapshots:
 
   fsevents@2.3.3:
     optional: true
-
-  get-port-please@3.1.2: {}
 
   get-tsconfig@4.10.1:
     dependencies:
