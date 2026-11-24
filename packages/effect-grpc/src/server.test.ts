@@ -1,7 +1,8 @@
 // packages/effect-grpc/src/server.test.ts
-import { Deferred, Effect, Exit, Fiber, Logger, Scope } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, LogLevel, Logger, Scope } from "effect";
 import dns from "node:dns";
 import { readFileSync } from "node:fs";
+import http2 from "node:http2";
 import net from "node:net";
 import vm from "node:vm";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -94,10 +95,13 @@ const freePort = Effect.async<number>((resume) => {
 
 const captureLogs = () => {
   const messages: Array<string> = [];
-  const logger = Logger.make(({ message }) => {
-    messages.push((Array.isArray(message) ? message : [message]).map(String).join(" "));
+  const errors: Array<{ message: string; cause: string }> = [];
+  const logger = Logger.make(({ message, logLevel, cause }) => {
+    const text = (Array.isArray(message) ? message : [message]).map(String).join(" ");
+    messages.push(text);
+    if (logLevel === LogLevel.Error) errors.push({ message: text, cause: Cause.pretty(cause) });
   });
-  return { messages, layer: Logger.replace(Logger.defaultLogger, logger) };
+  return { messages, errors, layer: Logger.replace(Logger.defaultLogger, logger) };
 };
 
 /**
@@ -114,6 +118,34 @@ const heapUsedAfterGc = Effect.gen(function* () {
   gc();
   return process.memoryUsage().heapUsed;
 });
+
+const connectStatus = (address: Server.GrpcServerAddress) =>
+  Effect.async<number>((resume) => {
+    const session = http2.connect(address.url);
+    session.on("error", () => {});
+    const request = session.request({
+      ":method": "CONNECT",
+      ":authority": `${address.host}:${address.port}`,
+    });
+    request.on("error", () => {});
+    request.on("response", (headers) => {
+      request.close();
+      session.close();
+      resume(Effect.succeed(Number(headers[":status"])));
+    });
+    return Effect.sync(() => session.destroy());
+  }).pipe(Effect.timeout("2 seconds"));
+
+const sendHttp1Request = (port: number) =>
+  Effect.async<void>((resume) => {
+    const socket = net.connect(port, "127.0.0.1", () => {
+      socket.write("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    });
+    socket.on("error", () => {});
+    socket.once("close", () => resume(Effect.void));
+    socket.resume();
+    return Effect.sync(() => socket.destroy());
+  }).pipe(Effect.timeout("2 seconds"));
 
 const lowPortsArePrivileged = (() => {
   try {
@@ -192,12 +224,16 @@ describe("GrpcServer.listen", () => {
 
   it("fails within one second when the port is taken, and the first server keeps serving", () =>
     Effect.gen(function* () {
+      const { errors, layer } = captureLogs();
       const first = yield* server.listen({ host: "127.0.0.1", port: 0 });
 
       const startedAt = Date.now();
-      const error = yield* Effect.flip(server.listen({ host: "127.0.0.1", port: first.port }));
+      const error = yield* Effect.flip(server.listen({ host: "127.0.0.1", port: first.port })).pipe(
+        Effect.provide(layer),
+      );
       const elapsed = Date.now() - startedAt;
 
+      expect(errors).toEqual([]);
       expect(error).toBeInstanceOf(Server.GrpcServerBindError);
       expect(error).toMatchObject({
         _tag: "@dr_nikson/effect-grpc/server/GrpcServerBindError",
@@ -329,4 +365,55 @@ describe("GrpcServer.listen", () => {
       expect(yield* acceptsConnections(port)).toBe(false);
       expect(messages.filter((message) => message.startsWith("gRPC server"))).toEqual([]);
     }).pipe(Effect.runPromise));
+});
+
+describe("GrpcServer while it serves", () => {
+  it("answers an HTTP/2 CONNECT request with 405 instead of leaving its stream open", () =>
+    Effect.gen(function* () {
+      const address = yield* server.listen({ host: "127.0.0.1", port: 0 });
+
+      expect(yield* connectStatus(address)).toBe(405);
+      const reply = yield* ping(address);
+      expect(reply.$typeName).toBe("google.protobuf.Empty");
+    }).pipe(Effect.scoped, Effect.runPromise));
+
+  it("writes nothing to the console for a call, a rejected HTTP/1.1 client, a closed connection or a shutdown", () =>
+    Effect.gen(function* () {
+      const consoleCalls = (["debug", "error", "info", "log", "warn"] as const).map((method) =>
+        vi.spyOn(console, method),
+      );
+      const { layer } = captureLogs();
+
+      const reply = yield* Effect.gen(function* () {
+        const address = yield* server.listen({ host: "127.0.0.1", port: 0 });
+        yield* sendHttp1Request(address.port);
+        return yield* ping(address);
+      }).pipe(Effect.scoped, Effect.provide(layer));
+
+      expect(reply.$typeName).toBe("google.protobuf.Empty");
+      expect(consoleCalls.flatMap((spy) => spy.mock.calls)).toEqual([]);
+    }).pipe(Effect.runPromise));
+
+  it("keeps serving and reports through the Effect logger an error the listening server emits", () =>
+    Effect.gen(function* () {
+      const created = vi.spyOn(http2, "createServer");
+      const { errors, layer } = captureLogs();
+      const address = yield* server
+        .listen({ host: "127.0.0.1", port: 0 })
+        .pipe(Effect.provide(layer));
+      const listening = created.mock.results[0]?.value as http2.Http2Server;
+      const emfile = Object.assign(new Error("accept EMFILE: too many open files"), {
+        code: "EMFILE",
+        errno: -24,
+        syscall: "accept",
+      });
+
+      expect(() => listening.emit("error", emfile)).not.toThrow();
+
+      expect(errors).toEqual([
+        { message: "gRPC server error", cause: expect.stringContaining("accept EMFILE") },
+      ]);
+      const reply = yield* ping(address);
+      expect(reply.$typeName).toBe("google.protobuf.Empty");
+    }).pipe(Effect.scoped, Effect.runPromise));
 });
