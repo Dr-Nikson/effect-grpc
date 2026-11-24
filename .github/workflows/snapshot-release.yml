@@ -8,8 +8,6 @@ on:
         description: 'Snapshot dist-tag: lowercase letters, digits and single hyphens, starting with a letter (e.g. mvp, pr-123)'
         required: true
         default: 'snapshot'
-  # Only an owner, member or collaborator starts the validate job, which reads the comment with
-  # read-only access and trusted code; only a request it allows reaches npm-publish.
   issue_comment: # zizmor: ignore[dangerous-triggers]
     types: [created]
 
@@ -27,9 +25,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      actions: read # find the commit's CI run and its build artifact
+      actions: read
       contents: read
-      pull-requests: read # read the pull request head
+      pull-requests: read
     outputs:
       kind: ${{ steps.request.outputs.kind }}
       reply: ${{ steps.request.outputs.reply }}
@@ -68,7 +66,7 @@ jobs:
       name: npm-publish
       url: https://npmjs.com/package/@dr_nikson/effect-grpc
     permissions:
-      actions: read # download the CI run's build artifacts
+      actions: read
       contents: read
       id-token: write # npm trusted publishing with provenance
     outputs:
@@ -114,9 +112,7 @@ jobs:
           ls -la packages/*/bin || echo "⚠️  bin folders not found (may not exist)"
           echo "✅ Build artifacts restored successfully"
 
-      # changesets refuses --snapshot in pre mode. Leaving pre mode here changes only this
-      # checkout, which is never committed. The version check stops a publish when the
-      # checkout's changeset config does not produce the 0.0.0 snapshot version.
+      # changesets refuses --snapshot in pre mode.
       - name: Version snapshot
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -155,7 +151,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      pull-requests: write # comment on the pull request
+      pull-requests: write
     steps:
       - name: Comment on PR
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
