@@ -4,7 +4,7 @@ A user calls the server through the generated client. They provide `helloWorldAP
 
 ## Sub-features
 
-- `cli-example` is the README example client (`node dist/client.js`). It logs the greeting, then fails on `FaceTheError` with `failed_precondition`.
+- `cli-example` is the README example client (`node dist/client.js`). It builds its client on a typed tag from `makeHelloWorldAPIClientTag`, logs the greeting, then fails on `FaceTheError` with `failed_precondition`.
 - `cli-localhost` is the README pairing: a client with base URL `http://127.0.0.1:<port>` reaches a server started with `host: "127.0.0.1"` on that port. The README uses port 8000. The ID keeps its name from when that pairing used `localhost`, because issue #60 and the verification lanes look it up by that name.
 - `cli-default-tag` is a client built on the default `HelloWorldAPIClientTag`. It gets the greeting over gRPC.
 - `cli-error` is the delivery of `FaceTheError` to the caller as `ConnectError: [failed_precondition] Face the consequences!`, as a defect.
@@ -29,7 +29,7 @@ Preconditions:
 
 ## Gotchas
 
-- `cli-example` fails on the base recorded in SKILL.md before any network call. It stops with `TypeError: effectProto.HelloWorldAPIClientTag is not a function`, because `client.ts` calls the typed-tag factory (see `gen-typed-tags` in [codegen.md](./codegen.md)). The server-log section stays empty.
+- On a base without the fix for issue #55, `cli-example` stops before any network call with `TypeError: effectProto.HelloWorldAPIClientTag is not a function`, and the server-log section stays empty (see `gen-typed-tags` in [codegen.md](./codegen.md)).
 - On a base without the fix for issue #61, `cli-ipv6` stops the server: the probe gets `[aborted] read ECONNRESET`, and the server log shows `TypeError: Invalid URL` with base `http://::1:<port>` (see `srv-hostile-authority` in [server-lifecycle.md](./server-lifecycle.md)).
 - The probe imports the compiled `packages/example/dist/generated` module and the built library. After you change client code, run `.claude/skills/verify/scripts/control-example build`. `.claude/skills/verify/scripts/control-example doctor` reports a stale `dist/`.
 - The result is always the last stdout line of the probe.
