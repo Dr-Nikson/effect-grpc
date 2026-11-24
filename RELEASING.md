@@ -177,31 +177,44 @@ The next "Version Packages" PR will create the stable version (e.g., `0.2.0`).
 
 ## Snapshot Releases (Testing Unreleased Changes)
 
-For testing changes in consuming projects before official release:
+For testing changes in consuming projects before official release.
 
-### Manual Snapshot
+A snapshot version has the form `0.0.0-<tag>-<commit sha>`. It is outside every release range, so a range such as `^3.0.0-alpha.5` never resolves to a snapshot. Install a snapshot by its tag or by its exact version:
 
 ```bash
-# Create a snapshot version
+pnpm add @dr_nikson/effect-grpc@pr-123
+```
+
+### PR Snapshots
+
+An owner, member or collaborator of the repository comments on a pull request. The command is the first line of the comment:
+
+```
+/snapshot          # publishes under the tag pr-<number>
+/snapshot <tag>    # publishes under <tag>
+```
+
+The Snapshot Release workflow then:
+
+1. Ignores the comment when the account is not an owner, member or collaborator.
+2. Refuses a tag that is not 1 to 32 lowercase letters, digits and single hyphens starting with a letter. It also refuses `latest`, `alpha` and version ranges such as `v1`.
+3. Refuses a pull request whose head lives in a fork.
+4. Requires a successful Typescript CI push run for the head commit, with its build artifact.
+5. Waits for approval of the `npm-publish` environment, publishes, and replies on the pull request.
+
+### Manual Snapshot from a Branch
+
+Run **Actions → Snapshot Release → Run workflow**, pick the branch, and enter a tag. The same tag rule and CI check apply.
+
+### Local Snapshot
+
+`changeset version --snapshot` refuses to run in pre mode. Work in a scratch clone, set `GITHUB_TOKEN` for the changelog generator, and never commit the result:
+
+```bash
+pnpm changeset pre exit
 pnpm changeset version --snapshot pr-123
-
-# This creates versions like: 0.0.0-pr-123-20250930123456
-
-# Publish with snapshot tag
-pnpm changeset publish --tag snapshot
+pnpm changeset publish --tag pr-123
 ```
-
-Users can test the snapshot:
-```bash
-pnpm add @dr_nikson/effect-grpc@snapshot
-```
-
-### Automated PR Snapshots
-
-Add a `snapshot` label to any PR to trigger automatic snapshot publishing:
-1. Label the PR with `snapshot`
-2. GitHub Actions automatically publishes a snapshot version
-3. Use the snapshot version for testing
 
 ## Package Configuration
 
