@@ -1,5 +1,5 @@
 // packages/effect-grpc/src/server.internal.ts
-import { Effect, Option, Predicate, Scope, Types } from "effect";
+import { Effect, ExecutionStrategy, Exit, Option, Predicate, Scope, Types } from "effect";
 import http2 from "node:http2";
 
 import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
@@ -274,6 +274,18 @@ const stopServer = (server: http2.Http2Server): Effect.Effect<unknown> =>
   : Effect.sync(() => server.close());
 
 /**
+ * Closing a scope that `Scope.fork` made also removes it from its parent, so an `effect` that fails
+ * or is interrupted leaves nothing in the current scope. Effect 3 does this in `ScopeImplProto.fork`
+ * (`src/internal/fiberRuntime.ts`), and Effect 4 documents it on `Scope.fork`.
+ */
+const releaseOnFailure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.acquireUseRelease(
+    Effect.flatMap(Effect.scope, (scope) => Scope.fork(scope, ExecutionStrategy.sequential)),
+    (child) => Scope.extend(effect, child),
+    (child, exit) => (Exit.isFailure(exit) ? Scope.close(child, exit) : Effect.void),
+  );
+
+/**
  * @internal
  * Live implementation of the GrpcServer interface.
  * Manages the HTTP/2 server and routes gRPC requests to registered services.
@@ -382,11 +394,15 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
           }),
       );
 
-      const server = yield* Effect.acquireRelease(createServer, stopServer);
-      const address = yield* awaitListening(server, options);
-      yield* Effect.logInfo(`gRPC server listening on ${address.url}`);
+      const startup = Effect.gen(function* () {
+        const server = yield* Effect.acquireRelease(createServer, stopServer);
+        const address = yield* awaitListening(server, options);
+        yield* Effect.logInfo(`gRPC server listening on ${address.url}`);
 
-      return address;
+        return address;
+      });
+
+      return yield* releaseOnFailure(startup);
     });
   }
 
