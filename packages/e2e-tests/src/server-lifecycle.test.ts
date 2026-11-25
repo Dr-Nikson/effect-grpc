@@ -128,13 +128,16 @@ describe("GrpcServer.listen", () => {
       }),
   );
 
-  it.live("fails with InvalidPort for a port above 65535", () =>
+  it.live.each([
+    { reason: "InvalidPort", at: "a port above 65535", host: "127.0.0.1", port: 65536 },
+    { reason: "Other", at: "an address that this host does not have", host: "192.0.2.1", port: 0 },
+  ])("fails with $reason for $at", ({ reason, host, port }) =>
     Effect.gen(function* () {
       const server = yield* serverFor(greeter);
 
-      const error = yield* Effect.flip(server.listen({ host: "127.0.0.1", port: 65536 }));
+      const error = yield* Effect.flip(server.listen({ host, port }));
 
-      expect(error).toMatchObject({ reason: { _tag: "InvalidPort" }, port: 65536 });
+      expect(error).toMatchObject({ reason: { _tag: reason }, host, port });
     }),
   );
 
