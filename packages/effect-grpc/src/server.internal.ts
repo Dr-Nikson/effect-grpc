@@ -1,5 +1,5 @@
 // packages/effect-grpc/src/server.internal.ts
-import { Effect, Scope, Types } from "effect";
+import { Effect, Option, Scope, Types } from "effect";
 import http2 from "node:http2";
 
 import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
@@ -9,7 +9,8 @@ import type {
   HandlerContext,
   ServiceImpl,
 } from "@connectrpc/connect";
-import { createContextValues } from "@connectrpc/connect";
+import { Code, createContextValues } from "@connectrpc/connect";
+import type { ConnectNodeAdapterOptions } from "@connectrpc/connect-node";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 
 import * as GrpcException from "./grpcException.js";
@@ -43,6 +44,60 @@ export function makeGrpcService<
   };
 }
 
+type RequestListener = (req: http2.Http2ServerRequest, res: http2.Http2ServerResponse) => void;
+
+const grpcContentType =
+  /^application\/grpc(?:-web(?:-text)?)?(?:\+(?:json(?:; ?charset=utf-?8)?|proto))?$/i;
+
+/**
+ * A gRPC or gRPC-web client reads the status from an HTTP 200 response. connect-go clients, buf
+ * curl among them, also reject a content type that names a codec other than the request's, so the
+ * reply echoes it.
+ */
+const refuseMalformedAuthority = (
+  req: http2.Http2ServerRequest,
+  res: http2.Http2ServerResponse,
+): void => {
+  const message = "malformed request authority";
+  const grpc = Option.fromNullable(req.headers["content-type"]).pipe(
+    Option.filter((contentType) => grpcContentType.test(contentType)),
+  );
+  if (Option.isSome(grpc)) {
+    // Headers set before end() leave in one HEADERS frame that ends the stream, which is a gRPC
+    // trailers-only response. writeHead() would send them without END_STREAM.
+    res.statusCode = 200;
+    res.setHeader("content-type", grpc.value);
+    res.setHeader("grpc-status", String(Code.InvalidArgument));
+    res.setHeader("grpc-message", encodeURIComponent(message));
+    res.end();
+    return;
+  }
+  res.statusCode = 400;
+  res.setHeader("content-type", "application/json");
+  res.end(JSON.stringify({ code: "invalid_argument", message }));
+};
+
+/**
+ * connect-node builds each request's URL from its authority synchronously inside the listener, and
+ * Node turns a throw there into an uncaught exception that stops the process.
+ */
+const makeRequestListener = (
+  options: Pick<ConnectNodeAdapterOptions, "routes" | "interceptors" | "contextValues">,
+): RequestListener => {
+  const handler = connectNodeAdapter(options);
+  return (req, res) => {
+    try {
+      if (!URL.canParse(`http://${req.authority}`)) {
+        refuseMalformedAuthority(req, res);
+        return;
+      }
+      handler(req, res);
+    } catch {
+      res.stream.close(http2.constants.NGHTTP2_INTERNAL_ERROR);
+    }
+  };
+};
+
 /**
  * @internal
  * Live implementation of the GrpcServer interface.
@@ -65,7 +120,7 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
     return Effect.gen(function* () {
       const executor = yield* makeExecutor();
       const handler = yield* Effect.sync(() =>
-        connectNodeAdapter({
+        makeRequestListener({
           routes: routes(executor),
           interceptors: [],
           contextValues(req): ContextValues {
