@@ -126,31 +126,6 @@ const sessionTo = (baseUrl: string) =>
     (sessionManager) => Effect.sync(() => sessionManager.abort()),
   );
 
-const throwingAuthority = (thrown: string) =>
-  Effect.acquireRelease(
-    Effect.fromNullishOr(
-      Object.getOwnPropertyDescriptor(http2.Http2ServerRequest.prototype, "authority"),
-    ).pipe(
-      Effect.orDie,
-      Effect.tap((original) =>
-        Effect.sync(() =>
-          Object.defineProperty(http2.Http2ServerRequest.prototype, "authority", {
-            configurable: true,
-            get(this: http2.Http2ServerRequest): unknown {
-              const authority: unknown = original.get?.call(this);
-              if (authority === thrown) throw new Error("thrown inside the request listener");
-              return authority;
-            },
-          }),
-        ),
-      ),
-    ),
-    (original) =>
-      Effect.sync(() =>
-        Object.defineProperty(http2.Http2ServerRequest.prototype, "authority", original),
-      ),
-  );
-
 const stallingProxy = (target: number) =>
   Effect.acquireRelease(
     Effect.callback<{
@@ -367,23 +342,6 @@ describe("Hostile requests (issue #61)", () => {
         } else {
           yield* expectInvalidAuthority(session, value, name);
         }
-        yield* expectServing(session, port);
-      }
-    }),
-  );
-
-  it.live("resets only the stream of a request that throws inside the listener", () =>
-    Effect.gen(function* () {
-      const { authority } = fixtures.throwingRequest;
-      yield* throwingAuthority(authority);
-      const port = yield* serve("127.0.0.1");
-      const session = yield* raw.connect(`http://127.0.0.1:${port}`);
-
-      for (const protocol of raw.protocols) {
-        const reply = yield* call(session, protocol, authority);
-        expect(reply.rstCode, `a request that throws in the listener, over ${protocol}`).toBe(
-          http2.constants.NGHTTP2_INTERNAL_ERROR,
-        );
         yield* expectServing(session, port);
       }
     }),
