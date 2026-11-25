@@ -94,6 +94,27 @@ const refuseMalformedAuthority = (
 };
 
 /**
+ * connect-node stops reading a request it refuses or answers before the request ends. The client
+ * then keeps sending, and Node keeps the stream until its request is read to the end, so graceful
+ * shutdown waits for it. Once the response's END_STREAM has been serialized, RFC 9113 section 8.1
+ * lets the server reset the request with NO_ERROR, and destroying the stream releases it. Node has
+ * no event for that moment, and destroying the stream earlier drops the response.
+ */
+const closeUnreadRequest = (stream: http2.ServerHttp2Stream): void => {
+  if (stream.destroyed) return;
+  const { localClose, state } = stream.state;
+  if (localClose === 1) {
+    stream.close(http2.constants.NGHTTP2_NO_ERROR);
+  } else if (state !== http2.constants.NGHTTP2_STREAM_STATE_IDLE) {
+    // A socket write still holds the END_STREAM. Node reports a stream that nghttp2 has already
+    // freed, because both sides ended, as idle.
+    setTimeout(closeUnreadRequest, 100, stream);
+    return;
+  }
+  stream.destroy();
+};
+
+/**
  * connect-node builds each request's URL from its authority synchronously inside the listener, and
  * Node turns a throw there into an uncaught exception that stops the process.
  */
@@ -104,6 +125,9 @@ const makeRequestListener = (
 ): RequestListener => {
   const handler = connectNodeAdapter(options);
   return (req, res) => {
+    res.stream.once("finish", () => {
+      if (!res.stream.readableEnded) setTimeout(closeUnreadRequest, 10, res.stream);
+    });
     try {
       const authority = readAuthority(req.authority);
       if (Option.isNone(authority)) {
