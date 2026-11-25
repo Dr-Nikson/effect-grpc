@@ -250,15 +250,13 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
     });
   }
 
-  private routes(
-    executor: ProtoRuntime.ServerExecutor<Ctx>,
-  ): (router: ConnectRouter) => ConnectRouter {
+  private routes(executor: ProtoRuntime.ServerExecutor<Ctx>): (router: ConnectRouter) => void {
     const allServices: T.GrpcService<any, any, Ctx>[] = Object.values(this.services);
 
     return (router: ConnectRouter) => {
-      return allServices.reduce((router, service: T.GrpcService<any, any, Ctx>) => {
-        return router.service(service.definition, service.implementation(executor));
-      }, router);
+      for (const service of allServices) {
+        router.service(service.definition, service.implementation(executor));
+      }
     };
   }
 
