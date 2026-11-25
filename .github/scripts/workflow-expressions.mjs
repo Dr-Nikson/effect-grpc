@@ -9,15 +9,7 @@ const unwrap = (expression) => {
   return /^\s*\$\{\{([\s\S]*)\}\}\s*$/.exec(text)?.[1] ?? text;
 };
 
-/**
- * Evaluates a workflow expression, with or without `${{ }}`. The evaluator knows no job status,
- * so always() is true and success() and failure() follow `status`.
- *
- * @param {string | boolean} expression
- * @param {Record<string, unknown>} contexts
- * @param {"success" | "failure"} [status]
- */
-export function evaluate(expression, contexts, status = "success") {
+function evaluateToData(expression, contexts, status = "success") {
   const functions = Object.entries({
     always: true,
     success: status === "success",
@@ -35,7 +27,25 @@ export function evaluate(expression, contexts, status = "success") {
     functions,
   ).parse();
   const context = JSON.parse(JSON.stringify(contexts), data.reviver);
-  return truthy(new Evaluator(ast, context, new Map(functions.map((f) => [f.name, f]))).evaluate());
+  return new Evaluator(ast, context, new Map(functions.map((f) => [f.name, f]))).evaluate();
+}
+
+/**
+ * Evaluates a workflow expression, with or without `${{ }}`. The evaluator knows no job status,
+ * so always() is true and success() and failure() follow `status`.
+ *
+ * @param {string | boolean} expression
+ * @param {Record<string, unknown>} contexts
+ * @param {"success" | "failure"} [status]
+ */
+export function evaluate(expression, contexts, status = "success") {
+  return truthy(evaluateToData(expression, contexts, status));
+}
+
+export function expand(value, contexts) {
+  return String(value).replace(/\$\{\{([\s\S]*?)\}\}/g, (_, expression) =>
+    evaluateToData(expression, contexts).coerceString(),
+  );
 }
 
 /**
