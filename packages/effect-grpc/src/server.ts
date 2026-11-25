@@ -161,9 +161,11 @@ export interface GrpcServerBuilder<Ctx, Services> {
  */
 export interface GrpcServerOptions {
   /**
-   * The largest request message the server reads, in bytes, from 1 to 4294967295. The server
-   * answers a larger message with `RESOURCE_EXHAUSTED`, and it checks the size on the wire and
-   * again after decompression. Defaults to 4 MiB (4194304 bytes), as in grpc-go and grpc-js.
+   * The largest request message the server reads, as a whole number of bytes from 1 to
+   * 4294967295. The server answers a larger message with `RESOURCE_EXHAUSTED`, and it checks the
+   * size on the wire and again after decompression. Defaults to 4 MiB (4194304 bytes), as in
+   * grpc-go and grpc-js. `build` throws `Cause.IllegalArgumentException` for any other value, such
+   * as `NaN` from `Number()` of an unset environment variable.
    */
   readonly readMaxBytes?: number;
 }

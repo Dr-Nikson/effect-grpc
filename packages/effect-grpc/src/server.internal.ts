@@ -1,5 +1,5 @@
 // packages/effect-grpc/src/server.internal.ts
-import { Effect, Option, Scope, Types } from "effect";
+import { Cause, Effect, Option, Scope, Types } from "effect";
 import http2 from "node:http2";
 
 import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
@@ -45,6 +45,9 @@ export function makeGrpcService<
 }
 
 const grpcDefaultMaxReceiveMessageBytes = 4 * 1024 * 1024;
+
+/** Connect accepts no larger value, because Node's zlib and protobuf-es stop at 4 GiB. */
+const largestReadMaxBytes = 0xffffffff;
 
 type RequestListener = (req: http2.Http2ServerRequest, res: http2.Http2ServerResponse) => void;
 
@@ -347,6 +350,11 @@ export class ConnectEsGprcServerBuilder<Ctx, Services>
     this: This,
     { readMaxBytes = grpcDefaultMaxReceiveMessageBytes }: T.GrpcServerOptions = {},
   ): T.GrpcServer<Services> {
+    if (!Number.isInteger(readMaxBytes) || readMaxBytes < 1 || readMaxBytes > largestReadMaxBytes) {
+      throw new Cause.IllegalArgumentException(
+        `readMaxBytes must be an integer from 1 to ${largestReadMaxBytes}, got ${readMaxBytes}`,
+      );
+    }
     const executorTransformation = ProtoRuntime.ServerExecutorTransformer().transformContext<Ctx>(
       this.transformCtx,
     );
