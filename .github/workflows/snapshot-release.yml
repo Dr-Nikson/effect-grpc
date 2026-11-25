@@ -113,7 +113,8 @@ jobs:
           ls -la packages/*/bin || echo "⚠️  bin folders not found (may not exist)"
           echo "✅ Build artifacts restored successfully"
 
-      # changesets refuses --snapshot in pre mode.
+      # changesets refuses --snapshot in pre mode. The `-0.` identifier sorts a snapshot below every
+      # alpha, beta and rc, so a branch whose config makes another form must stop here.
       - name: Version snapshot
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -123,8 +124,8 @@ jobs:
           fi
           pnpm exec changeset version --snapshot "$SNAPSHOT_TAG"
           VERSION=$(node -p "require('./packages/effect-grpc/package.json').version")
-          if [[ "$VERSION" != "0.0.0-$SNAPSHOT_TAG-$SNAPSHOT_SHA" ]]; then
-            echo "::error::The snapshot version is not 0.0.0-$SNAPSHOT_TAG-$SNAPSHOT_SHA"
+          if [[ "$VERSION" != *"-0.$SNAPSHOT_TAG.$SNAPSHOT_SHA" ]]; then
+            echo "::error::The snapshot version $VERSION does not end with -0.$SNAPSHOT_TAG.$SNAPSHOT_SHA"
             exit 1
           fi
           echo "Snapshot version: $VERSION"
@@ -133,7 +134,8 @@ jobs:
         id: publish
         run: |
           pnpm exec changeset publish --tag "$SNAPSHOT_TAG"
-          echo "version=0.0.0-$SNAPSHOT_TAG-$SNAPSHOT_SHA" >> "$GITHUB_OUTPUT"
+          VERSION=$(node -p "require('./packages/effect-grpc/package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Output to console
         if: github.event_name == 'workflow_dispatch'

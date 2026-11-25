@@ -2,7 +2,7 @@
 
 const TAG_GRAMMAR = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const TAG_MAX_LENGTH = 32;
-const RELEASE_DIST_TAGS = new Set(["latest", "alpha"]);
+const RELEASE_DIST_TAGS = new Set(["latest", "alpha", "beta", "rc", "effect-v3", "effect-v4"]);
 const SEMVER_RANGE = /^v*(?:x|[0-9]+)$/;
 const CI_WORKFLOW = "typescript-ci.yml";
 
@@ -36,7 +36,8 @@ export const REFUSAL_MESSAGES = {
     "Snapshot refused: write `/snapshot` or `/snapshot <tag>` as the first line of the comment.",
   tag:
     "Snapshot refused: a tag is 1 to 32 lowercase letters, digits and single hyphens, starts with a letter," +
-    " and is not `latest`, `alpha` or a version range such as `v1`.",
+    ` and is not a release channel (${[...RELEASE_DIST_TAGS].map((tag) => `\`${tag}\``).join(", ")})` +
+    " or a version range such as `v1`.",
   fork: "Snapshot refused: the pull request head must be a branch of this repository, not a fork.",
   ci: "Snapshot refused: this commit has no successful Typescript CI push run yet. Retry after it passes.",
   artifact:
