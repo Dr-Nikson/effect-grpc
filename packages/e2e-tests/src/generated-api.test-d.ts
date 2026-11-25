@@ -34,13 +34,13 @@ describe("the server code generated for a service", () => {
       faceTheError: () => Effect.fail(GrpcException.create(Code.FailedPrecondition, "no")),
     };
     const failsWithAString: effectProto.HelloWorldAPIService<AppContext> = {
-      getGreeting: greets.getGreeting,
+      getGreeting: (request) => Effect.succeed({ greeting: request.name }),
       // @ts-expect-error a handler fails only with GrpcException
       faceTheError: () => Effect.fail("no greeting"),
     };
     // @ts-expect-error each unary rpc needs a handler
     const lacksAHandler: effectProto.HelloWorldAPIService<AppContext> = {
-      getGreeting: greets.getGreeting,
+      getGreeting: (request) => Effect.succeed({ greeting: request.name }),
     };
 
     effectProto.helloWorldAPIServiceLiveLayer(appTag, greets);
