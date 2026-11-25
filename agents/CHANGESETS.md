@@ -72,7 +72,7 @@ Fix duplicate suffix in generated service names when proto service already ends 
 
 **Versions:**
 - The library follows semver. Changesets computes each version from the bump types of the pending changesets, so choose a bump for the change itself, never to match Effect's major version.
-- The Effect line is the `effect` peer range (`peer` catalog in `pnpm-workspace.yaml`).
+- The Effect line is the `effect` peer range (`peer` catalog in `pnpm-workspace.yaml`). Every release for Effect 4 also moves the `effect-v4` dist-tag (see `RELEASING.md`).
 
 ## Writing Good Descriptions
 

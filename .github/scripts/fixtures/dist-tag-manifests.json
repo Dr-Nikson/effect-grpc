@@ -1,0 +1,92 @@
+{
+  "accepted": [
+    {
+      "name": "an alpha prerelease",
+      "manifest": { "name": "@dr_nikson/effect-grpc", "version": "3.0.0-alpha.6" },
+      "args": ["dist-tag", "add", "@dr_nikson/effect-grpc@3.0.0-alpha.6", "effect-v4"]
+    },
+    {
+      "name": "a stable release",
+      "manifest": { "name": "@dr_nikson/effect-grpc", "version": "3.1.0" },
+      "args": ["dist-tag", "add", "@dr_nikson/effect-grpc@3.1.0", "effect-v4"]
+    },
+    {
+      "name": "a prerelease with several identifiers",
+      "manifest": { "name": "@dr_nikson/effect-grpc", "version": "4.0.0-rc.1-x.2" },
+      "args": ["dist-tag", "add", "@dr_nikson/effect-grpc@4.0.0-rc.1-x.2", "effect-v4"]
+    }
+  ],
+  "refused": [
+    {
+      "name": "the example package",
+      "manifest": { "name": "@dr_nikson/effect-grpc-example", "version": "0.1.0" }
+    },
+    {
+      "name": "a package of another scope",
+      "manifest": { "name": "@someone-else/effect-grpc", "version": "3.0.0" }
+    },
+    {
+      "name": "a manifest without a name",
+      "manifest": { "version": "3.0.0" }
+    },
+    {
+      "name": "a manifest without a version",
+      "manifest": { "name": "@dr_nikson/effect-grpc" }
+    },
+    {
+      "name": "a version that is a number",
+      "manifest": { "name": "@dr_nikson/effect-grpc", "version": 3 }
+    },
+    {
+      "name": "a version followed by an npm option",
+      "manifest": {
+        "name": "@dr_nikson/effect-grpc",
+        "version": "3.0.0 --registry=https://registry.example.test"
+      }
+    },
+    {
+      "name": "a version that is an npm option",
+      "manifest": { "name": "@dr_nikson/effect-grpc", "version": "--registry=https://registry.example.test" }
+    },
+    {
+      "name": "a version with a second argument on the next line",
+      "manifest": { "name": "@dr_nikson/effect-grpc", "version": "3.0.0\nlatest" }
+    },
+    {
+      "name": "a version with a shell command",
+      "manifest": { "name": "@dr_nikson/effect-grpc", "version": "3.0.0$(touch /tmp/moved)" }
+    },
+    {
+      "name": "a dist-tag in place of a version",
+      "manifest": { "name": "@dr_nikson/effect-grpc", "version": "latest" }
+    },
+    {
+      "name": "a version range",
+      "manifest": { "name": "@dr_nikson/effect-grpc", "version": "^3.0.0" }
+    },
+    {
+      "name": "a version with a v prefix",
+      "manifest": { "name": "@dr_nikson/effect-grpc", "version": "v3.0.0" }
+    },
+    {
+      "name": "a version with build metadata",
+      "manifest": { "name": "@dr_nikson/effect-grpc", "version": "3.0.0+sha.5114f85" }
+    },
+    {
+      "name": "a version with a leading zero",
+      "manifest": { "name": "@dr_nikson/effect-grpc", "version": "03.0.0" }
+    },
+    {
+      "name": "a version with two parts",
+      "manifest": { "name": "@dr_nikson/effect-grpc", "version": "3.0" }
+    },
+    {
+      "name": "a manifest that is a string",
+      "manifest": "3.0.0"
+    },
+    {
+      "name": "a manifest that is null",
+      "manifest": null
+    }
+  ]
+}

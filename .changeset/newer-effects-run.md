@@ -21,3 +21,5 @@ What else changes for a user:
 - A typed call of a generated tag constant, such as `HelloWorldAPIClientTag<Meta>("key")`, still does not compile. In untyped JavaScript the same call now returns `undefined`, where it threw a `TypeError` on Effect 3. Make a typed tag with `makeHelloWorldAPIClientTag<Meta>("key")`.
 
 The `version` field of the package changes from `3.0.0-alpha.5` to `3.0.0` with this change. It is the base that the release tooling computes `4.0.0-alpha.0` from, and no `3.0.0` is published.
+
+Every release for Effect 4 also moves the `effect-v4` dist-tag, so `npm install @dr_nikson/effect-grpc@effect-v4` installs the newest one.
