@@ -64,6 +64,25 @@ export const connect = (url: string): Effect.Effect<http2.ClientHttp2Session, ne
     (session) => Effect.sync(() => session.destroy()),
   );
 
+const largestWindow = 2 ** 31 - 1;
+
+/** The server can send up to 2 GiB on this session before the client reads any of it. */
+export const connectWithLargestWindows = (
+  url: string,
+): Effect.Effect<http2.ClientHttp2Session, never, Scope.Scope> =>
+  Effect.acquireRelease(
+    Effect.async<http2.ClientHttp2Session>((resume) => {
+      const session = http2
+        .connect(url, { settings: { initialWindowSize: largestWindow } })
+        .on("error", () => {});
+      session.once("connect", () => {
+        session.setLocalWindowSize(largestWindow);
+        resume(Effect.succeed(session));
+      });
+    }),
+    (session) => Effect.sync(() => session.destroy()),
+  );
+
 const exchange = (
   session: http2.ClientHttp2Session,
   protocol: Protocol,

@@ -6,6 +6,7 @@ import {
   Effect,
   ExecutionStrategy,
   Exit,
+  Fiber,
   Layer,
   Option,
   Schedule,
@@ -56,7 +57,11 @@ const authorityEcho: effectProto.HelloWorldAPIService<HandlerContext> = {
   faceTheError: (_request, ctx) => Effect.succeed({ greeting: new URL(ctx.url).host }),
 };
 
-const serve = (host: string, options?: EffectGrpcServer.GrpcServerOptions) =>
+const serve = (
+  host: string,
+  options?: EffectGrpcServer.GrpcServerOptions,
+  service: effectProto.HelloWorldAPIService<HandlerContext> = authorityEcho,
+) =>
   Effect.gen(function* () {
     const port = yield* Port;
     const service = yield* effectProto.HelloWorldAPIServiceTag;
@@ -69,7 +74,7 @@ const serve = (host: string, options?: EffectGrpcServer.GrpcServerOptions) =>
     return port;
   }).pipe(
     Effect.provide(
-      effectProto.helloWorldAPIServiceLiveLayer(effectProto.HelloWorldAPIServiceTag, authorityEcho),
+      effectProto.helloWorldAPIServiceLiveLayer(effectProto.HelloWorldAPIServiceTag, service),
     ),
   );
 
@@ -110,6 +115,40 @@ const sessionTo = (baseUrl: string) =>
   Effect.acquireRelease(
     Effect.sync(() => new Http2SessionManager(baseUrl)),
     (sessionManager) => Effect.sync(() => sessionManager.abort()),
+  );
+
+// A TCP proxy that can stop reading what the server sends, so the server's socket writes stay in
+// progress.
+const stallingProxy = (target: number) =>
+  Effect.acquireRelease(
+    Effect.async<{
+      readonly port: number;
+      readonly reading: (on: boolean) => void;
+      readonly close: () => void;
+    }>((resume) => {
+      const upstreams = new Set<net.Socket>();
+      const proxy = net.createServer((client) => {
+        const upstream = net.connect(target, "127.0.0.1");
+        upstreams.add(upstream);
+        client.on("data", (chunk) => upstream.write(chunk));
+        upstream.on("data", (chunk) => client.write(chunk));
+        client.on("close", () => upstream.destroy());
+        upstream.on("close", () => client.destroy());
+        client.on("error", () => {});
+        upstream.on("error", () => {});
+      });
+      proxy.listen(0, "127.0.0.1", () =>
+        resume(
+          Effect.succeed({
+            port: (proxy.address() as net.AddressInfo).port,
+            reading: (on) =>
+              upstreams.forEach((upstream) => (on ? upstream.resume() : upstream.pause())),
+            close: () => proxy.close(),
+          }),
+        ),
+      );
+    }),
+    ({ close }) => Effect.sync(close),
   );
 
 const expectInvalidAuthority = (
@@ -479,6 +518,56 @@ describe("Hostile requests (issue #61)", () => {
         },
       });
       yield* expectServing(session, port);
+    }).pipe(Effect.provide(PortLive)),
+  );
+
+  it.scopedLive("delivers a refusal that waits behind a stalled connection", () =>
+    Effect.gen(function* () {
+      const { downloadName, downloadBytes, fillMs, stallMs, closeDeadlineMs } =
+        fixtures.stalledConnection;
+      const port = yield* serve("127.0.0.1", undefined, {
+        ...authorityEcho,
+        getGreeting: (request, ctx) =>
+          Effect.succeed({
+            greeting:
+              request.name === downloadName ? "x".repeat(downloadBytes) : new URL(ctx.url).host,
+          }),
+      });
+      const proxy = yield* stallingProxy(port);
+      const session = yield* raw.connectWithLargestWindows(`http://127.0.0.1:${proxy.port}`);
+      const authority = `127.0.0.1:${port}`;
+
+      proxy.reading(false);
+      yield* Effect.fork(raw.getGreeting(session, "grpc", authority, downloadName));
+      yield* Effect.sleep(Duration.millis(fillMs));
+      const refused = yield* Effect.fork(
+        raw.getGreetingUntilClosed(
+          session,
+          "grpc",
+          authority,
+          expand(fixtures.messageLimit.nameOverLimit),
+        ),
+      );
+      yield* Effect.sleep(Duration.millis(stallMs));
+      const whileStalled = yield* Fiber.poll(refused);
+      proxy.reading(true);
+      const reply = yield* Fiber.join(refused).pipe(
+        Effect.timeoutOption(Duration.millis(closeDeadlineMs)),
+      );
+
+      expect(
+        Option.isNone(whileStalled),
+        "the refused call was still waiting while the connection was stalled",
+      ).toBe(true);
+      expect(
+        Option.map(reply, ({ grpcStatus, rstCode }) => ({ grpcStatus, rstCode })),
+        "the refused call once the connection reads again",
+      ).toEqual(
+        Option.some({
+          grpcStatus: String(Code.ResourceExhausted),
+          rstCode: http2.constants.NGHTTP2_NO_ERROR,
+        }),
+      );
     }).pipe(Effect.provide(PortLive)),
   );
 

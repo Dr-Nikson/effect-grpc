@@ -98,5 +98,13 @@
   "unfinishedUpload": {
     "case": "a client that keeps sending a 5 MiB message after the server refused it, waiting for the server to close the stream as curl and buf curl do",
     "closeDeadlineMs": 2000
+  },
+  "stalledConnection": {
+    "case": "a 16 MiB answer fills a connection whose client stops reading for a second, and the server refuses a 5 MiB message on that connection meanwhile",
+    "downloadName": "download",
+    "downloadBytes": 16777216,
+    "fillMs": 300,
+    "stallMs": 1000,
+    "closeDeadlineMs": 5000
   }
 }
