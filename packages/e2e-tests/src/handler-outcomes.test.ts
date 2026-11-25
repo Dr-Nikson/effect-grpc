@@ -223,4 +223,35 @@ describe("a call that its client cancels", () => {
       expect(Option.isSome(handlerInterrupted), "the handler was interrupted").toBe(true);
     }),
   );
+
+  it.live("leaves its connection serving the next call", () =>
+    Effect.gen(function* () {
+      const started = yield* Deferred.make<void>();
+      const interrupted = yield* Deferred.make<void>();
+      const server = yield* serverFor({
+        ...greeter,
+        getGreeting: (request, ctx) =>
+          request.name === "Ada" ?
+            Deferred.succeed(started, undefined).pipe(
+              Effect.andThen(Effect.never),
+              signalInterruption(interrupted),
+            )
+          : greeter.getGreeting(request, ctx),
+      });
+      const address = yield* server.listen({ host: "127.0.0.1", port: 0 });
+      const authority = new URL(address.url).host;
+      const session = yield* raw.connect(address.url);
+
+      const call = yield* Effect.forkChild(raw.getGreeting(session, "grpc", authority, "Ada"));
+      yield* Deferred.await(started);
+      yield* Fiber.interrupt(call);
+      yield* Deferred.await(interrupted).pipe(Effect.timeoutOption("2 seconds"));
+      const next = yield* raw.getGreeting(session, "grpc", authority, "Bob");
+
+      expect(
+        { status: next.grpcStatus, greeting: next.greeting },
+        "the next call on the same connection",
+      ).toEqual({ status: "0", greeting: "Hello, Bob!" });
+    }),
+  );
 });
