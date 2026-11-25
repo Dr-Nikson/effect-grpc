@@ -40,6 +40,14 @@
       "newest": "4.1.5"
     },
     {
+      "name": "reads the floor from the peer catalog, not from the default catalog that holds the installed release",
+      "peers": { "effect": "catalog:peer" },
+      "catalogs": { "default": { "effect": "4.1.5" }, "peer": { "effect": "^4.0.7" } },
+      "published": ["4.0.7", "4.1.0", "4.1.5"],
+      "oldest": "4.0.7",
+      "newest": "4.1.5"
+    },
+    {
       "name": "reads the range from the default catalog",
       "peers": { "effect": "catalog:" },
       "catalog": { "effect": "^4.1.0" },
@@ -94,5 +102,21 @@
       "mismatched": ["effect 4.0.7, 4.1.5"]
     }
   ],
+  "cli": {
+    "manifest": { "name": "effect-grpc", "private": true, "pnpm": { "overrides": { "semver": "7.7.2" } } },
+    "library": { "name": "@dr_nikson/effect-grpc", "peerDependencies": { "effect": "catalog:peer" } },
+    "workspace": {
+      "packages": ["packages/*"],
+      "catalogs": { "default": { "effect": "4.1.5" }, "peer": { "effect": "^4.0.7" } }
+    },
+    "published": ["4.0.6", "4.0.7", "4.1.0", "4.1.5", "4.2.0-beta.1"],
+    "installed": [
+      "effect@4.1.5",
+      "@effect/platform-node@4.1.5",
+      "@effect/platform-node-shared@4.1.5",
+      "@effect/language-service@0.87.5",
+      "vitest@5.1.1"
+    ]
+  },
   "hostilePins": ["npm:evil@1.0.0", "file:../evil", "4.0.7 || 5", "^4.0.7", "4.0.7\nx", "", null]
 }
