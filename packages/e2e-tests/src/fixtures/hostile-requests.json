@@ -105,10 +105,6 @@
     "smallest": 1,
     "largest": 4294967295
   },
-  "throwingRequest": {
-    "case": "a request whose authority getter throws inside the request listener, standing in for a throw that no known request causes",
-    "authority": "listener-throws.test:50051"
-  },
   "stalledConnection": {
     "case": "a 16 MiB answer fills a connection whose client stops reading for a second, and the server refuses a 5 MiB message on that connection meanwhile",
     "downloadName": "download",

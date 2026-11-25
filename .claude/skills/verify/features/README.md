@@ -49,5 +49,5 @@ Keep implementation details out of the map. Name only user paths, stable handles
 ## Not mapped yet
 
 - Distributed tracing (W3C `traceparent` to a server span, and the server span's kind and `rpc.*` attributes). The example configures no OpenTelemetry exporter, so a user sees nothing to check. Only `packages/e2e-tests/src/tracing.test.ts` covers it.
-- Context transformers (`withContextTransformer`), request headers and metadata transformers, compression, and client-side timeouts. The example does not use them. `packages/e2e-tests/src/handler-context.test.ts` checks the context a handler gets with no transformer, and the library's unit tests check chained transformers.
+- Context transformers (`withContextTransformer`), request headers and metadata transformers, compression, and client-side timeouts. The example does not use them. `packages/e2e-tests/src/handler-context.test.ts` checks the context a handler gets with no transformer, and the order of chained transformers.
 - Calls to streaming rpcs. The example has none, so no journey calls one. `packages/e2e-tests/src/mixed-service.test.ts` serves a service that mixes unary and streaming rpcs and checks that each streaming rpc gets `UNIMPLEMENTED` over gRPC, gRPC-web and Connect.

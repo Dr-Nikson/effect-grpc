@@ -89,6 +89,7 @@ const exchange = (
   name: string,
   contentType: string,
   authorityHeader: ":authority" | "host",
+  headers: http2.OutgoingHttpHeaders,
   until: "answer" | "close",
 ): Effect.Effect<RawReply> =>
   Effect.callback<RawReply>((resume) => {
@@ -99,6 +100,7 @@ const exchange = (
       [authorityHeader]: authority,
       "content-type": contentType,
       ...(protocol === "grpc" ? { te: "trailers" } : {}),
+      ...headers,
     });
 
     let httpStatus: number | undefined;
@@ -159,8 +161,9 @@ export const getGreeting = (
   name: string,
   contentType: string = defaultContentType(protocol),
   authorityHeader: ":authority" | "host" = ":authority",
+  headers: http2.OutgoingHttpHeaders = {},
 ): Effect.Effect<RawReply> =>
-  exchange(session, protocol, authority, name, contentType, authorityHeader, "answer");
+  exchange(session, protocol, authority, name, contentType, authorityHeader, headers, "answer");
 
 export const getGreetingUntilClosed = (
   session: http2.ClientHttp2Session,
@@ -168,4 +171,13 @@ export const getGreetingUntilClosed = (
   authority: string,
   name: string,
 ): Effect.Effect<RawReply> =>
-  exchange(session, protocol, authority, name, defaultContentType(protocol), ":authority", "close");
+  exchange(
+    session,
+    protocol,
+    authority,
+    name,
+    defaultContentType(protocol),
+    ":authority",
+    {},
+    "close",
+  );

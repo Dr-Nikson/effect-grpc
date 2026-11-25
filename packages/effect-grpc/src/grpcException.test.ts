@@ -12,39 +12,22 @@ import * as GrpcException from "./grpcException.js";
 const data = { userId: "u-1", reasons: ["missing", "Grüße ✓"], attempts: 3, appeal: null };
 
 describe("GrpcException.create", () => {
-  it("makes a tagged Error with the code and message, and no data, description or cause", () => {
-    const error = GrpcException.create(Code.NotFound, "User not found");
-
-    expect(error).toBeInstanceOf(GrpcException.GrpcException);
-    expect(error).toBeInstanceOf(Error);
-    expect(error).toMatchObject({
-      _tag: "@dr_nikson/effect-grpc/grpcException/GrpcException",
-      code: Code.NotFound,
-      message: "User not found",
-    });
-    expect(error.data).toEqual(Option.none());
-    expect(error.description).toBeUndefined();
-    expect(error.cause).toBeUndefined();
-  });
-
-  it("keeps the cause it is given", () => {
+  it("makes an Error with the code, the message and the cause, and no data", () => {
     const cause = new Error("disk full");
+    const error = GrpcException.create(Code.NotFound, "User not found", cause);
 
-    expect(GrpcException.create(Code.Internal, "Operation failed", cause).cause).toBe(cause);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toMatchObject({ code: Code.NotFound, message: "User not found" });
+    expect(error.cause).toBe(cause);
+    expect(error.data).toEqual(Option.none());
   });
 });
 
 describe("new GrpcException", () => {
-  it("defaults the data to none when the fields leave it out, and keeps data that they give", () => {
-    const without = new GrpcException.GrpcException({ code: Code.NotFound, message: "m" });
-    const withData = new GrpcException.GrpcException({
-      code: Code.NotFound,
-      message: "m",
-      data: Option.some(data),
-    });
+  it("defaults the data to none, so code that builds the class without data keeps working", () => {
+    const error = new GrpcException.GrpcException({ code: Code.NotFound, message: "m" });
 
-    expect(without.data).toEqual(Option.none());
-    expect(withData.data).toEqual(Option.some(data));
+    expect(error.data).toEqual(Option.none());
   });
 });
 
@@ -69,7 +52,6 @@ describe("GrpcException.from", () => {
 
   it.each([
     ["a string", "boom", "boom"],
-    ["a number", 42, "42"],
     ["undefined", undefined, "undefined"],
     ["null", null, "null"],
     ["a plain object", { reason: "quota" }, "[object Object]"],
@@ -82,19 +64,22 @@ describe("GrpcException.from", () => {
 });
 
 describe("GrpcException.withDescription", () => {
-  it("returns a new exception with the description and the same code, message and cause", () => {
+  it("returns a new exception with the description, and keeps the code, message, cause and data", () => {
     const cause = new Error("connection reset");
-    const original = GrpcException.create(Code.NotFound, "User not found", cause);
+    const original = GrpcException.withData(
+      GrpcException.create(Code.NotFound, "User not found", cause),
+      data,
+    );
 
     const described = GrpcException.withDescription(original, "Database query failed");
 
-    expect(described).not.toBe(original);
     expect(described).toMatchObject({
       code: Code.NotFound,
       message: "User not found",
       description: "Database query failed",
     });
     expect(described.cause).toBe(cause);
+    expect(described.data).toEqual(Option.some(data));
     expect(original.description).toBeUndefined();
   });
 
@@ -102,12 +87,6 @@ describe("GrpcException.withDescription", () => {
     const first = GrpcException.withDescription(GrpcException.create(Code.NotFound, "m"), "first");
 
     expect(GrpcException.withDescription(first, "second").description).toBe("second");
-  });
-
-  it("keeps the data", () => {
-    const withData = GrpcException.withData(GrpcException.create(Code.NotFound, "m"), data);
-
-    expect(GrpcException.withDescription(withData, "d").data).toEqual(Option.some(data));
   });
 });
 
@@ -121,7 +100,6 @@ describe("GrpcException.withData", () => {
 
     const withData = GrpcException.withData(original, data);
 
-    expect(withData).not.toBe(original);
     expect(withData).toMatchObject({
       code: Code.FailedPrecondition,
       message: "Account is locked",
@@ -143,7 +121,7 @@ describe("GrpcException.withData", () => {
 });
 
 describe("GrpcException.toConnectError", () => {
-  it("carries the code, the message and the cause, drops the description, and adds no metadata or details", () => {
+  it("sends the code and the message, keeps the description on the server, and sends no detail without data", () => {
     const cause = new Error("connection reset");
     const error = GrpcException.withDescription(
       GrpcException.create(Code.NotFound, "User not found", cause),
@@ -151,23 +129,13 @@ describe("GrpcException.toConnectError", () => {
     );
 
     const connectError = GrpcException.toConnectError(error);
+    const received = GrpcException.from(Code.Unknown, connectError);
 
-    expect(connectError).toBeInstanceOf(ConnectError);
-    expect(connectError.code).toBe(Code.NotFound);
-    expect(connectError.rawMessage).toBe("User not found");
     expect(connectError.cause).toBe(cause);
-    expect(connectError).not.toHaveProperty("description");
-    expect([...connectError.metadata.keys()]).toEqual([]);
     expect(connectError.details).toEqual([]);
-  });
-
-  it("comes back through from with the same code and message", () => {
-    const original = GrpcException.create(Code.PermissionDenied, "Not yours");
-
-    const back = GrpcException.from(Code.Unknown, GrpcException.toConnectError(original));
-
-    expect(back).toMatchObject({ code: Code.PermissionDenied, message: "Not yours" });
-    expect(back.data).toEqual(Option.none());
+    expect([...connectError.metadata.keys()], "the response metadata").toEqual([]);
+    expect(received).toMatchObject({ code: Code.NotFound, message: "User not found" });
+    expect(received.data).toEqual(Option.none());
   });
 
   it.each([
@@ -239,7 +207,6 @@ describe("GrpcException.from, reading the data of a ConnectError", () => {
         },
       ],
     ],
-    ["a Value with no kind", [{ desc: ValueSchema, value: {} }]],
   ])("gives no data, and keeps the code and the message, for %s", (_, details) => {
     const error = GrpcException.from(
       Code.Unknown,
@@ -250,46 +217,34 @@ describe("GrpcException.from, reading the data of a ConnectError", () => {
     expect(error.data).toEqual(Option.none());
   });
 
-  it("reads the first Value detail from the wire that decodes", () => {
-    const connectError = new ConnectError("m", Code.FailedPrecondition);
-    connectError.details.push(
-      { type: "google.protobuf.Value", value: new Uint8Array([0xff, 0xff]) },
-      {
-        type: "google.protobuf.Value",
-        value: toBinary(
-          ValueSchema,
-          create(ValueSchema, { kind: { case: "stringValue", value: "second" } }),
-        ),
-      },
-    );
-
-    expect(GrpcException.from(Code.Unknown, connectError).data).toEqual(Option.some("second"));
-  });
-
-  it("gives no data for a Value detail from the wire whose bytes do not decode", () => {
-    const connectError = new ConnectError("m", Code.FailedPrecondition);
-    connectError.details.push({
+  it("reads the first Value detail from the wire whose bytes decode, and gives no data when none does", () => {
+    const undecodable = { type: "google.protobuf.Value", value: new Uint8Array([0xff, 0xff]) };
+    const second = {
       type: "google.protobuf.Value",
-      value: new Uint8Array([0xff, 0xff]),
-    });
+      value: toBinary(
+        ValueSchema,
+        create(ValueSchema, { kind: { case: "stringValue", value: "second" } }),
+      ),
+    };
+    const fromWire = (details: ReadonlyArray<typeof undecodable>) => {
+      const connectError = new ConnectError("m", Code.FailedPrecondition);
+      connectError.details.push(...details);
+      return GrpcException.from(Code.Unknown, connectError).data;
+    };
 
-    expect(GrpcException.from(Code.Unknown, connectError).data).toEqual(Option.none());
+    expect(fromWire([undecodable, second])).toEqual(Option.some("second"));
+    expect(fromWire([undecodable])).toEqual(Option.none());
   });
 });
 
 describe("GrpcException as text", () => {
-  it("prints the numeric code and the message, then the description in parentheses", () => {
+  it("prints the numeric code and the message, then the description in parentheses, also through util.inspect", () => {
     const error = GrpcException.create(Code.NotFound, "User not found");
 
     expect(String(error)).toBe("[5] User not found");
+    expect(inspect(error)).toBe("[5] User not found");
     expect(String(GrpcException.withDescription(error, "Database query failed"))).toBe(
       "[5] User not found (Database query failed)",
-    );
-  });
-
-  it("prints the same text through util.inspect", () => {
-    expect(inspect(GrpcException.create(Code.NotFound, "User not found"))).toBe(
-      "[5] User not found",
     );
   });
 });

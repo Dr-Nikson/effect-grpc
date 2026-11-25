@@ -1,6 +1,7 @@
 // packages/e2e-tests/src/test-fixtures.ts
 import { Effect, Layer } from "effect";
 import type { Scope } from "effect";
+import type { ClientSessionOptions } from "node:http2";
 
 import type { Transport } from "@connectrpc/connect";
 import { Code } from "@connectrpc/connect";
@@ -55,8 +56,36 @@ export function createServer(): Effect.Effect<
   });
 }
 
+/**
+ * A server of the generated HelloWorldAPI layer over `service`. Each `listen` binds a port of its
+ * own, which the scope that `listen` runs in owns.
+ */
+export function serverFor(
+  service: effectProto.HelloWorldAPIService,
+): Effect.Effect<EffectGrpcServer.GrpcServer<"com.example.v1.HelloWorldAPI">> {
+  return createServer().pipe(
+    Effect.provide(
+      effectProto.helloWorldAPIServiceLiveLayer(effectProto.HelloWorldAPIServiceTag, service),
+    ),
+  );
+}
+
+/**
+ * Calls `getGreeting` through a generated client of its own, which closes its connection when the
+ * call ends.
+ */
+export function greet(
+  address: EffectGrpcServer.GrpcServerAddress,
+  name: string,
+): Effect.Effect<proto.GetGreetingResponse, GrpcException.GrpcException> {
+  return Effect.flatMap(effectProto.HelloWorldAPIClientTag, (client) =>
+    client.getGreeting({ name }, {}),
+  ).pipe(Effect.provide(clientLayer(address)));
+}
+
 export function clientLayer(
   address: EffectGrpcServer.GrpcServerAddress,
+  http2SessionOptions: ClientSessionOptions = {},
 ): Layer.Layer<effectProto.HelloWorldAPIClientTag["Identifier"]> {
   return effectProto
     .helloWorldAPIClientLiveLayer(effectProto.HelloWorldAPIClientTag)
@@ -64,7 +93,7 @@ export function clientLayer(
       Layer.provide(
         Layer.succeed(
           effectProto.HelloWorldAPIConfigTag,
-          EffectGrpcClient.GrpcClientConfig({ baseUrl: new URL(address.url) }),
+          EffectGrpcClient.GrpcClientConfig({ baseUrl: new URL(address.url), http2SessionOptions }),
         ),
       ),
       Layer.provide(EffectGrpcClient.liveGrpcClientRuntimeLayer()),
