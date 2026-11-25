@@ -15,7 +15,7 @@ case " $* " in
     echo "Snapshot release is not allowed in pre mode" >&2
     exit 1
   fi
-  printf '{"version":"%s"}' "$VERSIONED" > packages/effect-grpc/package.json
+  printf '{"version":"%s"}' "$CHANGESETS_WRITES" > packages/effect-grpc/package.json
   ;;
 *" changeset publish "*)
   echo "$*" >> "$PUBLISHED"
