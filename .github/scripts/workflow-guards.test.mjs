@@ -22,20 +22,7 @@ const library = readJson("../../packages/effect-grpc/package.json");
 const events = readJson("./fixtures/workflow-events.json");
 const associations = readJson("./fixtures/comment-associations.json");
 
-/**
- * @typedef {{
- *   name?: string, if?: string, run?: string, shell?: string, env?: Record<string, unknown>
- * }} Step
- */
-
-/**
- * Runs the `run:` text of a step as a Linux runner does for a step without `shell:`, in
- * `bash -e`, with its `env:` expressions evaluated against `contexts`.
- *
- * @param {Step} step
- * @param {Record<string, unknown>} contexts
- * @param {Record<string, unknown> | undefined} jobEnv
- */
+/** Runs a step as a Linux runner does for a step without `shell:`, in `bash -e`. */
 function exitCodeOf(step, contexts, jobEnv) {
   assert.ok(
     step.run && step.shell === undefined,
@@ -52,24 +39,12 @@ function exitCodeOf(step, contexts, jobEnv) {
   }).status;
 }
 
-/**
- * What the runner makes of a job: skipped when its condition is false, otherwise the outcome
- * of its steps, run in order. A job without a condition runs only when every job it needs passed.
- *
- * @param {{ if?: string, env?: Record<string, unknown>, steps: Step[] }} job
- * @param {{ needs: Record<string, { result?: string }> }} contexts
- */
 function conclusion(job, contexts) {
   const needsPassed = Object.values(contexts.needs).every((need) => need.result === "success");
-  if (!runs(job.if ?? "success()", contexts, needsPassed ? "success" : "failure")) {
-    return "skipped";
-  }
+  if (!runs(job.if, contexts, needsPassed ? "success" : "failure")) return "skipped";
   let status = "success";
   for (const step of job.steps) {
-    if (
-      runs(step.if ?? "success()", contexts, status) &&
-      exitCodeOf(step, contexts, job.env) !== 0
-    ) {
+    if (runs(step.if, contexts, status) && exitCodeOf(step, contexts, job.env) !== 0) {
       status = "failure";
     }
   }
