@@ -51,8 +51,6 @@ const largestReadMaxBytes = 0xffffffff;
 
 type RequestListener = (req: http2.Http2ServerRequest, res: http2.Http2ServerResponse) => void;
 
-const addressAndPort = /^(.+):(\d+)$/;
-
 /**
  * Node's HTTP/2 client strips the brackets from an IPv6 literal when it builds `:authority`, so it
  * sends `::1:8000` for `http://[::1]:8000`. `::1:8000` is also a complete IPv6 address, but a
@@ -61,12 +59,9 @@ const addressAndPort = /^(.+):(\d+)$/;
 const readAuthority = (authority: string): Option.Option<string> =>
   URL.canParse(`http://${authority}`) ?
     Option.some(authority)
-  : Option.liftPredicate(authority.replace(addressAndPort, "[$1]:$2"), (bracketed) =>
+  : Option.liftPredicate(authority.replace(/^(.+):(\d+)$/, "[$1]:$2"), (bracketed) =>
       URL.canParse(`http://${bracketed}`),
     );
-
-const grpcContentType =
-  /^application\/grpc(?:-web(?:-text)?)?(?:\+(?:json(?:; ?charset=utf-?8)?|proto))?$/i;
 
 /**
  * A gRPC or gRPC-web client reads the status from an HTTP 200 response. connect-go clients, buf
@@ -79,7 +74,11 @@ const refuseMalformedAuthority = (
 ): void => {
   const message = "malformed request authority";
   const grpc = Option.fromNullable(req.headers["content-type"]).pipe(
-    Option.filter((contentType) => grpcContentType.test(contentType)),
+    Option.filter((contentType) =>
+      /^application\/grpc(?:-web(?:-text)?)?(?:\+(?:json(?:; ?charset=utf-?8)?|proto))?$/i.test(
+        contentType,
+      ),
+    ),
   );
   if (Option.isSome(grpc)) {
     // Headers set before end() leave in one HEADERS frame that ends the stream, which is a gRPC
