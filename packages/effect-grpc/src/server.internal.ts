@@ -46,6 +46,20 @@ export function makeGrpcService<
 
 type RequestListener = (req: http2.Http2ServerRequest, res: http2.Http2ServerResponse) => void;
 
+const addressAndPort = /^(.+):(\d+)$/;
+
+/**
+ * Node's HTTP/2 client strips the brackets from an IPv6 literal when it builds `:authority`, so it
+ * sends `::1:8000` for `http://[::1]:8000`. `::1:8000` is also a complete IPv6 address, but a
+ * valid authority must bracket an IPv6 address, and Node's client always appends the port.
+ */
+const readAuthority = (authority: string): Option.Option<string> =>
+  URL.canParse(`http://${authority}`) ?
+    Option.some(authority)
+  : Option.liftPredicate(authority.replace(addressAndPort, "[$1]:$2"), (bracketed) =>
+      URL.canParse(`http://${bracketed}`),
+    );
+
 const grpcContentType =
   /^application\/grpc(?:-web(?:-text)?)?(?:\+(?:json(?:; ?charset=utf-?8)?|proto))?$/i;
 
@@ -87,10 +101,13 @@ const makeRequestListener = (
   const handler = connectNodeAdapter(options);
   return (req, res) => {
     try {
-      if (!URL.canParse(`http://${req.authority}`)) {
+      const authority = readAuthority(req.authority);
+      if (Option.isNone(authority)) {
         refuseMalformedAuthority(req, res);
         return;
       }
+      // Connect reads req.authority, and Node's getter returns this header first.
+      if (authority.value !== req.authority) req.headers[":authority"] = authority.value;
       handler(req, res);
     } catch {
       res.stream.close(http2.constants.NGHTTP2_INTERNAL_ERROR);
