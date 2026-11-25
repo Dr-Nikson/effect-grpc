@@ -66,18 +66,19 @@ function gRpcServer(): Effect.Effect<
   });
 }
 
-const prog = Effect.gen(function* () {
-  const server = yield* gRpcServer();
-  const host = yield* address.host;
-  const port = yield* address.port;
+const grpcServerLayer = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const server = yield* gRpcServer();
+    const host = yield* address.host;
+    const port = yield* address.port;
 
-  yield* server.listen({ host, port });
-  return yield* Effect.never;
-});
+    yield* server.listen({ host, port });
+  }),
+);
 
 const layer = Layer.empty.pipe(
   Layer.provideMerge(debugApiLayer),
   Layer.provideMerge(Layer.succeed(References.MinimumLogLevel, "Trace")),
 );
 
-NodeRuntime.runMain(Effect.provide(prog, layer).pipe(Effect.scoped));
+NodeRuntime.runMain(Layer.launch(grpcServerLayer.pipe(Layer.provide(layer))));

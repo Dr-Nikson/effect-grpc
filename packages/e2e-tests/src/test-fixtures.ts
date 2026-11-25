@@ -71,10 +71,6 @@ export function clientLayer(
     );
 }
 
-/**
- * On Node 22, `server.close()` waits for every open HTTP/2 session, so each client session is
- * aborted in a finalizer that runs before the server's scope closes (#101).
- */
 const sessionTo = (baseUrl: string): Effect.Effect<Http2SessionManager, never, Scope.Scope> =>
   Effect.acquireRelease(
     Effect.sync(() => new Http2SessionManager(baseUrl)),
