@@ -345,7 +345,7 @@ type UnaryMethodKeys<Proto extends GenService<GenServiceMethods>> = {
  * ```typescript
  * import { Effect } from "effect"
  * import { EffectGrpcServer } from "@dr_nikson/effect-grpc"
- * import { ChatService } from "./gen/chat_pb" // Send is unary and Watch is server-streaming
+ * import { ChatService } from "./gen/chat_pb.js" // Send is unary and Watch is server-streaming
  *
  * const implementation = (
  *   exec: EffectGrpcServer.ServerExecutor<unknown>,
