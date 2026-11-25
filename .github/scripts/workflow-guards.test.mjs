@@ -23,26 +23,31 @@ const events = readJson("./fixtures/workflow-events.json");
 const associations = readJson("./fixtures/comment-associations.json");
 
 /**
- * @typedef {{ name?: string, if?: string, run?: string, env?: Record<string, unknown> }} Step
+ * @typedef {{
+ *   name?: string, if?: string, run?: string, shell?: string, env?: Record<string, unknown>
+ * }} Step
  */
 
 /**
- * Runs the `run:` text of a step in bash, as the runner does, with its `env:` expressions
- * evaluated against `contexts`.
+ * Runs the `run:` text of a step as a Linux runner does for a step without `shell:`, in
+ * `bash -e`, with its `env:` expressions evaluated against `contexts`.
  *
  * @param {Step} step
  * @param {Record<string, unknown>} contexts
  * @param {Record<string, unknown> | undefined} jobEnv
  */
 function exitCodeOf(step, contexts, jobEnv) {
-  assert.ok(step.run, `step ${step.name} has no run text to execute`);
+  assert.ok(
+    step.run && step.shell === undefined,
+    `step ${step.name} must be run text in the default shell`,
+  );
   const env = Object.fromEntries(
     Object.entries({ ...jobEnv, ...step.env }).map(([name, value]) => [
       name,
       expand(value, contexts),
     ]),
   );
-  return spawnSync("bash", ["--noprofile", "--norc", "-eo", "pipefail", "-c", step.run], {
+  return spawnSync("bash", ["--noprofile", "--norc", "-e", "-c", step.run], {
     env: { PATH: process.env.PATH, ...env },
   }).status;
 }
