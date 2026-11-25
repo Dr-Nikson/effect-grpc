@@ -44,13 +44,20 @@ const lowPortsArePrivileged = (() => {
 })();
 
 const tcpClientThatSendsNothing = (address: EffectGrpcServer.GrpcServerAddress) =>
-  Effect.acquireRelease(
-    Effect.callback<net.Socket>((resume) => {
-      const socket = net.connect(address.port, address.host).on("error", () => {});
-      socket.once("connect", () => resume(Effect.succeed(socket.resume())));
-    }),
-    (socket) => Effect.sync(() => socket.destroy()),
-  );
+  Effect.gen(function* () {
+    const closed = yield* Deferred.make<void>();
+    yield* Effect.acquireRelease(
+      Effect.callback<net.Socket>((resume) => {
+        const socket = net
+          .connect(address.port, address.host)
+          .on("error", () => {})
+          .once("close", () => Deferred.doneUnsafe(closed, Effect.void));
+        socket.once("connect", () => resume(Effect.succeed(socket.resume())));
+      }),
+      (socket) => Effect.sync(() => socket.destroy()),
+    );
+    return Deferred.await(closed);
+  });
 
 const sendHttp1Request = (address: EffectGrpcServer.GrpcServerAddress) =>
   Effect.callback<void>((resume) => {
@@ -112,23 +119,39 @@ describe("GrpcServer.listen", () => {
           reason: { _tag: "AddressInUse" },
           host: "127.0.0.1",
           port: first.port,
+          cause: { code: "EADDRINUSE" },
         });
+        expect(error.message, "the message names the error Node reported").toContain("EADDRINUSE");
         expect(errors).toEqual([]);
         expect((yield* greet(first, "Ada")).greeting).toBe("Hello, Ada!");
       }),
   );
 
   it.live.each([
-    { reason: "InvalidPort", at: "a port above 65535", host: "127.0.0.1", port: 65536 },
-    { reason: "Other", at: "an address that this host does not have", host: "192.0.2.1", port: 0 },
-  ])("fails with $reason for $at", ({ reason, host, port }) =>
-    Effect.gen(function* () {
-      const server = yield* serverFor(greeter);
+    {
+      reason: "InvalidPort",
+      at: "a port above 65535",
+      host: "127.0.0.1",
+      port: 65536,
+      code: "ERR_SOCKET_BAD_PORT",
+    },
+    {
+      reason: "Other",
+      at: "an address that this host does not have",
+      host: "192.0.2.1",
+      port: 0,
+      code: "EADDRNOTAVAIL",
+    },
+  ])(
+    "fails with $reason for $at, with the $code error that Node reported as the cause",
+    ({ reason, host, port, code }) =>
+      Effect.gen(function* () {
+        const server = yield* serverFor(greeter);
 
-      const error = yield* Effect.flip(server.listen({ host, port }));
+        const error = yield* Effect.flip(server.listen({ host, port }));
 
-      expect(error).toMatchObject({ reason: { _tag: reason }, host, port });
-    }),
+        expect(error).toMatchObject({ reason: { _tag: reason }, host, port, cause: { code } });
+      }),
   );
 
   it.live.skipIf(!lowPortsArePrivileged)(
@@ -192,9 +215,15 @@ const idleClients = [
     client: "the generated client",
     connect: (address: EffectGrpcServer.GrpcServerAddress) =>
       Effect.gen(function* () {
-        const services = yield* Layer.build(clientLayer(address));
+        const closed = yield* Deferred.make<void>();
+        const createConnection = () =>
+          net
+            .connect(address.port, address.host)
+            .once("close", () => Deferred.doneUnsafe(closed, Effect.void));
+        const services = yield* Layer.build(clientLayer(address, { createConnection }));
         const client = Context.get(services, effectProto.HelloWorldAPIClientTag);
         yield* client.getGreeting({ name: "Ada" }, {});
+        return Deferred.await(closed);
       }),
   },
   { client: "a TCP client that sends nothing", connect: tcpClientThatSendsNothing },
@@ -207,7 +236,7 @@ class Greetings extends Context.Service<
 
 describe("GrpcServer at shutdown", () => {
   it.live.each(idleClients)(
-    "stops within a second while $client stays connected and idle",
+    "stops within a second while $client stays connected and idle, and closes its connection",
     ({ connect }) =>
       Effect.gen(function* () {
         const serverScope = yield* childScope;
@@ -215,12 +244,16 @@ describe("GrpcServer at shutdown", () => {
         const address = yield* server
           .listen({ host: "127.0.0.1", port: 0 })
           .pipe(Scope.provide(serverScope));
-        yield* connect(address);
+        const connectionClosed = yield* connect(address);
 
         const stopping = yield* Effect.forkDetach(Scope.close(serverScope, Exit.void));
         const stopped = yield* Fiber.await(stopping).pipe(Effect.timeoutOption("1 second"));
+        const closed = yield* connectionClosed.pipe(Effect.timeoutOption("1 second"));
 
-        expect(Option.isSome(stopped), "the server stopped within one second").toBe(true);
+        expect(stopped, "the server stopped within one second, with no error").toEqual(
+          Option.some(Exit.void),
+        );
+        expect(Option.isSome(closed), "the client saw its connection close").toBe(true);
       }),
   );
 
@@ -259,7 +292,7 @@ describe("GrpcServer at shutdown", () => {
             return effectProto.helloWorldAPIServiceLiveLayer(effectProto.HelloWorldAPIServiceTag, {
               ...greeter,
               getGreeting: ({ name }) =>
-                signalThenWait(started, release).pipe(
+                (name === "Ada" ? signalThenWait(started, release) : Effect.void).pipe(
                   Effect.andThen(greetings.greetingFor(name)),
                   Effect.tap(() => Effect.sync(() => events.push("the call ended"))),
                   Effect.map((greeting) => ({ greeting })),
@@ -295,13 +328,16 @@ describe("GrpcServer at shutdown", () => {
 
         const stopping = yield* Effect.forkChild(Fiber.interrupt(launched));
         const toldToStop = yield* Deferred.await(goaway).pipe(Effect.timeoutOption("1 second"));
-        const nextCall = yield* Effect.flip(greet(address, "Bob"));
+        const nextCall = yield* greet(address, "Bob").pipe(
+          Effect.match({ onFailure: (error) => error.code, onSuccess: () => "served" }),
+          Effect.timeoutOption("1 second"),
+        );
         yield* Deferred.succeed(release, undefined);
         const reply = yield* Fiber.join(call);
         const stopped = yield* Fiber.join(stopping).pipe(Effect.timeoutOption("1 second"));
 
         expect(Option.isSome(toldToStop), "the client got GOAWAY while its call ran").toBe(true);
-        expect(nextCall.code, "a call after the shutdown began").toBe(Code.Unavailable);
+        expect(nextCall, "a call after the shutdown began").toEqual(Option.some(Code.Unavailable));
         expect(reply.greeting, "the call in flight read an open store").toBe("Hello, Ada!");
         expect(Option.isSome(stopped), "the program stopped once the call ended").toBe(true);
         expect(events).toEqual([

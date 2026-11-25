@@ -1,6 +1,7 @@
 // packages/e2e-tests/src/test-fixtures.ts
 import { Effect, Layer } from "effect";
 import type { Scope } from "effect";
+import type { ClientSessionOptions } from "node:http2";
 
 import type { Transport } from "@connectrpc/connect";
 import { Code } from "@connectrpc/connect";
@@ -84,6 +85,7 @@ export function greet(
 
 export function clientLayer(
   address: EffectGrpcServer.GrpcServerAddress,
+  http2SessionOptions: ClientSessionOptions = {},
 ): Layer.Layer<effectProto.HelloWorldAPIClientTag["Identifier"]> {
   return effectProto
     .helloWorldAPIClientLiveLayer(effectProto.HelloWorldAPIClientTag)
@@ -91,7 +93,7 @@ export function clientLayer(
       Layer.provide(
         Layer.succeed(
           effectProto.HelloWorldAPIConfigTag,
-          EffectGrpcClient.GrpcClientConfig({ baseUrl: new URL(address.url) }),
+          EffectGrpcClient.GrpcClientConfig({ baseUrl: new URL(address.url), http2SessionOptions }),
         ),
       ),
       Layer.provide(EffectGrpcClient.liveGrpcClientRuntimeLayer()),
