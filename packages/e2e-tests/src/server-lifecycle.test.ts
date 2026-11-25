@@ -32,10 +32,6 @@ const captureLogs = () => {
   return { lines, errors, layer: Logger.layer([logger]) };
 };
 
-/**
- * A scope that the test's scope closes too, so a server in it stops even when an assertion fails
- * before the test closes it.
- */
 const childScope = Effect.flatMap(Effect.scope, (scope) => Scope.fork(scope, "sequential"));
 
 const lowPortsArePrivileged = (() => {
