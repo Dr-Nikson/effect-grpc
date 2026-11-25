@@ -53,6 +53,11 @@ Each package consists of modules, for example: `packages/effect-grpc` contains m
 1. Absent values use Effect data types such as `Option`, never `null` or `undefined`. Convert a nullable value from Node, connect or another library at that boundary with `Option.fromNullishOr`.
 
 
+## Object lifecycle
+
+1. Create an object that has state or a lifecycle inside an owner whose lifecycle is known: an instance, a class, a service or a layer. Class instances, clients, propagators and caches are such objects. Never create one when the module loads. An object created at module load is attached to nothing, so its lifecycle is unknown. The operator, in [a review of PR #103](https://github.com/Dr-Nikson/effect-grpc/pull/103#discussion_r4686617213): "This is not attached to anything. So lifecycle is unknown. I'd rather make it a part of some instance\class". Constants stay at module level: literals, lookup tables, regular expressions, pure functions, service tags and layer definitions.
+
+
 ## Comments and JSDoc
 
 1. Do not remove a comment marked as TODO (`// TODO`) or related to a TODO. The exceptions are a TODO that a tracked issue replaces and a TODO whose work is done. Name the issue in the commit message and the PR description.

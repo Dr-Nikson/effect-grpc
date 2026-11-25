@@ -3,17 +3,12 @@ import { Cause, Effect, Layer } from "effect";
 
 import type { Transport } from "@connectrpc/connect";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
-import {
-  Http2SessionManager,
-  createConnectTransport,
-  createGrpcTransport,
-  createGrpcWebTransport,
-} from "@connectrpc/connect-node";
 import { EffectGrpcClient, EffectGrpcServer } from "@dr_nikson/effect-grpc";
 import { describe, expect, it } from "@effect/vitest";
 
 import * as effectProto from "./generated/com/example/v1/streaming_test_service_effect.js";
 import { StreamingTestService } from "./generated/com/example/v1/streaming_test_service_pb.js";
+import { overEachProtocol } from "./test-fixtures.js";
 
 type Chunk = { readonly data: string };
 
@@ -43,37 +38,6 @@ const generatedClientAt = (address: EffectGrpcServer.GrpcServerAddress) =>
       ),
       Layer.provide(EffectGrpcClient.liveGrpcClientRuntimeLayer()),
     );
-
-/**
- * On Node 22, `server.close()` waits for every open HTTP/2 session, so each client session is
- * aborted in a finalizer that runs before the server's scope closes (#101).
- */
-const sessionTo = (baseUrl: string) =>
-  Effect.acquireRelease(
-    Effect.sync(() => new Http2SessionManager(baseUrl)),
-    (sessionManager) => Effect.sync(() => sessionManager.abort()),
-  );
-
-const overEachProtocol = <A>(baseUrl: string, run: (transport: Transport) => Effect.Effect<A>) =>
-  Effect.gen(function* () {
-    return {
-      grpc: yield* run(createGrpcTransport({ baseUrl, sessionManager: yield* sessionTo(baseUrl) })),
-      grpcWeb: yield* run(
-        createGrpcWebTransport({
-          baseUrl,
-          httpVersion: "2",
-          sessionManager: yield* sessionTo(baseUrl),
-        }),
-      ),
-      connect: yield* run(
-        createConnectTransport({
-          baseUrl,
-          httpVersion: "2",
-          sessionManager: yield* sessionTo(baseUrl),
-        }),
-      ),
-    };
-  });
 
 async function* streamOf(chunk: Chunk): AsyncIterable<Chunk> {
   yield chunk;

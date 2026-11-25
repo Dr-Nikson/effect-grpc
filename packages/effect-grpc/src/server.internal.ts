@@ -274,9 +274,9 @@ const releaseOnFailure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
   constructor(
     public readonly services: Record<string & Services, T.GrpcService<any, any, Ctx>>,
-    public readonly transformation: (
-      executor: ProtoRuntime.ServerExecutor<HandlerContext>,
-    ) => ProtoRuntime.ServerExecutor<Ctx>,
+    public readonly transformCtx: (
+      handlerCtx: HandlerContext,
+    ) => Effect.Effect<Ctx, GrpcException.GrpcException>,
     public readonly readMaxBytes: number,
   ) {}
 
@@ -286,11 +286,11 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
     options: ListenOptions,
   ): Effect.Effect<T.GrpcServerAddress, T.GrpcServerBindError, Scope.Scope> {
     const routes = this.routes.bind(this);
-    const { transformation, readMaxBytes } = this;
+    const { transformCtx, readMaxBytes } = this;
 
     return Effect.gen(function* () {
       const context = yield* Effect.context<never>();
-      const executor = transformation(ProtoRuntime.ServerExecutor(context));
+      const executor = ProtoRuntime.ServerExecutor(context, transformCtx);
       const handler = yield* Effect.sync(() =>
         makeRequestListener({ routes: routes(executor), interceptors: [], readMaxBytes }),
       );
@@ -341,7 +341,10 @@ export class ConnectEsGprcServerBuilder<Ctx, Services>
   ) {}
 
   static get empty(): T.GrpcServerBuilder<unknown, never> {
-    return new ConnectEsGprcServerBuilder<unknown, never>(() => Effect.succeed(undefined), {});
+    return new ConnectEsGprcServerBuilder<unknown, never>(
+      (handlerCtx) => Effect.succeed(handlerCtx),
+      {},
+    );
   }
 
   withContextTransformer<Ctx1>(
@@ -371,14 +374,6 @@ export class ConnectEsGprcServerBuilder<Ctx, Services>
         `readMaxBytes must be an integer from 1 to ${largestReadMaxBytes}, got ${readMaxBytes}`,
       );
     }
-    const executorTransformation = ProtoRuntime.ServerExecutorTransformer().transformContext<Ctx>(
-      this.transformCtx,
-    );
-
-    return new EffectGrpcServerLive(
-      this.services,
-      executorTransformation.transformation,
-      readMaxBytes,
-    );
+    return new EffectGrpcServerLive(this.services, this.transformCtx, readMaxBytes);
   }
 }

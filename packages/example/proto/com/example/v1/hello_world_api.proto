@@ -11,6 +11,10 @@ service HelloWorldAPI {
   rpc GetGreeting(GetGreetingRequest) returns (GetGreetingResponse);
   // Always fails with the error
   rpc FaceTheError(GetGreetingRequest) returns (GetGreetingResponse);
+  // Always dies with a defect, as a bug in a handler does
+  rpc FaceTheDefect(GetGreetingRequest) returns (GetGreetingResponse);
+  // Returns the greeting after one second
+  rpc GetGreetingSlowly(GetGreetingRequest) returns (GetGreetingResponse);
 }
 
 message GetGreetingRequest {

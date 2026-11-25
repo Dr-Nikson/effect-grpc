@@ -30,6 +30,23 @@ const HelloWorldAPIServiceLive: effectProto.HelloWorldAPIService = {
 
     return yield* GrpcException.create(Code.FailedPrecondition, "Face the consequences!");
   }),
+
+  faceTheDefect: Effect.fn("HelloWorldAPIServiceLive.faceTheDefect")(function* (
+    request: proto.GetGreetingRequest,
+  ) {
+    yield* Effect.logInfo(`faceTheDefect called, now you(${request.name}) will meet a bug!`);
+
+    return yield* Effect.die(new Error(`A bug that ${request.name} must never read`));
+  }),
+
+  getGreetingSlowly(request: proto.GetGreetingRequest) {
+    return Effect.logInfo("getGreetingSlowly called, the greeting takes one second").pipe(
+      Effect.andThen(Effect.sleep("1 second")),
+      Effect.as({
+        greeting: `Hey there! Your name is ${request.name}, right? Sorry for the wait.`,
+      }),
+    );
+  },
 };
 
 const debugApiLayer = effectProto.helloWorldAPIServiceLiveLayer(

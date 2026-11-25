@@ -94,22 +94,8 @@ export interface ServerExecutor<Ctx> {
  * @internal
  */
 export const ServerExecutor: {
-  (context: Context.Context<never>): ServerExecutor<any>;
-} = internal.ServerExecutorLive.make;
-
-/**
- * @internal
- */
-export interface ServerExecutorTransformer<Ctx> {
-  readonly transformation: (underlying: ServerExecutor<HandlerContext>) => ServerExecutor<Ctx>;
-
-  transformContext<Ctx1>(
-    f: (handlerCtx: HandlerContext) => Effect.Effect<Ctx1, GrpcException.GrpcException>,
-  ): ServerExecutorTransformer<Ctx1>;
-}
-/**
- * @internal
- */
-export const ServerExecutorTransformer: {
-  (): ServerExecutorTransformer<any>;
-} = internal.ServerExecutorTransformerLive.empty;
+  <Ctx>(
+    context: Context.Context<never>,
+    transformCtx: (handlerCtx: HandlerContext) => Effect.Effect<Ctx, GrpcException.GrpcException>,
+  ): ServerExecutor<Ctx>;
+} = internal.makeServerExecutor;

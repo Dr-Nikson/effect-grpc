@@ -322,11 +322,11 @@ const listenWithFallback = server.listen({ host: "127.0.0.1", port: 8000 }).pipe
 Fluent builder interface for constructing gRPC servers.
 
 **Type Parameters:**
-- `Ctx` - Context type available to service handlers. It starts as `unknown`, so a service whose implementation reads `ctx` needs `withContextTransformer` first.
+- `Ctx` - Context type available to service handlers. It starts as `unknown`, so a service whose implementation reads `ctx` needs `withContextTransformer` first. With no transformer, each handler receives the call's Connect `HandlerContext`.
 - `Services` - Union of currently registered service tags
 
 **Methods:**
-- `withContextTransformer<Ctx1>(f: (originalCtx: HandlerContext, ctx: Ctx) => Effect.Effect<Ctx1>): GrpcServerBuilder<Ctx1, never>` - Transform the handler context. The first parameter is the original Connect-RPC HandlerContext, the second is the current context (`unknown` before the first transformer). Must be called before adding services.
+- `withContextTransformer<Ctx1>(f: (originalCtx: HandlerContext, ctx: Ctx) => Effect.Effect<Ctx1>): GrpcServerBuilder<Ctx1, never>` - Transform the handler context. The first parameter is the original Connect-RPC HandlerContext, the second is the current context (before the first transformer, the same HandlerContext, typed `unknown`). Must be called before adding services.
 - `withService<S>(service: S): GrpcServerBuilder<Ctx, Services | Tag<S>>` - Add a service (enforces unique tags)
 - `build(options?: GrpcServerOptions): GrpcServer<Services>` - Build the server (requires at least one service). `options.readMaxBytes` is the largest request message the server reads, in bytes, 4 MiB by default. A larger message gets `RESOURCE_EXHAUSTED`. `build` throws `Cause.IllegalArgumentError` unless the value is a whole number from 1 to 4294967295.
 
@@ -881,6 +881,12 @@ const UserServiceLive: effectProto.UserService = {
 - `GrpcException.from(code, cause)` - Convert any error to GrpcException
 - `GrpcException.withDescription(error, desc)` - Add context description
 
+**What the client receives.** The server sends one status for each call:
+- A typed failure sends its code and message, also when a finalizer dies after it.
+- A defect, such as `Effect.die`, a throw or `Effect.orDie`, sends `INTERNAL` with the message `Internal server error`. The defect stays on the server. When a second defect, such as a dying finalizer, follows a `GrpcException` that `Effect.die` or `Effect.orDie` turned into a defect, the server sends the exception's code and message. Effect 4 gives that cause the same shape as a typed failure whose finalizer died. `GrpcException.from` copies an error's message, so in that case the wrapped error's message reaches the client.
+- A deadline that passes while the handler waits on something asynchronous, such as a promise or a timer, interrupts the handler and sends `DEADLINE_EXCEEDED`. A handler that runs synchronous code past its deadline and then finishes answers normally.
+- A client that cancels the call interrupts the handler, and the client reads nothing more.
+
 For gRPC status codes and error handling best practices, see [Connect RPC Error Handling](https://connectrpc.com/docs/node/errors).
 
 ### Dependency Injection
@@ -1071,6 +1077,8 @@ const program = myGrpcProgram.pipe(
 |----------|------------------|---------|
 | Client | `GrpcClient.makeUnaryRequest({service}/{method})` | `GrpcClient.makeUnaryRequest(example.v1.HelloService/SayHello)` |
 | Server | `{service}/{method}` | `example.v1.HelloService/SayHello` |
+
+The server span has the span kind `SERVER` and a `protocol` attribute that names the protocol of the call: `gRPC`, `gRPC-web` or `Connect`. Its `rpc.system` is `grpc`, or `connect_rpc` for a Connect call. The server's log lines for a call carry the same `protocol` annotation, next to `method`.
 
 #### Full Trace Hierarchy
 
