@@ -105,7 +105,7 @@ Run doctor first whenever anything looks off. If doctor reports FAIL on a stale 
 | `.claude/skills/verify/scripts/control-example probe getGreeting Ada` | the generated Effect client on its default tag ([effect-client-probe.mjs](scripts/effect-client-probe.mjs)), against the instance's URL | last stdout line: `{"ok":…,"response":…}` or `{"ok":false,"kind":…,"error":…}` |
 | `.claude/skills/verify/scripts/control-example codegen` | `pnpm -r run build`, then lists the generated files, their exports, and the `typeof` of the tag factories | export names; `typeof … = function` |
 | `.claude/skills/verify/scripts/control-example hostile-authority` | the authority cases in `packages/e2e-tests/src/fixtures/hostile-requests.json`, over gRPC and Connect, through [hostile-requests.mjs](scripts/hostile-requests.mjs) | `verdict=PASS` when every check passes and the server survives |
-| `.claude/skills/verify/scripts/control-example message-limit` | messages of 4 MiB, 4 MiB + 1 byte and 5 MiB from the same fixture, each oversized message on a connection of its own | `verdict=PASS` when every check passes and the server survives |
+| `.claude/skills/verify/scripts/control-example message-limit` | messages of 4 MiB, 4 MiB + 1 byte and 5 MiB from the same fixture, each oversized message on a connection of its own, two of them from a client that keeps sending | `verdict=PASS` when every check passes and the server survives |
 
 `call` takes a protocol (`grpc`, `connect` or `http1`), a proto method name on the route `/com.example.v1.HelloWorldAPI/<Method>`, and an optional JSON request that defaults to `{"name":"verify"}`. `probe` takes `getGreeting` or `faceTheError` and an optional name.
 

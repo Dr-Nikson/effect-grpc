@@ -32,8 +32,10 @@ const envelope = (message) => {
 };
 
 // With `authority` undefined, Node's client sends its default for the session URL, which for an
-// IPv6 literal URL is the address and port without brackets.
-const call = (protocol, authority, name, on = session) =>
+// IPv6 literal URL is the address and port without brackets. With `untilClosed`, the call waits up
+// to 5 s for the server to close the stream instead of cancelling it after the answer, the way curl
+// and buf curl wait while their upload is blocked.
+const call = (protocol, authority, name, on = session, untilClosed = false) =>
   new Promise((resolve) => {
     const headers = {
       ":method": "POST",
@@ -69,7 +71,8 @@ const call = (protocol, authority, name, on = session) =>
     });
     stream.on("trailers", (t) => (reply.grpcStatus = t["grpc-status"]));
     stream.on("data", (chunk) => chunks.push(chunk));
-    stream.on("end", finish);
+    if (untilClosed) setTimeout(finish, 5000);
+    else stream.on("end", finish);
     stream.on("close", finish);
     stream.on("error", () => {});
     const message = toBinary(GetGreetingRequestSchema, create(GetGreetingRequestSchema, { name }));
@@ -108,12 +111,12 @@ const expectServing = async (after) => {
 };
 
 // Without nodejs/node#67113 and nodejs/node#67114, Node's client keeps charging the unsent rest of
-// each refused upload to the session's maxSessionMemory, even after a cancel. Past the 10 MB
-// default, it resets every later stream on the session with ENHANCE_YOUR_CALM.
-const callOnItsOwnConnection = async (protocol, name) => {
+// each refused upload to the session's maxSessionMemory, even after a cancel or the server's reset.
+// Past the 10 MB default, it resets every later stream on the session with ENHANCE_YOUR_CALM.
+const callOnItsOwnConnection = async (protocol, name, untilClosed = false) => {
   const own = http2.connect(url);
   own.on("error", () => {});
-  const reply = await call(protocol, undefined, name, own);
+  const reply = await call(protocol, undefined, name, own, untilClosed);
   own.destroy();
   return reply;
 };
@@ -167,6 +170,21 @@ if (mode === "authority") {
     "a 5 MiB message over connect gets RESOURCE_EXHAUSTED",
     connect.httpStatus === 429 && connect.connectCode === "resource_exhausted",
     connect,
+  );
+  const grpcKeptSending = await callOnItsOwnConnection("grpc", overLimit, true);
+  check(
+    "a 5 MiB message over grpc whose client keeps sending gets RESOURCE_EXHAUSTED, then a NO_ERROR reset",
+    grpcKeptSending.grpcStatus === "8" &&
+      grpcKeptSending.rstCode === http2.constants.NGHTTP2_NO_ERROR,
+    grpcKeptSending,
+  );
+  const connectKeptSending = await callOnItsOwnConnection("connect", overLimit, true);
+  check(
+    "a 5 MiB message over connect whose client keeps sending gets RESOURCE_EXHAUSTED, then a NO_ERROR reset",
+    connectKeptSending.httpStatus === 429 &&
+      connectKeptSending.connectCode === "resource_exhausted" &&
+      connectKeptSending.rstCode === http2.constants.NGHTTP2_NO_ERROR,
+    connectKeptSending,
   );
   await expectServing("the oversized messages");
 }
