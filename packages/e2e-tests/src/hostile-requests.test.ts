@@ -515,6 +515,64 @@ describe("Hostile requests (issue #61)", () => {
     }).pipe(Effect.provide(PortLive)),
   );
 
+  it.scopedLive("refuses at build a readMaxBytes outside 1 to 4294967295", () =>
+    Effect.gen(function* () {
+      const { invalid, smallest, largest } = fixtures.readMaxBytesRange;
+      const builder = EffectGrpcServer.GrpcServerBuilder().withService(
+        yield* effectProto.HelloWorldAPIServiceTag,
+      );
+      const built = yield* Effect.forEach(invalid, (value) =>
+        Effect.exit(Effect.sync(() => builder.build({ readMaxBytes: Number(value) }))).pipe(
+          Effect.map(
+            Exit.match({
+              onFailure: (cause) =>
+                Cause.isIllegalArgumentException(Cause.squash(cause)) ?
+                  "IllegalArgumentException"
+                : String(Cause.squash(cause)),
+              onSuccess: () => "built",
+            }),
+          ),
+        ),
+      );
+      expect(built, `build with readMaxBytes ${invalid.join(", ")}`).toEqual(
+        invalid.map(() => "IllegalArgumentException"),
+      );
+
+      const servedBy = (readMaxBytes: number, names: ReadonlyArray<string>) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const port = yield* serve("127.0.0.1", { readMaxBytes });
+            const session = yield* raw.connect(`http://127.0.0.1:${port}`);
+            return yield* Effect.forEach(names, (name) =>
+              call(session, "grpc", `127.0.0.1:${port}`, name).pipe(
+                Effect.map((reply) =>
+                  reply.greeting === `127.0.0.1:${port}` ? "served" : reply.grpcStatus,
+                ),
+              ),
+            );
+          }),
+        );
+      expect(
+        yield* servedBy(smallest, ["", "a"]),
+        `an empty and a 3-byte message to a server built with readMaxBytes ${smallest}`,
+      ).toEqual(["served", String(Code.ResourceExhausted)]);
+      expect(
+        yield* servedBy(largest, [expand(fixtures.messageLimit.nameOverLimit)]),
+        `a 5 MiB message to a server built with readMaxBytes ${largest}`,
+      ).toEqual(["served"]);
+    }).pipe(
+      Effect.provide(
+        Layer.merge(
+          PortLive,
+          effectProto.helloWorldAPIServiceLiveLayer(
+            effectProto.HelloWorldAPIServiceTag,
+            authorityEcho,
+          ),
+        ),
+      ),
+    ),
+  );
+
   it.scopedLive("stops while clients that had a message refused keep their connections", () =>
     Effect.gen(function* () {
       const { stopDeadlineMs } = fixtures.refusedClientsConnected;

@@ -99,6 +99,12 @@
     "case": "a client that keeps sending a 5 MiB message after the server refused it, waiting for the server to close the stream as curl and buf curl do",
     "closeDeadlineMs": 2000
   },
+  "readMaxBytesRange": {
+    "case": "readMaxBytes values outside 1 to 4294967295, as Number() reads them, and the two bounds",
+    "invalid": ["NaN", "0", "-1", "1.5", "4294967296", "Infinity"],
+    "smallest": 1,
+    "largest": 4294967295
+  },
   "throwingRequest": {
     "case": "a request whose authority getter throws inside the request listener, standing in for a throw that no known request causes",
     "authority": "listener-throws.test:50051"
