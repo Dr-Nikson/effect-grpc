@@ -954,7 +954,7 @@ const userName = (userId: string) =>
   );
 ```
 
-The data travels as one `google.protobuf.Value` in the standard gRPC status details, so your `.proto` files stay as they are. The server sends it over gRPC, gRPC-web and Connect, and any client can read it. `buf curl` prints it under `details[].debug` on all three protocols, and so does the JSON error body of a Connect call. A Connect client in Node turns its `ConnectError` into the same `GrpcException`, data included, with `GrpcException.from(Code.Unknown, error)`. The client gets what `JSON.stringify` writes, so `NaN` arrives as `null`. Keep the data small. Over gRPC the details travel in a trailer, and a status past HTTP/2's header limit fails the call with `INTERNAL`. In a test with Connect 2.3, 32 KiB of data passed and 63 KiB failed.
+The data travels as one `google.protobuf.Value` in the standard gRPC status details, so your `.proto` files stay as they are. The server sends it over gRPC, gRPC-web and Connect. `buf curl` prints it under `details[].debug` on all three protocols, and so does the JSON error body of a Connect call. A Connect client in Node turns its `ConnectError` into the same `GrpcException`, data included, with `GrpcException.from(Code.Unknown, error)`. The client gets what `JSON.stringify` writes, so `NaN` arrives as `null`. Keep the data small. Over gRPC the details travel in a trailer, and a status past HTTP/2's header limit fails the call with `INTERNAL`. In a test with Connect 2.3, 32 KiB of data passed and 63 KiB failed.
 
 ### Dependency Injection
 
