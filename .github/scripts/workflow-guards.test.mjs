@@ -1,11 +1,12 @@
 // .github/scripts/workflow-guards.test.mjs
 import { load } from "js-yaml";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { test } from "node:test";
 import semver from "semver";
 
-import { runs } from "./workflow-expressions.mjs";
+import { expand, runs } from "./workflow-expressions.mjs";
 
 const readJson = (path) => JSON.parse(readFileSync(new URL(path, import.meta.url), "utf8"));
 const readWorkflow = (name) =>
@@ -20,6 +21,35 @@ const ci = readWorkflow("typescript-ci.yml");
 const library = readJson("../../packages/effect-grpc/package.json");
 const events = readJson("./fixtures/workflow-events.json");
 const associations = readJson("./fixtures/comment-associations.json");
+
+/** Runs a step as a Linux runner does for a step without `shell:`, in `bash -e`. */
+function exitCodeOf(step, contexts, jobEnv) {
+  assert.ok(
+    step.run && step.shell === undefined,
+    `step ${step.name} must be run text in the default shell`,
+  );
+  const env = Object.fromEntries(
+    Object.entries({ ...jobEnv, ...step.env }).map(([name, value]) => [
+      name,
+      expand(value, contexts),
+    ]),
+  );
+  return spawnSync("bash", ["--noprofile", "--norc", "-e", "-c", step.run], {
+    env: { PATH: process.env.PATH, ...env },
+  }).status;
+}
+
+function conclusion(job, contexts) {
+  const needsPassed = Object.values(contexts.needs).every((need) => need.result === "success");
+  if (!runs(job.if, contexts, needsPassed ? "success" : "failure")) return "skipped";
+  let status = "success";
+  for (const step of job.steps) {
+    if (runs(step.if, contexts, status) && exitCodeOf(step, contexts, job.env) !== 0) {
+      status = "failure";
+    }
+  }
+  return status;
+}
 
 for (const { name, workflow_run, runs: expected } of events.releaseRuns) {
   test(`release.yml ${expected ? "starts" : "skips"} the version job for ${name}`, () => {
@@ -166,6 +196,14 @@ test("typescript-ci.yml runs the test job on the oldest Node that the library's 
     `the test job's node-version matrix includes ${floor}, from engines.node ${library.engines.node}`,
   );
 });
+
+for (const { name, results, passes } of events.examplesSummary) {
+  test(`typescript-ci.yml's examples-summary check ${passes ? "passes" : "fails"} when ${name}`, () => {
+    const job = ci.jobs["examples-summary"];
+    const needs = Object.fromEntries([job.needs].flat().map((id) => [id, { result: results[id] }]));
+    assert.equal(conclusion(job, { needs }), passes ? "success" : "failure");
+  });
+}
 
 test("snapshot-release.yml replies on the pull request only for a comment request", () => {
   const condition = snapshot.jobs.reply.if;

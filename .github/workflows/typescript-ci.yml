@@ -154,3 +154,106 @@ jobs:
 
       - name: Run tests
         run: pnpm -r run test
+
+  effect-versions:
+    runs-on: ubuntu-latest
+    outputs:
+      oldest: ${{ steps.resolve.outputs.oldest }}
+      newest: ${{ steps.resolve.outputs.newest }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '24.x'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Find the oldest and the newest effect release in the library's peer range
+        id: resolve
+        run: node .github/scripts/effect-versions.mjs resolve
+
+  examples:
+    name: examples on effect ${{ matrix.effect }}, Node ${{ matrix.node-version }}
+    runs-on: ubuntu-latest
+    needs: effect-versions
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - effect: ${{ needs.effect-versions.outputs.oldest }}
+            node-version: '22.19.0'
+          - effect: ${{ needs.effect-versions.outputs.newest }}
+            node-version: '24.x'
+    env:
+      EFFECT_VERSION: ${{ matrix.effect }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Pin every Effect package to the release under test
+        run: node .github/scripts/effect-versions.mjs pin "$EFFECT_VERSION"
+
+      # A frozen install refuses overrides that the lockfile lacks, so this one updates the
+      # lockfile, in this job only.
+      - name: Install the pinned release
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Check that every Effect package is at the release under test
+        run: node .github/scripts/effect-versions.mjs check "$EFFECT_VERSION"
+
+      - name: Build
+        run: pnpm -r run build
+
+      - name: Run tests:types
+        run: pnpm -r run test:types
+
+      - name: Run tests
+        run: pnpm -r run test
+
+  examples-summary:
+    runs-on: ubuntu-latest
+    needs:
+      - effect-versions
+      - examples
+    if: always()
+
+    steps:
+      - name: Fail unless the version job and every examples job passed
+        env:
+          EFFECT_VERSIONS_RESULT: ${{ needs.effect-versions.result }}
+          EXAMPLES_RESULT: ${{ needs.examples.result }}
+        run: |
+          echo "effect-versions: $EFFECT_VERSIONS_RESULT"
+          echo "examples: $EXAMPLES_RESULT"
+          test "$EFFECT_VERSIONS_RESULT" = success
+          test "$EXAMPLES_RESULT" = success

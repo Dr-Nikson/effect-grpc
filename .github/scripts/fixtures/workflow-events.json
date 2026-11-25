@@ -72,5 +72,37 @@
       },
       "runs": false
     }
+  ],
+  "examplesSummary": [
+    {
+      "name": "the version job and every examples job passed",
+      "results": { "effect-versions": "success", "examples": "success" },
+      "passes": true
+    },
+    {
+      "name": "an examples job failed",
+      "results": { "effect-versions": "success", "examples": "failure" },
+      "passes": false
+    },
+    {
+      "name": "the version job failed and skipped the examples jobs",
+      "results": { "effect-versions": "failure", "examples": "skipped" },
+      "passes": false
+    },
+    {
+      "name": "the examples jobs were skipped although the version job passed",
+      "results": { "effect-versions": "success", "examples": "skipped" },
+      "passes": false
+    },
+    {
+      "name": "the examples jobs were cancelled",
+      "results": { "effect-versions": "success", "examples": "cancelled" },
+      "passes": false
+    },
+    {
+      "name": "only the version job failed",
+      "results": { "effect-versions": "failure", "examples": "success" },
+      "passes": false
+    }
   ]
 }
