@@ -101,6 +101,8 @@ Create a PR as usual. The changeset file will be reviewed along with your code.
 
 The version of `@dr_nikson/effect-grpc` follows [semver](https://semver.org/). Changesets computes it from the pending changesets, and it does not follow Effect's major version as a rule. The Effect line a release works with is its `effect` peer range, `^4.0.7`, and the package needs Node.js 22.19 or later. On Effect 4.0.0 and 4.0.1 the server stops at startup, and on 4.0.2 to 4.0.6 a call whose deadline passes gets another status code.
 
+Typescript CI tests both ends of that range on every pull request. Its `examples` jobs run the example and the e2e tests on the oldest and the newest `effect` release in the range, with every Effect package at that release. The jobs read the range from the `peer` catalog in `pnpm-workspace.yaml`, so a change to the range changes the releases they test.
+
 The pending changesets include major ones, so the next release is a major, `4.0.0-alpha.0`. The `version` field holds `3.0.0`, the base that changesets bumps, and no `3.0.0` is published. A major bump of a prerelease of `3.0.0` gives `3.0.0`, so from the last published version, `3.0.0-alpha.5`, changesets would compute `3.0.0-alpha.6`.
 
 ### The `effect-v4` dist-tag

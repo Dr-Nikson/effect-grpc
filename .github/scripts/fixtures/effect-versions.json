@@ -1,0 +1,98 @@
+{
+  "supported": [
+    {
+      "name": "takes the oldest and the newest release in the peer range, never a prerelease or a later major",
+      "peers": { "effect": "catalog:peer", "@effect/opentelemetry": "catalog:peer" },
+      "catalogs": { "peer": { "effect": "^4.0.7", "@effect/opentelemetry": "^4.0.7" } },
+      "published": [
+        "3.19.15",
+        "3.22.5",
+        "4.0.0-beta.107",
+        "4.0.0-rc.118",
+        "4.0.0",
+        "4.0.6",
+        "4.0.7",
+        "4.1.0",
+        "4.1.5",
+        "4.2.0-beta.1",
+        "5.0.0-alpha.0",
+        "5.0.0"
+      ],
+      "oldest": "4.0.7",
+      "newest": "4.1.5"
+    },
+    {
+      "name": "skips npm entries that are not plain versions",
+      "peers": { "effect": "^4.0.7" },
+      "published": [
+        "4.0.7",
+        "v4.9.0",
+        " 4.8.0",
+        "4.7.0\nnewest=0.0.0",
+        "4.6.0+build",
+        "latest",
+        "",
+        null,
+        4.5,
+        "4.1.5"
+      ],
+      "oldest": "4.0.7",
+      "newest": "4.1.5"
+    },
+    {
+      "name": "reads the range from the default catalog",
+      "peers": { "effect": "catalog:" },
+      "catalog": { "effect": "^4.1.0" },
+      "published": ["4.0.7", "4.1.0", "4.1.5"],
+      "oldest": "4.1.0",
+      "newest": "4.1.5"
+    },
+    {
+      "name": "refuses a range that no published release satisfies",
+      "peers": { "effect": "^4.9.0" },
+      "published": ["4.0.7", "4.1.5"],
+      "refused": "No published effect release satisfies ^4.9.0"
+    },
+    {
+      "name": "refuses an Effect peer that rejects the oldest release",
+      "peers": { "effect": "catalog:peer", "@effect/opentelemetry": "catalog:peer" },
+      "catalogs": { "peer": { "effect": "^4.0.7", "@effect/opentelemetry": "^4.1.5" } },
+      "published": ["4.0.7", "4.1.5"],
+      "refused": "@effect/opentelemetry peer range ^4.1.5"
+    }
+  ],
+  "lockfiles": [
+    {
+      "name": "passes when every Effect package resolved to the version under test",
+      "version": "4.0.7",
+      "packages": [
+        "effect@4.0.7",
+        "@effect/opentelemetry@4.0.7",
+        "@effect/platform-node@4.0.7",
+        "@effect/platform-node-shared@4.0.7",
+        "@effect/vitest@4.0.7",
+        "@effect/language-service@0.87.5",
+        "picomatch@4.0.7",
+        "vitest@5.1.1"
+      ],
+      "mismatched": []
+    },
+    {
+      "name": "names a package that kept another version, as platform-node-shared does under a caret range",
+      "version": "4.0.7",
+      "packages": [
+        "effect@4.0.7",
+        "@effect/platform-node@4.0.7",
+        "@effect/platform-node-shared@4.1.5"
+      ],
+      "mismatched": ["@effect/platform-node-shared 4.1.5"]
+    },
+    {
+      "name": "names effect when two versions of it are installed",
+      "version": "4.0.7",
+      "packages": ["effect@4.0.7", "effect@4.1.5"],
+      "mismatched": ["effect 4.0.7, 4.1.5"]
+    }
+  ],
+  "hostilePins": ["npm:evil@1.0.0", "file:../evil", "4.0.7 || 5", "^4.0.7", "4.0.7\nx", "", null]
+}
