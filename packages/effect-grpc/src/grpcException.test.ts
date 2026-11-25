@@ -52,6 +52,8 @@ describe("GrpcException.from", () => {
 
   it.each([
     ["a string", "boom", "boom"],
+    ["undefined", undefined, "undefined"],
+    ["null", null, "null"],
     ["a plain object", { reason: "quota" }, "[object Object]"],
   ])("makes the message from String() of %s, with the value as the cause", (_, value, message) => {
     const error = GrpcException.from(Code.Unknown, value);
@@ -79,6 +81,12 @@ describe("GrpcException.withDescription", () => {
     expect(described.cause).toBe(cause);
     expect(described.data).toEqual(Option.some(data));
     expect(original.description).toBeUndefined();
+  });
+
+  it("replaces an earlier description", () => {
+    const first = GrpcException.withDescription(GrpcException.create(Code.NotFound, "m"), "first");
+
+    expect(GrpcException.withDescription(first, "second").description).toBe("second");
   });
 });
 
@@ -125,8 +133,8 @@ describe("GrpcException.toConnectError", () => {
 
     expect(connectError.cause).toBe(cause);
     expect(connectError.details).toEqual([]);
+    expect([...connectError.metadata.keys()], "the response metadata").toEqual([]);
     expect(received).toMatchObject({ code: Code.NotFound, message: "User not found" });
-    expect(received.description).toBeUndefined();
     expect(received.data).toEqual(Option.none());
   });
 
