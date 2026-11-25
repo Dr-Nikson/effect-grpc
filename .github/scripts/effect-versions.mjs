@@ -80,6 +80,11 @@ export function effectPackages(lockfile) {
     const name = key.slice(0, at);
     if (releasesWithEffect(name)) found.set(name, [...(found.get(name) ?? []), key.slice(at + 1)]);
   }
+  if (!found.has("effect")) {
+    throw new Error(
+      "The lockfile has no effect package. The keys under packages must look like effect@4.1.5.",
+    );
+  }
   return found;
 }
 

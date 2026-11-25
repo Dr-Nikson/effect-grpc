@@ -102,6 +102,18 @@
       "mismatched": ["effect 4.0.7, 4.1.5"]
     }
   ],
+  "lockfilesWithoutEffect": [
+    { "name": "has no packages section", "lockfile": { "lockfileVersion": "9.0" } },
+    { "name": "has an empty packages section", "lockfile": { "lockfileVersion": "9.0", "packages": {} } },
+    {
+      "name": "keeps its packages under the keys of an older pnpm, with a slash before the name",
+      "lockfile": { "lockfileVersion": "6.0", "packages": { "/effect@4.1.5": {}, "/@effect/vitest@4.1.5": {} } }
+    },
+    {
+      "name": "lists no package of Effect",
+      "lockfile": { "lockfileVersion": "9.0", "packages": { "vitest@5.1.1": {}, "picomatch@4.0.7": {} } }
+    }
+  ],
   "cli": {
     "manifest": { "name": "effect-grpc", "private": true, "pnpm": { "overrides": { "semver": "7.7.2" } } },
     "library": { "name": "@dr_nikson/effect-grpc", "peerDependencies": { "effect": "catalog:peer" } },

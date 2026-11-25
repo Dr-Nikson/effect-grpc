@@ -163,3 +163,14 @@ for (const { name, version, packages, mismatched } of fixtures.lockfiles) {
     for (const mismatch of mismatched) assert.ok(run.stderr.includes(mismatch), mismatch);
   });
 }
+
+for (const command of ["pin", "check"]) {
+  for (const { name, lockfile } of fixtures.lockfilesWithoutEffect) {
+    test(`the ${command} command fails when the lockfile ${name}`, () => {
+      const run = runScript([command, "4.0.7"], { lockfile });
+      assert.notEqual(run.status, 0);
+      assert.match(run.stderr, /no effect package/);
+      assert.deepEqual(run.manifest, cli.manifest);
+    });
+  }
+}
