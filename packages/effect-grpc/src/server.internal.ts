@@ -44,6 +44,8 @@ export function makeGrpcService<
   };
 }
 
+const grpcDefaultMaxReceiveMessageBytes = 4 * 1024 * 1024;
+
 type RequestListener = (req: http2.Http2ServerRequest, res: http2.Http2ServerResponse) => void;
 
 const addressAndPort = /^(.+):(\d+)$/;
@@ -96,7 +98,9 @@ const refuseMalformedAuthority = (
  * Node turns a throw there into an uncaught exception that stops the process.
  */
 const makeRequestListener = (
-  options: Pick<ConnectNodeAdapterOptions, "routes" | "interceptors" | "contextValues">,
+  options: Pick<ConnectNodeAdapterOptions, "routes" | "interceptors" | "contextValues"> & {
+    readonly readMaxBytes: number;
+  },
 ): RequestListener => {
   const handler = connectNodeAdapter(options);
   return (req, res) => {
@@ -126,6 +130,7 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
     public readonly transformation: (
       executor: ProtoRuntime.ServerExecutor<HandlerContext>,
     ) => ProtoRuntime.ServerExecutor<Ctx>,
+    public readonly readMaxBytes: number,
   ) {}
 
   readonly _Services: Types.Contravariant<Services> = (a) => a;
@@ -133,6 +138,7 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
   run(options: { host: string; port: number }): Effect.Effect<never, never, Scope.Scope> {
     const routes = this.routes.bind(this);
     const makeExecutor = this.makeExecutor.bind(this);
+    const { readMaxBytes } = this;
 
     return Effect.gen(function* () {
       const executor = yield* makeExecutor();
@@ -140,6 +146,7 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
         makeRequestListener({
           routes: routes(executor),
           interceptors: [],
+          readMaxBytes,
           contextValues(req): ContextValues {
             // TODO: implement proper request transformations
             console.log("Creating context values for request", req.url);
@@ -312,11 +319,18 @@ export class ConnectEsGprcServerBuilder<Ctx, Services>
     });
   }
 
-  build<This extends T.GrpcServerBuilder<Ctx, Services>>(this: This): T.GrpcServer<Services> {
+  build<This extends T.GrpcServerBuilder<Ctx, Services>>(
+    this: This,
+    { readMaxBytes = grpcDefaultMaxReceiveMessageBytes }: T.GrpcServerOptions = {},
+  ): T.GrpcServer<Services> {
     const executorTransformation = ProtoRuntime.ServerExecutorTransformer().transformContext<Ctx>(
       this.transformCtx,
     );
 
-    return new EffectGrpcServerLive(this.services, executorTransformation.transformation);
+    return new EffectGrpcServerLive(
+      this.services,
+      executorTransformation.transformation,
+      readMaxBytes,
+    );
   }
 }
