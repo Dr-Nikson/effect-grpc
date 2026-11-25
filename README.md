@@ -20,7 +20,7 @@ Type-safe gRPC and Protocol Buffer support for the Effect ecosystem
 
 ## Installation
 
-effect-grpc 4 needs Effect 4.1.5 or later and Node.js 22.19 or later.
+effect-grpc needs Effect 4.0.7 or later and Node.js 22.19 or later.
 
 ```bash
 npm install @dr_nikson/effect-grpc effect @effect/opentelemetry

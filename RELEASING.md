@@ -96,7 +96,13 @@ Create a PR as usual. The changeset file will be reviewed along with your code.
    - Creates Git tags (e.g., `@dr_nikson/effect-grpc@0.2.0`)
    - Creates GitHub releases with changelog
 
-### Move `latest` after the first 4.x publish
+### Versions
+
+The version of `@dr_nikson/effect-grpc` follows [semver](https://semver.org/). Changesets computes it from the pending changesets, and it does not follow Effect's major version as a rule. The Effect line a release works with is its `effect` peer range, `^4.0.0`.
+
+The pending changesets include major ones, so the next release is a major, `4.0.0-alpha.0`. The `version` field holds `3.0.0`, the base that changesets bumps, and no `3.0.0` is published. A major bump of a prerelease of `3.0.0` gives `3.0.0`, so from the last published version, `3.0.0-alpha.5`, changesets would compute `3.0.0-alpha.6`.
+
+### Move `latest` after the first release for Effect 4
 
 The repository is in pre mode with the tag `alpha` (see `.changeset/pre.json`), so `changeset publish` publishes each version under `alpha` and does not move `latest`. `latest` points to `3.0.0-alpha.5`, the Effect 3 build, until someone moves it. The install line in `README.md` names the package without a version, so npm resolves the version that `latest` points to.
 

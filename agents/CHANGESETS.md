@@ -70,6 +70,10 @@ Fix duplicate suffix in generated service names when proto service already ends 
 - `@dr_nikson/effect-grpc-example`
 - `@dr_nikson/effect-grpc-e2e-tests`
 
+**Versions:**
+- The library follows semver. Changesets computes each version from the bump types of the pending changesets, so choose a bump for the change itself, never to match Effect's major version.
+- The Effect line is the `effect` peer range (`peer` catalog in `pnpm-workspace.yaml`).
+
 ## Writing Good Descriptions
 
 **Do:**
