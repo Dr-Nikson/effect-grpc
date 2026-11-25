@@ -239,3 +239,21 @@ jobs:
 
       - name: Run tests
         run: pnpm -r run test
+
+  examples-summary:
+    runs-on: ubuntu-latest
+    needs:
+      - effect-versions
+      - examples
+    if: always()
+
+    steps:
+      - name: Fail unless the version job and every examples job passed
+        env:
+          EFFECT_VERSIONS_RESULT: ${{ needs.effect-versions.result }}
+          EXAMPLES_RESULT: ${{ needs.examples.result }}
+        run: |
+          echo "effect-versions: $EFFECT_VERSIONS_RESULT"
+          echo "examples: $EXAMPLES_RESULT"
+          test "$EFFECT_VERSIONS_RESULT" = success
+          test "$EXAMPLES_RESULT" = success
