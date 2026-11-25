@@ -258,7 +258,8 @@ export const withDescription: {
  * `grpc-status-details-bin` trailer over gRPC and gRPC-web, and in the error body over Connect.
  * Over gRPC the trailer counts against HTTP/2's header limits, so keep the data small. The data
  * goes out as `JSON.stringify` writes it, so `NaN` becomes `null`. Data that `JSON.stringify`
- * refuses, such as a cycle, and objects nested about 100 levels deep are not sent.
+ * refuses, such as a cycle, is not sent, and neither is data nested 99 or more levels deep.
+ * `from` reads data nested 50 or more levels deep as `Option.none()`.
  *
  * @param error - The GrpcException to modify
  * @param data - The JSON data to send
