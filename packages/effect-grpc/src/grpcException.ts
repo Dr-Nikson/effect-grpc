@@ -123,14 +123,14 @@ export class GrpcException extends Data.TaggedError(
    *   "User not found"
    * );
    * console.log(error1.toString());
-   * // Output: "[not_found] User not found"
+   * // Output: "[5] User not found"
    *
    * const error2 = GrpcException.withDescription(
    *   error1,
    *   "Database query failed"
    * );
    * console.log(error2.toString());
-   * // Output: "[not_found] User not found (Database query failed)"
+   * // Output: "[5] User not found (Database query failed)"
    * ```
    */
   toString(): string {
@@ -258,8 +258,9 @@ export const withDescription: {
  * `grpc-status-details-bin` trailer over gRPC and gRPC-web, and in the error body over Connect.
  * Over gRPC the trailer counts against HTTP/2's header limits, so keep the data small. The data
  * goes out as `JSON.stringify` writes it, so `NaN` becomes `null`. Data that `JSON.stringify`
- * refuses, such as a cycle, is not sent, and neither is data nested 99 or more levels deep.
- * `from` reads data nested 50 or more levels deep as `Option.none()`.
+ * refuses, such as a cycle, is not sent, and neither is data nested about 100 or more levels
+ * deep. `from` reads data nested about 50 or more levels deep as `Option.none()`, even with a
+ * higher `binaryOptions.recursionLimit` in the client config.
  *
  * @param error - The GrpcException to modify
  * @param data - The JSON data to send
