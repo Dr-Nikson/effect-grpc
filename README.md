@@ -22,6 +22,8 @@ Type-safe gRPC and Protocol Buffer support for the Effect ecosystem
 
 effect-grpc needs `effect` ^4.0.7 and Node.js 22.19 or later. On Effect 4.0.0 and 4.0.1 the server stops at startup, and on 4.0.2 to 4.0.6 a call whose deadline passes gets another status code.
 
+With `effect` at 4.0.7, install the other Effect packages at 4.0.7 too: `@effect/opentelemetry`, `@effect/platform-node`, and `@effect/platform-node-shared`, which `@effect/platform-node` depends on. Each of them needs `effect` at its own release or later. With a newer one, npm stops with `ERESOLVE`, or it installs a package whose `effect` peer is not met.
+
 ```bash
 npm install @dr_nikson/effect-grpc effect @effect/opentelemetry
 # gRPC runtime deps
