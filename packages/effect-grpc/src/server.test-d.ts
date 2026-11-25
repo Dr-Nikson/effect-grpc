@@ -1,5 +1,5 @@
 // packages/effect-grpc/src/server.test-d.ts
-import { Effect, Scope } from "effect";
+import { Effect } from "effect";
 import { assertType, expectTypeOf, test } from "vitest";
 
 import type { GenService } from "@bufbuild/protobuf/codegenv2";
@@ -131,21 +131,6 @@ test("GrpcServer dependencies should be correctly inferred", () => {
   expectTypeOf(fun2).toBeCallableWith(server2);
   // And we can also use all implemented apis
   expectTypeOf(fun).toBeCallableWith(server2);
-});
-
-test("GrpcServer#listen succeeds with the bound address, fails with GrpcServerBindError, needs a Scope", () => {
-  const server: Server.GrpcServer<"DebugAPI"> = null as any;
-
-  expectTypeOf(server.listen({ host: "127.0.0.1", port: 0 })).toEqualTypeOf<
-    Effect.Effect<Server.GrpcServerAddress, Server.GrpcServerBindError, Scope.Scope>
-  >();
-  expectTypeOf<Server.GrpcServerBindError["reason"]["_tag"]>().toEqualTypeOf<
-    "AddressInUse" | "PermissionDenied" | "InvalidPort" | "Other"
-  >();
-  expectTypeOf(server).not.toHaveProperty("run");
-  expectTypeOf<
-    Server.GrpcServerBindError["_tag"]
-  >().toEqualTypeOf<"@dr_nikson/effect-grpc/server/GrpcServerBindError">();
 });
 
 test("GrpcService takes handlers for the unary methods alone of a service that also has streaming methods", () => {

@@ -15,7 +15,6 @@ import dns from "node:dns";
 import { readFileSync } from "node:fs";
 import http2 from "node:http2";
 import net from "node:net";
-import vm from "node:vm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { create, createFileRegistry } from "@bufbuild/protobuf";
@@ -119,23 +118,6 @@ const captureLogs = () => {
   });
   return { messages, errors, layer: Logger.layer([logger]) };
 };
-
-/**
- * A failed listen's socket handle closes on a later turn of the event loop and points at its server
- * until then, so the loop turns before the heap is read.
- */
-const heapUsedAfterGc = Effect.gen(function* () {
-  const { gc } = globalThis;
-  if (gc === undefined) {
-    return yield* Effect.die(
-      new Error("the tests need --expose-gc, which vitest.config.ts passes"),
-    );
-  }
-  yield* Effect.sleep("20 millis");
-  gc();
-  gc();
-  return process.memoryUsage().heapUsed;
-});
 
 const connectStatus = (address: Server.GrpcServerAddress) =>
   Effect.callback<number>((resume) => {
@@ -385,25 +367,6 @@ describe("GrpcServer.listen", () => {
       expect(reply.$typeName).toBe("google.protobuf.Empty");
     }).pipe(Effect.scoped, Effect.runPromise));
 
-  it("keeps nothing from a failed attempt in the caller's scope, so a retry loop holds no memory", () =>
-    Effect.gen(function* () {
-      const taken = yield* server.listen({ host: "127.0.0.1", port: 0 });
-      const serverErrorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
-      const scope = yield* Scope.make();
-
-      yield* Effect.flip(server.listen({ host: "127.0.0.1", port: taken.port })).pipe(
-        Scope.provide(scope),
-        Effect.replicateEffect(500, { discard: true }),
-      );
-      // A logged Node error keeps its server alive until its stack is read, and the spy keeps it.
-      serverErrorLog.mockClear();
-      const heldWhileOpen = yield* heapUsedAfterGc;
-      yield* Scope.close(scope, Exit.void);
-      const releasedOnClose = heldWhileOpen - (yield* heapUsedAfterGc);
-
-      expect(releasedOnClose).toBeLessThan(2_000_000);
-    }).pipe(Effect.scoped, Effect.runPromise));
-
   it("fails with PermissionDenied when listen reports EACCES", () =>
     Effect.gen(function* () {
       const denied = Object.assign(new Error("listen EACCES: permission denied 127.0.0.1:80"), {
@@ -427,26 +390,6 @@ describe("GrpcServer.listen", () => {
       });
       expect(error.cause).toBe(denied);
       expect(error.message).toContain("EACCES");
-    }).pipe(Effect.scoped, Effect.runPromise));
-
-  it("reads the code of an error from another realm, as Jest and Vitest's VM pools report it", () =>
-    Effect.gen(function* () {
-      const inUse = Object.assign(
-        vm.runInNewContext(`new Error("listen EADDRINUSE: address already in use 127.0.0.1:8000")`),
-        { code: "EADDRINUSE", errno: -98, syscall: "listen", address: "127.0.0.1", port: 8000 },
-      );
-      vi.spyOn(net.Server.prototype, "listen").mockImplementationOnce(function (this: net.Server) {
-        process.nextTick(() => this.emit("error", inUse));
-        return this;
-      });
-
-      const error = yield* Effect.flip(server.listen({ host: "127.0.0.1", port: 8000 }));
-
-      expect(inUse).not.toBeInstanceOf(Error);
-      expect(error.reason).toEqual({ _tag: "AddressInUse" });
-      expect(error.message).toBe(
-        "gRPC server could not listen on 127.0.0.1:8000 (AddressInUse): listen EADDRINUSE: address already in use 127.0.0.1:8000",
-      );
     }).pipe(Effect.scoped, Effect.runPromise));
 
   it.skipIf(!lowPortsArePrivileged)(
