@@ -64,13 +64,14 @@ export const connect = (url: string): Effect.Effect<http2.ClientHttp2Session, ne
     (session) => Effect.sync(() => session.destroy()),
   );
 
-export const getGreeting = (
+const exchange = (
   session: http2.ClientHttp2Session,
   protocol: Protocol,
   authority: string,
   name: string,
-  contentType: string = protocol === "grpc" ? "application/grpc" : "application/json",
-  authorityHeader: ":authority" | "host" = ":authority",
+  contentType: string,
+  authorityHeader: ":authority" | "host",
+  until: "answer" | "close",
 ): Effect.Effect<RawReply> =>
   Effect.async<RawReply>((resume) => {
     const message = toBinary(GetGreetingRequestSchema, create(GetGreetingRequestSchema, { name }));
@@ -122,10 +123,35 @@ export const getGreeting = (
       grpcMessage = header(trailers["grpc-message"]);
     });
     stream.on("data", (chunk: Buffer) => chunks.push(chunk));
-    stream.on("end", finish);
+    if (until === "answer") stream.on("end", finish);
     stream.on("close", finish);
     stream.on("error", () => {});
     stream.end(protocol === "grpc" ? envelope(message) : JSON.stringify({ name }));
 
     return Effect.sync(() => stream.close(http2.constants.NGHTTP2_CANCEL));
   });
+
+const defaultContentType = (protocol: Protocol): string =>
+  protocol === "grpc" ? "application/grpc" : "application/json";
+
+export const getGreeting = (
+  session: http2.ClientHttp2Session,
+  protocol: Protocol,
+  authority: string,
+  name: string,
+  contentType: string = defaultContentType(protocol),
+  authorityHeader: ":authority" | "host" = ":authority",
+): Effect.Effect<RawReply> =>
+  exchange(session, protocol, authority, name, contentType, authorityHeader, "answer");
+
+/**
+ * Unlike getGreeting, waits for the server to close the stream and never cancels it after the
+ * answer, as curl and buf curl wait while their upload is blocked.
+ */
+export const getGreetingUntilClosed = (
+  session: http2.ClientHttp2Session,
+  protocol: Protocol,
+  authority: string,
+  name: string,
+): Effect.Effect<RawReply> =>
+  exchange(session, protocol, authority, name, defaultContentType(protocol), ":authority", "close");

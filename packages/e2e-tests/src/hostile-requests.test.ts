@@ -1,5 +1,16 @@
 // packages/e2e-tests/src/hostile-requests.test.ts
-import { Cause, Effect, Exit, Layer, Schedule } from "effect";
+import {
+  Cause,
+  Context,
+  Duration,
+  Effect,
+  ExecutionStrategy,
+  Exit,
+  Layer,
+  Option,
+  Schedule,
+  Scope,
+} from "effect";
 import http2 from "node:http2";
 import net from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -377,6 +388,96 @@ describe("Hostile requests (issue #61)", () => {
         { atLimit: atLimit.greeting, justOverLimit: justOverLimit.grpcStatus },
         `a server built with readMaxBytes ${readMaxBytes}, at and 1 byte over that limit`,
       ).toEqual({ atLimit: `127.0.0.1:${port}`, justOverLimit: String(Code.ResourceExhausted) });
+      yield* expectServing(session, port);
+    }).pipe(Effect.provide(PortLive)),
+  );
+
+  it.scopedLive("stops while clients that had a message refused keep their connections", () =>
+    Effect.gen(function* () {
+      const { stopDeadlineMs } = fixtures.refusedClientsConnected;
+      const name = expand(fixtures.messageLimit.nameOverLimit);
+      const serverScope = yield* Scope.fork(yield* Effect.scope, ExecutionStrategy.sequential);
+      const port = yield* serve("127.0.0.1").pipe(Scope.extend(serverScope));
+      const baseUrl = `http://127.0.0.1:${port}`;
+
+      const generated = Context.get(
+        yield* Layer.build(clientAt(baseUrl)),
+        effectProto.HelloWorldAPIClientTag,
+      );
+      const refusals = {
+        generated: Exit.match(yield* Effect.exit(generated.getGreeting({ name }, {})), {
+          onFailure: (cause) => Code[ConnectError.from(Cause.squash(cause)).code],
+          onSuccess: () => "served",
+        }),
+        ...(yield* overEachProtocol(baseUrl, (transport) =>
+          Effect.promise(() =>
+            createClient(HelloWorldAPI, transport)
+              .getGreeting({ name })
+              .then(
+                () => "served",
+                (error) => Code[ConnectError.from(error).code],
+              ),
+          ),
+        )),
+      };
+      // The server stops in an uninterruptible finalizer, so the deadline must not wait for it.
+      const stopped = yield* Scope.close(serverScope, Exit.void).pipe(
+        Effect.disconnect,
+        Effect.timeoutOption(Duration.millis(stopDeadlineMs)),
+      );
+
+      expect(refusals, "each client's 5 MiB message").toEqual({
+        generated: "ResourceExhausted",
+        grpc: "ResourceExhausted",
+        grpcWeb: "ResourceExhausted",
+        connect: "ResourceExhausted",
+      });
+      expect(
+        Option.isSome(stopped),
+        `the server stopped within ${stopDeadlineMs} ms while every client kept its connection`,
+      ).toBe(true);
+    }).pipe(Effect.provide(PortLive)),
+  );
+
+  it.scopedLive("closes a refused request that its client keeps sending", () =>
+    Effect.gen(function* () {
+      const { closeDeadlineMs } = fixtures.unfinishedUpload;
+      const name = expand(fixtures.messageLimit.nameOverLimit);
+      const port = yield* serve("127.0.0.1");
+      const session = yield* raw.connect(`http://127.0.0.1:${port}`);
+      const untilClosed = (protocol: raw.Protocol) =>
+        raw.getGreetingUntilClosed(session, protocol, `127.0.0.1:${port}`, name).pipe(
+          Effect.timeoutOption(Duration.millis(closeDeadlineMs)),
+          Effect.map(
+            Option.match({
+              onNone: () => "the stream stayed open",
+              onSome: ({ httpStatus, grpcStatus, connectCode, rstCode }) => ({
+                httpStatus,
+                grpcStatus,
+                connectCode,
+                rstCode,
+              }),
+            }),
+          ),
+        );
+
+      expect(
+        { grpc: yield* untilClosed("grpc"), connect: yield* untilClosed("connect") },
+        `each refused stream within ${closeDeadlineMs} ms`,
+      ).toEqual({
+        grpc: {
+          httpStatus: 200,
+          grpcStatus: String(Code.ResourceExhausted),
+          connectCode: undefined,
+          rstCode: http2.constants.NGHTTP2_NO_ERROR,
+        },
+        connect: {
+          httpStatus: 429,
+          grpcStatus: undefined,
+          connectCode: "resource_exhausted",
+          rstCode: http2.constants.NGHTTP2_NO_ERROR,
+        },
+      });
       yield* expectServing(session, port);
     }).pipe(Effect.provide(PortLive)),
   );
