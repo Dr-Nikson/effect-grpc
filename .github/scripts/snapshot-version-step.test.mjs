@@ -30,14 +30,7 @@ const publishStep = steps.find((step) => step.id === "publish");
 
 const readIfPresent = (path) => (existsSync(path) ? readFileSync(path, "utf8") : "");
 
-/**
- * Runs a step's script the way a Linux runner does for a step without `shell:` (`bash -e`), in a
- * checkout whose package.json holds `version`. The changesets CLI is not run: `pnpm` only
- * records its arguments, so the version in package.json is the one the CLI would have left.
- *
- * @param {{ run: string }} step
- * @param {string} version
- */
+/** Runs a step's script the way a Linux runner does for a step without `shell:` (`bash -e`). */
 function runStep(step, version) {
   const dir = mkdtempSync(join(tmpdir(), "snapshot-step-"));
   try {

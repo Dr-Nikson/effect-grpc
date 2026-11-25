@@ -113,8 +113,7 @@ jobs:
           ls -la packages/*/bin || echo "⚠️  bin folders not found (may not exist)"
           echo "✅ Build artifacts restored successfully"
 
-      # changesets refuses --snapshot in pre mode. The `-0.` identifier sorts a snapshot below every
-      # alpha, beta and rc, so a branch whose config makes another form must stop here.
+      # changesets refuses --snapshot in pre mode.
       - name: Version snapshot
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
