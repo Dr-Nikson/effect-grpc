@@ -66,7 +66,6 @@ const splitAtEquals = (line) => [
   line.slice(line.indexOf("=") + 1),
 ];
 
-/** The command a Linux runner starts a step's script with. */
 function shellCommand(step, script) {
   const shell = step.shell ?? job.defaults?.run?.shell ?? workflow.defaults?.run?.shell;
   const template = shell === undefined ? "bash -e {0}" : (SHELLS[shell] ?? shell);
@@ -74,14 +73,12 @@ function shellCommand(step, script) {
 }
 
 /**
- * Runs steps of the snapshot job in order, as the runner does, in a scratch checkout where the
- * package is at `before` and the fake changesets CLI versions it to `versioned`. The job's earlier
- * steps count as succeeded. A step runs while its `if:` holds, and a failed step fails the job
- * unless its `continue-on-error` holds.
+ * Runs steps of the snapshot job in order, as the runner does. A step runs while its `if:` holds,
+ * and a failed step fails the job unless its `continue-on-error` holds.
  */
 function runSteps(
   steps,
-  { github = DISPATCH, before = UNVERSIONED, versioned = before, preMode = false } = {},
+  { github = DISPATCH, before = UNVERSIONED, changesetsWrites = before, preMode = false } = {},
 ) {
   const dir = mkdtempSync(join(tmpdir(), "snapshot-step-"));
   try {
@@ -125,7 +122,7 @@ function runSteps(
           SNAPSHOT_SHA: sha,
           GITHUB_OUTPUT: join(dir, "github-output"),
           PUBLISHED: join(dir, "published"),
-          VERSIONED: versioned,
+          CHANGESETS_WRITES: changesetsWrites,
         },
       });
       const failed = last.status !== 0 && !evaluate(step["continue-on-error"] ?? false, contexts);
@@ -152,11 +149,8 @@ function runSteps(
   }
 }
 
-/**
- * The version that `changeset version --snapshot` gives a major change with this repository's
- * .changeset/config.json, on a package at 3.0.0-alpha.5 once the version step has left pre mode.
- */
 function changesetsSnapshot() {
+  const afterPreExit = { mode: "exit", tag: "alpha", initialVersions: {}, changesets: [] };
   const workspace = {
     tool: "pnpm",
     root: { dir: "/repo", packageJson: { name: "effect-grpc", version: "0.0.0" } },
@@ -170,7 +164,7 @@ function changesetsSnapshot() {
     [{ id: "change", summary: "", releases: [{ name: "@dr_nikson/effect-grpc", type: "major" }] }],
     workspace,
     parseChangesetConfig(changesetConfig, workspace),
-    { mode: "exit", tag: "alpha", initialVersions: {}, changesets: [] },
+    afterPreExit,
     { tag, commit: sha },
   );
   return releases.find(({ name }) => name === "@dr_nikson/effect-grpc").newVersion;
@@ -178,14 +172,14 @@ function changesetsSnapshot() {
 
 for (const version of accepted) {
   test(`the version step lets ${version} through`, () => {
-    const result = runSteps([versionStep], { versioned: version });
+    const result = runSteps([versionStep], { changesetsWrites: version });
     assert.equal(result.status, 0, result.stdout + result.stderr);
   });
 }
 
 for (const { name, version } of refused) {
   test(`the version step fails on ${name}`, () => {
-    const result = runSteps([versionStep], { versioned: version });
+    const result = runSteps([versionStep], { changesetsWrites: version });
     assert.notEqual(result.status, 0);
     assert.match(result.stdout, /^::error::/m);
     assert.ok(result.stdout.includes(version), "the error names the version it found");
@@ -194,7 +188,7 @@ for (const { name, version } of refused) {
 
 test("the version step makes the snapshot in pre mode and outside it", () => {
   for (const preMode of [true, false]) {
-    const result = runSteps([versionStep], { versioned: accepted[0], preMode });
+    const result = runSteps([versionStep], { changesetsWrites: accepted[0], preMode });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.equal(result.version, accepted[0]);
   }
@@ -203,7 +197,7 @@ test("the version step makes the snapshot in pre mode and outside it", () => {
 test("with the changesets settings, a snapshot of 3.0.0-alpha.5 is 3.0.0-0.<tag>.<commit>, which the version step lets through", () => {
   const snapshot = changesetsSnapshot();
   assert.equal(snapshot, `3.0.0-0.${tag}.${sha}`);
-  const result = runSteps([versionStep], { versioned: snapshot });
+  const result = runSteps([versionStep], { changesetsWrites: snapshot });
   assert.equal(result.status, 0, result.stdout + result.stderr);
 });
 
@@ -221,10 +215,10 @@ for (const [trigger, github] of [
 ]) {
   test(`${trigger} publishes only a version that the version step lets through`, () => {
     for (const { version } of refused) {
-      const result = runSteps(versionThroughPublish, { github, versioned: version });
+      const result = runSteps(versionThroughPublish, { github, changesetsWrites: version });
       assert.deepEqual(result.publishedTags, [], version);
     }
-    const result = runSteps(versionThroughPublish, { github, versioned: accepted[0] });
+    const result = runSteps(versionThroughPublish, { github, changesetsWrites: accepted[0] });
     assert.deepEqual(result.publishedTags, [tag]);
   });
 }
