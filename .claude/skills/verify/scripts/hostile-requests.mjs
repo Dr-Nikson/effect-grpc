@@ -32,9 +32,7 @@ const envelope = (message) => {
 };
 
 // With `authority` undefined, Node's client sends its default for the session URL, which for an
-// IPv6 literal URL is the address and port without brackets. With `untilClosed`, the call waits up
-// to 5 s for the server to close the stream instead of cancelling it after the answer, the way curl
-// and buf curl wait while their upload is blocked.
+// IPv6 literal URL is the address and port without brackets.
 const call = (protocol, authority, name, on = session, untilClosed = false) =>
   new Promise((resolve) => {
     const headers = {
@@ -53,6 +51,8 @@ const call = (protocol, authority, name, on = session, untilClosed = false) =>
       if (done) return;
       done = true;
       reply.rstCode = stream.rstCode;
+      // A stream that was never reset also reads rstCode 0.
+      if (untilClosed) reply.closedByServer = stream.closed;
       stream.close(http2.constants.NGHTTP2_CANCEL);
       const body = Buffer.concat(chunks);
       if (protocol === "grpc" && reply.grpcStatus === "0") {
@@ -175,6 +175,7 @@ if (mode === "authority") {
   check(
     "a 5 MiB message over grpc whose client keeps sending gets RESOURCE_EXHAUSTED, then a NO_ERROR reset",
     grpcKeptSending.grpcStatus === "8" &&
+      grpcKeptSending.closedByServer &&
       grpcKeptSending.rstCode === http2.constants.NGHTTP2_NO_ERROR,
     grpcKeptSending,
   );
@@ -183,6 +184,7 @@ if (mode === "authority") {
     "a 5 MiB message over connect whose client keeps sending gets RESOURCE_EXHAUSTED, then a NO_ERROR reset",
     connectKeptSending.httpStatus === 429 &&
       connectKeptSending.connectCode === "resource_exhausted" &&
+      connectKeptSending.closedByServer &&
       connectKeptSending.rstCode === http2.constants.NGHTTP2_NO_ERROR,
     connectKeptSending,
   );
