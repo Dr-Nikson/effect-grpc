@@ -109,6 +109,17 @@ const expectServing = (session: http2.ClientHttp2Session, port: number) =>
     }
   });
 
+const connectMethodStatus = (session: http2.ClientHttp2Session, authority: string) =>
+  Effect.callback<number>((resume) => {
+    const request = session.request({ ":method": "CONNECT", ":authority": authority });
+    request.on("error", () => {});
+    request.once("response", (headers) => {
+      request.close();
+      resume(Effect.succeed(Number(headers[":status"])));
+    });
+    return Effect.sync(() => request.close(http2.constants.NGHTTP2_CANCEL));
+  }).pipe(Effect.timeout("2 seconds"));
+
 const sessionTo = (baseUrl: string) =>
   Effect.acquireRelease(
     Effect.sync(() => new Http2SessionManager(baseUrl)),
@@ -425,6 +436,16 @@ describe("Hostile requests (issue #61)", () => {
         );
         yield* expectServing(session, port);
       }
+    }),
+  );
+
+  it.live("answers an HTTP/2 CONNECT request with 405 and keeps serving", () =>
+    Effect.gen(function* () {
+      const port = yield* serve("127.0.0.1");
+      const session = yield* raw.connect(`http://127.0.0.1:${port}`);
+
+      expect(yield* connectMethodStatus(session, `127.0.0.1:${port}`)).toBe(405);
+      yield* expectServing(session, port);
     }),
   );
 
