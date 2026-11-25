@@ -271,7 +271,7 @@ Fluent builder interface for constructing gRPC servers.
 **Methods:**
 - `withContextTransformer<Ctx1>(f: (originalCtx: HandlerContext, ctx: Ctx) => Effect.Effect<Ctx1>): GrpcServerBuilder<Ctx1, never>` - Transform the handler context. The first parameter is the original Connect-RPC HandlerContext, the second is the current context (defaults to `any`). Must be called before adding services.
 - `withService<S>(service: S): GrpcServerBuilder<Ctx, Services | Tag<S>>` - Add a service (enforces unique tags)
-- `build(options?: GrpcServerOptions): GrpcServer<Services>` - Build the server (requires at least one service). `options.readMaxBytes` is the largest request message the server reads, in bytes, 4 MiB by default. A larger message gets `RESOURCE_EXHAUSTED`.
+- `build(options?: GrpcServerOptions): GrpcServer<Services>` - Build the server (requires at least one service). `options.readMaxBytes` is the largest request message the server reads, in bytes, 4 MiB by default. A larger message gets `RESOURCE_EXHAUSTED`. `build` throws `Cause.IllegalArgumentException` unless the value is a whole number from 1 to 4294967295.
 
 **Example:**
 ```typescript
