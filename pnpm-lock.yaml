@@ -7,23 +7,23 @@ settings:
 catalogs:
   default:
     '@bufbuild/buf':
-      specifier: 1.57.0
-      version: 1.57.0
+      specifier: 1.75.0
+      version: 1.75.0
     '@bufbuild/protobuf':
-      specifier: 2.8.0
-      version: 2.8.0
+      specifier: 2.17.0
+      version: 2.17.0
     '@bufbuild/protoc-gen-es':
-      specifier: 2.8.0
-      version: 2.8.0
+      specifier: 2.17.0
+      version: 2.17.0
     '@bufbuild/protoplugin':
-      specifier: 2.9.0
-      version: 2.9.0
+      specifier: 2.17.0
+      version: 2.17.0
     '@connectrpc/connect':
-      specifier: 2.1.0
-      version: 2.1.0
+      specifier: 2.3.0
+      version: 2.3.0
     '@connectrpc/connect-node':
-      specifier: 2.1.0
-      version: 2.1.0
+      specifier: 2.3.0
+      version: 2.3.0
     '@effect/cluster':
       specifier: 0.56.1
       version: 0.56.1
@@ -130,13 +130,13 @@ importers:
     dependencies:
       '@bufbuild/protobuf':
         specifier: 'catalog:'
-        version: 2.8.0
+        version: 2.17.0
       '@connectrpc/connect':
         specifier: 'catalog:'
-        version: 2.1.0(@bufbuild/protobuf@2.8.0)
+        version: 2.3.0(@bufbuild/protobuf@2.17.0)
       '@connectrpc/connect-node':
         specifier: 'catalog:'
-        version: 2.1.0(@bufbuild/protobuf@2.8.0)(@connectrpc/connect@2.1.0(@bufbuild/protobuf@2.8.0))
+        version: 2.3.0(@bufbuild/protobuf@2.17.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.17.0))
       '@dr_nikson/effect-grpc':
         specifier: workspace:*
         version: link:../effect-grpc
@@ -146,10 +146,10 @@ importers:
     devDependencies:
       '@bufbuild/buf':
         specifier: 'catalog:'
-        version: 1.57.0
+        version: 1.75.0
       '@bufbuild/protoc-gen-es':
         specifier: 'catalog:'
-        version: 2.8.0(@bufbuild/protobuf@2.8.0)
+        version: 2.17.0(@bufbuild/protobuf@2.17.0)
       '@effect/cluster':
         specifier: 'catalog:'
         version: 0.56.1(@effect/platform@0.94.2(effect@3.19.15))(@effect/rpc@0.73.0(@effect/platform@0.94.2(effect@3.19.15))(effect@3.19.15))(@effect/sql@0.49.0(@effect/experimental@0.58.0(@effect/platform@0.94.2(effect@3.19.15))(effect@3.19.15))(@effect/platform@0.94.2(effect@3.19.15))(effect@3.19.15))(@effect/workflow@0.16.0(@effect/experimental@0.58.0(@effect/platform@0.94.2(effect@3.19.15))(effect@3.19.15))(@effect/platform@0.94.2(effect@3.19.15))(@effect/rpc@0.73.0(@effect/platform@0.94.2(effect@3.19.15))(effect@3.19.15))(effect@3.19.15))(effect@3.19.15)
@@ -197,10 +197,10 @@ importers:
     dependencies:
       '@bufbuild/protoplugin':
         specifier: 'catalog:'
-        version: 2.9.0
+        version: 2.17.0
       '@connectrpc/connect-node':
         specifier: 'catalog:'
-        version: 2.1.0(@bufbuild/protobuf@2.8.0)(@connectrpc/connect@2.1.0(@bufbuild/protobuf@2.8.0))
+        version: 2.3.0(@bufbuild/protobuf@2.17.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.17.0))
       '@opentelemetry/api':
         specifier: 'catalog:'
         version: 1.9.0
@@ -210,16 +210,16 @@ importers:
     devDependencies:
       '@bufbuild/buf':
         specifier: 'catalog:'
-        version: 1.57.0
+        version: 1.75.0
       '@bufbuild/protobuf':
         specifier: 'catalog:'
-        version: 2.8.0
+        version: 2.17.0
       '@bufbuild/protoc-gen-es':
         specifier: 'catalog:'
-        version: 2.8.0(@bufbuild/protobuf@2.8.0)
+        version: 2.17.0(@bufbuild/protobuf@2.17.0)
       '@connectrpc/connect':
         specifier: 'catalog:'
-        version: 2.1.0(@bufbuild/protobuf@2.8.0)
+        version: 2.3.0(@bufbuild/protobuf@2.17.0)
       '@effect/opentelemetry':
         specifier: 'catalog:'
         version: 0.61.0(@effect/platform@0.94.2(effect@3.19.15))(@opentelemetry/api@1.9.0)(@opentelemetry/resources@2.5.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-logs@0.211.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-metrics@2.5.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-node@2.5.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-web@2.5.0(@opentelemetry/api@1.9.0))(@opentelemetry/semantic-conventions@1.39.0)(effect@3.19.15)
@@ -237,10 +237,10 @@ importers:
     dependencies:
       '@bufbuild/protobuf':
         specifier: 'catalog:'
-        version: 2.8.0
+        version: 2.17.0
       '@connectrpc/connect':
         specifier: 'catalog:'
-        version: 2.1.0(@bufbuild/protobuf@2.8.0)
+        version: 2.3.0(@bufbuild/protobuf@2.17.0)
       '@dr_nikson/effect-grpc':
         specifier: workspace:3.0.0-alpha.5
         version: link:../effect-grpc
@@ -250,10 +250,10 @@ importers:
     devDependencies:
       '@bufbuild/buf':
         specifier: 'catalog:'
-        version: 1.57.0
+        version: 1.75.0
       '@bufbuild/protoc-gen-es':
         specifier: 'catalog:'
-        version: 2.8.0(@bufbuild/protobuf@2.8.0)
+        version: 2.17.0(@bufbuild/protobuf@2.17.0)
       '@effect/cluster':
         specifier: 'catalog:'
         version: 0.56.1(@effect/platform@0.94.2(effect@3.19.15))(@effect/rpc@0.73.0(@effect/platform@0.94.2(effect@3.19.15))(effect@3.19.15))(@effect/sql@0.49.0(@effect/experimental@0.58.0(@effect/platform@0.94.2(effect@3.19.15))(effect@3.19.15))(@effect/platform@0.94.2(effect@3.19.15))(effect@3.19.15))(@effect/workflow@0.16.0(@effect/experimental@0.58.0(@effect/platform@0.94.2(effect@3.19.15))(effect@3.19.15))(@effect/platform@0.94.2(effect@3.19.15))(@effect/rpc@0.73.0(@effect/platform@0.94.2(effect@3.19.15))(effect@3.19.15))(effect@3.19.15))(effect@3.19.15)
@@ -329,74 +329,68 @@ packages:
     resolution: {integrity: sha512-bkFqkLhh3pMBUQQkpVgWDWq/lqzc2678eUyDlTBhRqhCHFguYYGM0Efga7tYk4TogG/3x0EEl66/OQ+WGbWB/Q==}
     engines: {node: '>=6.9.0'}
 
-  '@bufbuild/buf-darwin-arm64@1.57.0':
-    resolution: {integrity: sha512-XKmb6cb1n23+5cgiwHqNRuGnrDv4yTBAsakjw3b/wP5WahIdloS/6ixoC1FdxuLt79fDqdhXbvCCeM0QOBAmRg==}
+  '@bufbuild/buf-darwin-arm64@1.75.0':
+    resolution: {integrity: sha512-QiQYSmtVUcKy9DK/d+zJ3+D4iUQmmiDQ3i8/yBr8cf7Nr28lqKMAIKznJE/uGRsjr90fHaUQO+Xsedec0ArN5g==}
     engines: {node: '>=12'}
     cpu: [arm64]
     os: [darwin]
 
-  '@bufbuild/buf-darwin-x64@1.57.0':
-    resolution: {integrity: sha512-lCu5DJ63VfzTsoKz8iA8ZJMUTECaJABHEoQdlWnhh9MpoPr5Sd1l+uZvh0m1eBO9sVrKPAZFmYsjLGc/tpmbPA==}
+  '@bufbuild/buf-darwin-x64@1.75.0':
+    resolution: {integrity: sha512-U2W+MRE9jJ7Am7x02ZWt87U5lfPrjKMdB1aZDslsuyOHo+fEUvZolupmhoW30v6syNAWBOfkoi0k5TLc2FNGqQ==}
     engines: {node: '>=12'}
     cpu: [x64]
     os: [darwin]
 
-  '@bufbuild/buf-linux-aarch64@1.57.0':
-    resolution: {integrity: sha512-LjFsPinUzvJ7BiHzlzQm1Dv5EQLUCFPtsxROVgluhX9iQOxxDtwbjsv0E/toKsJk35PQXwAsVKJlswR1CZ9bFQ==}
+  '@bufbuild/buf-linux-aarch64@1.75.0':
+    resolution: {integrity: sha512-eX+XyokzJDqsNIFo8b1O3DBvbnksOozPJX4QVsNn61JqSUtWspyTNeYqwg8lRDancML+bDqZEDFPABjAsVCQGQ==}
     engines: {node: '>=12'}
     cpu: [arm64]
     os: [linux]
 
-  '@bufbuild/buf-linux-armv7@1.57.0':
-    resolution: {integrity: sha512-sHThZvZgXiyQtAZEviZG4EDuc4MhZhrBrRmGR3uLRWiZ1BTVr6LCtOto3AWoXvcyORTfmEpAMLSFb/XfoO7NIg==}
+  '@bufbuild/buf-linux-armv7@1.75.0':
+    resolution: {integrity: sha512-2RVhmr3vJ145DazYTk9dWAzeQPtcJ0SiSzY02v1Su/JIfgzhv9lgOm+y3nGuLjyZFF8UfTtmuHfHso5zDBgsCQ==}
     engines: {node: '>=12'}
     cpu: [arm]
     os: [linux]
 
-  '@bufbuild/buf-linux-x64@1.57.0':
-    resolution: {integrity: sha512-QdrvXX2JNMf0385egPSsOJZkOsOBca7LDFll1doC7Fo2W8cP//KXvVqPIMNA1Blq/sHyx7J8sbbf0w/iQo7kVw==}
+  '@bufbuild/buf-linux-x64@1.75.0':
+    resolution: {integrity: sha512-YGGJAx0lpMCE7aMWjNOJcfoEaG/e+iYHnTC4SZ0P5eS4IffMryA9Z4/bb1m1wNXAEJ8ATFMEZOAk/5x9VE47ig==}
     engines: {node: '>=12'}
     cpu: [x64]
     os: [linux]
 
-  '@bufbuild/buf-win32-arm64@1.57.0':
-    resolution: {integrity: sha512-TRPzAiSwlQHwJmb3BD1Yzn7dREjbkebnMJ9R/AAn8uB4dE4eJqo8vG4L5t5laARkaCvt7EwlUghwXLdJvXHoQQ==}
+  '@bufbuild/buf-win32-arm64@1.75.0':
+    resolution: {integrity: sha512-iRge6Ntta41gt0i7P8/EZFDWe3uLNnCEN86r1tKTWctumWxPET3UJcSzzYPyL4gxvzu1/1VTu+AB3+MYAqHy6Q==}
     engines: {node: '>=12'}
     cpu: [arm64]
     os: [win32]
 
-  '@bufbuild/buf-win32-x64@1.57.0':
-    resolution: {integrity: sha512-2yGkSo4ei/IIeh1wkzJo0JIoZhn0KdrhlTUlcJbqgvaJ5UXZsGQFE3pZ2zh2gmcx2qSRUthzrBs2c5PL8lvl7g==}
+  '@bufbuild/buf-win32-x64@1.75.0':
+    resolution: {integrity: sha512-/BgLt3VWndocuG4lbMdlBc1i41I+Bap4zm8R1Cnmov6DtoAQp4dy/leRrvT4aDArIUQ1o7W/Y92xTRITedU4ww==}
     engines: {node: '>=12'}
     cpu: [x64]
     os: [win32]
 
-  '@bufbuild/buf@1.57.0':
-    resolution: {integrity: sha512-dQgrxSh+3gilB3fJam+Dn39ve/3YU8IPt03WvKqQdldwC5GhGHRHgl7tivVLOP+RyBHs1jnDK7lknXFGLGV65g==}
+  '@bufbuild/buf@1.75.0':
+    resolution: {integrity: sha512-uMuBCULLDax9/3d5Lo9mea38vuPDv4mrRVE4XfSq3qPcD5UUxlg0RJ9hm84lYCzI3A3lIvLeChxrw9c1RUiD2w==}
     engines: {node: '>=12'}
     hasBin: true
 
-  '@bufbuild/protobuf@2.8.0':
-    resolution: {integrity: sha512-r1/0w5C9dkbcdjyxY8ZHsC5AOWg4Pnzhm2zu7LO4UHSounp2tMm6Y+oioV9zlGbLveE7YaWRDUk48WLxRDgoqg==}
+  '@bufbuild/protobuf@2.17.0':
+    resolution: {integrity: sha512-hcPkSz6D7MiTU/5VBBhK+kxaYDoOdQ6yJRFJ3kS8Nydp+VZXfg1vrpABKPNod8bXMufsVCmiUJVIKFzCzta4uw==}
 
-  '@bufbuild/protobuf@2.9.0':
-    resolution: {integrity: sha512-rnJenoStJ8nvmt9Gzye8nkYd6V22xUAnu4086ER7h1zJ508vStko4pMvDeQ446ilDTFpV5wnoc5YS7XvMwwMqA==}
-
-  '@bufbuild/protoc-gen-es@2.8.0':
-    resolution: {integrity: sha512-wyCXK7/FOgcHdqP6dWnGNZBJyXcYYUcvZBMBQVgeYjbF5u0OgVsInEYnr2Gu4E2HC7HoxcQZcVlVbwyxeiebDA==}
-    engines: {node: '>=20'}
+  '@bufbuild/protoc-gen-es@2.17.0':
+    resolution: {integrity: sha512-Uk8Hx145z76lDOEPhWChy53jtKITUnqG0vASuOiRybbZbBbx4oho9JDqt8QZsHemeTCNl6q4yy4Qpc2iV5outQ==}
+    engines: {node: '>=22'}
     hasBin: true
     peerDependencies:
-      '@bufbuild/protobuf': 2.8.0
+      '@bufbuild/protobuf': 2.17.0
     peerDependenciesMeta:
       '@bufbuild/protobuf':
         optional: true
 
-  '@bufbuild/protoplugin@2.8.0':
-    resolution: {integrity: sha512-kwZeZAz6jmDC571Wf/f5cDX02IjvPmtdspdxW/hbLS+bnZHkXMW4StaW+irGd4TkykvHD4fFgBnPG/O1x8OgXw==}
-
-  '@bufbuild/protoplugin@2.9.0':
-    resolution: {integrity: sha512-uoiwNVYoTq+AyqaV1L6pBazGx5fXOO89L0NSR9/7hEfo0Y8n9T1jsKGu4mkitLmP3z+8gJREaule1mMuKBPyYw==}
+  '@bufbuild/protoplugin@2.17.0':
+    resolution: {integrity: sha512-4ExU8AGygKkwIx3U8D5kyBOn9rcCM1qnj4wCP95RbP1CRe73QvVGHQ/lOp6IQiyvQMh9BGrYGht+ZDa8gwC2fg==}
 
   '@changesets/apply-release-plan@7.0.13':
     resolution: {integrity: sha512-BIW7bofD2yAWoE8H4V40FikC+1nNFEKBisMECccS16W1rt6qqhNTBDmIw5HaqmMgtLNz9e7oiALiEUuKrQ4oHg==}
@@ -459,15 +453,15 @@ packages:
   '@changesets/write@0.4.0':
     resolution: {integrity: sha512-CdTLvIOPiCNuH71pyDu3rA+Q0n65cmAbXnwWH84rKGiFumFzkmHNT8KHTMEchcxN+Kl8I54xGUhJ7l3E7X396Q==}
 
-  '@connectrpc/connect-node@2.1.0':
-    resolution: {integrity: sha512-6akCXZSX5uWHLR654ne9Tnq7AnPUkLS65NvgsI5885xBkcuVy2APBd8sA4sLqaplUt84cVEr6LhjEFNx6W1KtQ==}
-    engines: {node: '>=20'}
+  '@connectrpc/connect-node@2.3.0':
+    resolution: {integrity: sha512-kcQgV4GqFIESsl0MOHInC9/wNYU4aJDvG1OfGR5Lq6/l0gqycSGqEk+fixXGcUtPLc8vJBgS4V1nTmWlh4o9gw==}
+    engines: {node: '>=22'}
     peerDependencies:
       '@bufbuild/protobuf': ^2.7.0
-      '@connectrpc/connect': 2.1.0
+      '@connectrpc/connect': 2.3.0
 
-  '@connectrpc/connect@2.1.0':
-    resolution: {integrity: sha512-xhiwnYlJNHzmFsRw+iSPIwXR/xweTvTw8x5HiwWp10sbVtd4OpOXbRgE7V58xs1EC17fzusF1f5uOAy24OkBuA==}
+  '@connectrpc/connect@2.3.0':
+    resolution: {integrity: sha512-rjAn8L9KbAZrkwiB8m1qzDsLs74hkYmwwM2iSWuxTPVOTRm/EZw31smKbQqPU50AXqJC5eKKpEnA6Uf/swQOgQ==}
     peerDependencies:
       '@bufbuild/protobuf': ^2.7.0
 
@@ -1217,8 +1211,8 @@ packages:
     resolution: {integrity: sha512-T+S1KqRD4sg/bHfLwrpF/K3gQLBM1n7Rp7OjjikjTEssI2YJzQpi5WXoynOaQ93ERIuq3O8RBTOUYDKszUCEHw==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@typescript/vfs@1.6.1':
-    resolution: {integrity: sha512-JwoxboBh7Oz1v38tPbkrZ62ZXNHAk9bJ7c9x0eI5zBfBnBYGhURdbnh7Z4smN/MV48Y5OCcZb58n972UtbazsA==}
+  '@typescript/vfs@1.6.6':
+    resolution: {integrity: sha512-gXw0+tpchiQUjTcbnNIPnyLFIhbwJ7M1VaxLQ1vXhjQxtTBK3sdDLY1ih0jxCu1I5K3V0dDxq8CkVZtIMspC3A==}
     peerDependencies:
       typescript: '*'
 
@@ -2190,61 +2184,51 @@ snapshots:
       '@babel/helper-string-parser': 7.27.1
       '@babel/helper-validator-identifier': 7.27.1
 
-  '@bufbuild/buf-darwin-arm64@1.57.0':
+  '@bufbuild/buf-darwin-arm64@1.75.0':
     optional: true
 
-  '@bufbuild/buf-darwin-x64@1.57.0':
+  '@bufbuild/buf-darwin-x64@1.75.0':
     optional: true
 
-  '@bufbuild/buf-linux-aarch64@1.57.0':
+  '@bufbuild/buf-linux-aarch64@1.75.0':
     optional: true
 
-  '@bufbuild/buf-linux-armv7@1.57.0':
+  '@bufbuild/buf-linux-armv7@1.75.0':
     optional: true
 
-  '@bufbuild/buf-linux-x64@1.57.0':
+  '@bufbuild/buf-linux-x64@1.75.0':
     optional: true
 
-  '@bufbuild/buf-win32-arm64@1.57.0':
+  '@bufbuild/buf-win32-arm64@1.75.0':
     optional: true
 
-  '@bufbuild/buf-win32-x64@1.57.0':
+  '@bufbuild/buf-win32-x64@1.75.0':
     optional: true
 
-  '@bufbuild/buf@1.57.0':
+  '@bufbuild/buf@1.75.0':
     optionalDependencies:
-      '@bufbuild/buf-darwin-arm64': 1.57.0
-      '@bufbuild/buf-darwin-x64': 1.57.0
-      '@bufbuild/buf-linux-aarch64': 1.57.0
-      '@bufbuild/buf-linux-armv7': 1.57.0
-      '@bufbuild/buf-linux-x64': 1.57.0
-      '@bufbuild/buf-win32-arm64': 1.57.0
-      '@bufbuild/buf-win32-x64': 1.57.0
+      '@bufbuild/buf-darwin-arm64': 1.75.0
+      '@bufbuild/buf-darwin-x64': 1.75.0
+      '@bufbuild/buf-linux-aarch64': 1.75.0
+      '@bufbuild/buf-linux-armv7': 1.75.0
+      '@bufbuild/buf-linux-x64': 1.75.0
+      '@bufbuild/buf-win32-arm64': 1.75.0
+      '@bufbuild/buf-win32-x64': 1.75.0
 
-  '@bufbuild/protobuf@2.8.0': {}
+  '@bufbuild/protobuf@2.17.0': {}
 
-  '@bufbuild/protobuf@2.9.0': {}
-
-  '@bufbuild/protoc-gen-es@2.8.0(@bufbuild/protobuf@2.8.0)':
+  '@bufbuild/protoc-gen-es@2.17.0(@bufbuild/protobuf@2.17.0)':
     dependencies:
-      '@bufbuild/protoplugin': 2.8.0
+      '@bufbuild/protoplugin': 2.17.0
     optionalDependencies:
-      '@bufbuild/protobuf': 2.8.0
+      '@bufbuild/protobuf': 2.17.0
     transitivePeerDependencies:
       - supports-color
 
-  '@bufbuild/protoplugin@2.8.0':
+  '@bufbuild/protoplugin@2.17.0':
     dependencies:
-      '@bufbuild/protobuf': 2.8.0
-      '@typescript/vfs': 1.6.1(typescript@5.4.5)
-      typescript: 5.4.5
-    transitivePeerDependencies:
-      - supports-color
-
-  '@bufbuild/protoplugin@2.9.0':
-    dependencies:
-      '@bufbuild/protobuf': 2.9.0
-      '@typescript/vfs': 1.6.1(typescript@5.4.5)
+      '@bufbuild/protobuf': 2.17.0
+      '@typescript/vfs': 1.6.6(typescript@5.4.5)
       typescript: 5.4.5
     transitivePeerDependencies:
       - supports-color
@@ -2408,14 +2392,14 @@ snapshots:
       human-id: 4.1.1
       prettier: 2.8.8
 
-  '@connectrpc/connect-node@2.1.0(@bufbuild/protobuf@2.8.0)(@connectrpc/connect@2.1.0(@bufbuild/protobuf@2.8.0))':
+  '@connectrpc/connect-node@2.3.0(@bufbuild/protobuf@2.17.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.17.0))':
     dependencies:
-      '@bufbuild/protobuf': 2.8.0
-      '@connectrpc/connect': 2.1.0(@bufbuild/protobuf@2.8.0)
+      '@bufbuild/protobuf': 2.17.0
+      '@connectrpc/connect': 2.3.0(@bufbuild/protobuf@2.17.0)
 
-  '@connectrpc/connect@2.1.0(@bufbuild/protobuf@2.8.0)':
+  '@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.17.0)':
     dependencies:
-      '@bufbuild/protobuf': 2.8.0
+      '@bufbuild/protobuf': 2.17.0
 
   '@effect/cluster@0.56.1(@effect/platform@0.94.2(effect@3.19.15))(@effect/rpc@0.73.0(@effect/platform@0.94.2(effect@3.19.15))(effect@3.19.15))(@effect/sql@0.49.0(@effect/experimental@0.58.0(@effect/platform@0.94.2(effect@3.19.15))(effect@3.19.15))(@effect/platform@0.94.2(effect@3.19.15))(effect@3.19.15))(@effect/workflow@0.16.0(@effect/experimental@0.58.0(@effect/platform@0.94.2(effect@3.19.15))(effect@3.19.15))(@effect/platform@0.94.2(effect@3.19.15))(@effect/rpc@0.73.0(@effect/platform@0.94.2(effect@3.19.15))(effect@3.19.15))(effect@3.19.15))(effect@3.19.15)':
     dependencies:
@@ -3047,7 +3031,7 @@ snapshots:
       '@typescript-eslint/types': 8.43.0
       eslint-visitor-keys: 4.2.1
 
-  '@typescript/vfs@1.6.1(typescript@5.4.5)':
+  '@typescript/vfs@1.6.6(typescript@5.4.5)':
     dependencies:
       debug: 4.4.3
       typescript: 5.4.5
