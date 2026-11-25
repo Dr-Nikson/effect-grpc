@@ -30,6 +30,7 @@ jobs:
       pull-requests: write
     outputs:
       has_unpublished: ${{ steps.check-unpublished.outputs.has_unpublished }}
+      dist_tag_behind: ${{ steps.check-dist-tag.outputs.behind }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -113,12 +114,20 @@ jobs:
 
           echo "has_unpublished=$HAS_UNPUBLISHED" >> $GITHUB_OUTPUT
 
+      # A run whose dist-tag step failed leaves its version on npm, so this check lets a later run
+      # move the tag.
+      - name: Check the effect-v4 dist-tag
+        id: check-dist-tag
+        if: steps.changesets.outputs.pullRequestNumber == ''
+        run: node .github/scripts/move-effect-dist-tag.mjs --check >> "$GITHUB_OUTPUT"
+
       - name: Log status
         env:
           HAS_CHANGESETS: ${{ steps.changesets.outputs.hasChangesets }}
           OPEN_VERSION_PR: ${{ steps.open-version-pr.outputs.number }}
           VERSION_PR: ${{ steps.changesets.outputs.pullRequestNumber }}
           HAS_UNPUBLISHED: ${{ steps.check-unpublished.outputs.has_unpublished }}
+          DIST_TAG_BEHIND: ${{ steps.check-dist-tag.outputs.behind }}
         run: |
           if [[ -n "$VERSION_PR" && "$VERSION_PR" == "$OPEN_VERSION_PR" ]]; then
             echo "Updated version PR #$VERSION_PR"
@@ -131,6 +140,8 @@ jobs:
           fi
           if [[ "$HAS_UNPUBLISHED" == "true" ]]; then
             echo "Unpublished packages found: the publish job waits for npm-publish approval"
+          elif [[ "$DIST_TAG_BEHIND" == "true" ]]; then
+            echo "effect-v4 points to an older version: the publish job waits for npm-publish approval to move it"
           elif [[ -z "$VERSION_PR" ]]; then
             echo "Every package version is already on npm"
           fi
@@ -138,7 +149,9 @@ jobs:
   publish:
     name: Publish to npm
     needs: version-pr
-    if: needs.version-pr.outputs.has_unpublished == 'true'
+    if: >-
+      needs.version-pr.outputs.has_unpublished == 'true' ||
+      needs.version-pr.outputs.dist_tag_behind == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment:

@@ -1,19 +1,47 @@
 {
-  "accepted": [
+  "setupNodeNpm": "11.19.1",
+  "latest": "3.0.0-alpha.5",
+  "tagMoves": [
     {
-      "name": "an alpha prerelease",
-      "manifest": { "name": "@dr_nikson/effect-grpc", "version": "3.0.0-alpha.6" },
-      "args": ["dist-tag", "add", "@dr_nikson/effect-grpc@3.0.0-alpha.6", "effect-v4"]
+      "name": "the first release for Effect 4",
+      "release": "4.0.0-alpha.0",
+      "after": "4.0.0-alpha.0"
     },
     {
-      "name": "a stable release",
-      "manifest": { "name": "@dr_nikson/effect-grpc", "version": "3.1.0" },
-      "args": ["dist-tag", "add", "@dr_nikson/effect-grpc@3.1.0", "effect-v4"]
+      "name": "the next alpha",
+      "tagged": "4.0.0-alpha.0",
+      "release": "4.0.0-alpha.1",
+      "after": "4.0.0-alpha.1"
+    },
+    {
+      "name": "alpha.10, which sorts after alpha.9",
+      "tagged": "4.0.0-alpha.9",
+      "release": "4.0.0-alpha.10",
+      "after": "4.0.0-alpha.10"
+    },
+    {
+      "name": "a release after its release candidate",
+      "tagged": "4.0.0-rc.1",
+      "release": "4.0.0",
+      "after": "4.0.0"
     },
     {
       "name": "a prerelease with several identifiers",
-      "manifest": { "name": "@dr_nikson/effect-grpc", "version": "4.0.0-rc.1-x.2" },
-      "args": ["dist-tag", "add", "@dr_nikson/effect-grpc@4.0.0-rc.1-x.2", "effect-v4"]
+      "tagged": "4.0.0",
+      "release": "4.1.0-rc.1-x.2",
+      "after": "4.1.0-rc.1-x.2"
+    },
+    {
+      "name": "a patch of an older minor",
+      "tagged": "4.1.0",
+      "release": "4.0.9",
+      "after": "4.1.0"
+    },
+    {
+      "name": "a release below the prerelease that effect-v4 points at",
+      "tagged": "4.0.1-alpha.0",
+      "release": "4.0.0",
+      "after": "4.0.1-alpha.0"
     }
   ],
   "refused": [

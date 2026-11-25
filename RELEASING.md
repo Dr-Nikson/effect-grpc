@@ -105,14 +105,16 @@ The pending changesets include major ones, so the next release is a major, `4.0.
 
 ### The `effect-v4` dist-tag
 
-Every release for Effect 4 also moves the `effect-v4` dist-tag, so `npm install @dr_nikson/effect-grpc@effect-v4` installs the newest one. Prereleases count. After `changeset publish`, the `publish` job of `release.yml` runs `.github/scripts/move-effect-dist-tag.mjs`. The script runs `npm dist-tag add @dr_nikson/effect-grpc@<version> effect-v4` for the version in `packages/effect-grpc/package.json`, and it refuses a manifest that is not the library's. npm changes nothing when the tag already points to that version, so the step is safe to run again.
+Every release for Effect 4 also moves the `effect-v4` dist-tag, so `npm install @dr_nikson/effect-grpc@effect-v4` installs the newest one. Prereleases count. After `changeset publish`, the `publish` job of `release.yml` runs `.github/scripts/move-effect-dist-tag.mjs`. The script reads the version in `packages/effect-grpc/package.json`, and it refuses a manifest that is not the library's. It runs `npm dist-tag add @dr_nikson/effect-grpc@<version> effect-v4` only when `effect-v4` is not set or points to an older version, in semver order. So a rerun of a release, or of an older release, leaves the tag where it is.
 
-The step needs two settings that this repository cannot hold:
+The `version-pr` job runs the same script with `--check`. When `effect-v4` points to an older version than the manifest, the `publish` job runs even if every version is already on npm. It publishes nothing and moves the tag, after the `npm-publish` approval.
+
+The step needs two things:
 
 - **npm 11.21.0 or later on npm 11, or 12.2.0 or later on npm 12.** Earlier npm cannot change a dist-tag with OIDC. The job installs `npm@11.21.0` after the publish, so the publish keeps the npm that `actions/setup-node` provides.
-- **Allow npm dist-tag** in the trusted publisher configuration of the package on npmjs.com. It is off by default, and permission to publish does not grant it.
+- **Allow npm dist-tag** in the trusted publisher configuration of the package on npmjs.com. This setting lives on npmjs.com, not in this repository. It is off by default, and permission to publish does not grant it.
 
-Without that setting, the step fails after npm has published the version, and the run turns red. Move the tag by hand with an npm account that can publish the package:
+Without that setting, the step fails after npm has published the version, and the run turns red. Turn the setting on, then rerun the workflow with **Re-run all jobs** or **Re-run failed jobs** while CI keeps the build artifact, for 7 days. A later run of the workflow that creates or updates no version PR also moves the tag. To move it by hand, use an npm account that can publish the package:
 
 ```bash
 npm dist-tag add @dr_nikson/effect-grpc@<version> effect-v4

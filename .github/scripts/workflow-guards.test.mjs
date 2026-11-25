@@ -3,11 +3,8 @@ import { load } from "js-yaml";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { test } from "node:test";
-import semver from "semver";
 
 import { runs } from "./workflow-expressions.mjs";
-
-import { EFFECT_DIST_TAG } from "./move-effect-dist-tag.mjs";
 
 const readJson = (path) => JSON.parse(readFileSync(new URL(path, import.meta.url), "utf8"));
 const readWorkflow = (name) =>
@@ -57,17 +54,22 @@ test("release.yml checks npm whenever the action opened no version PR, also when
   );
 });
 
-test("release.yml publishes only after the version job found an unpublished version", () => {
+test("release.yml publishes only after the version job found an unpublished version or an effect-v4 tag behind the release", () => {
   const { needs, if: condition } = release.jobs.publish;
   assert.equal(needs, "version-pr");
-  for (const [hasUnpublished, expected] of [
-    ["true", true],
-    ["false", false],
-    ["", false],
+  for (const [hasUnpublished, distTagBehind, expected] of [
+    ["true", "false", true],
+    ["false", "true", true],
+    ["false", "false", false],
+    ["", "", false],
   ]) {
     assert.equal(
       runs(condition, {
-        needs: { "version-pr": { outputs: { has_unpublished: hasUnpublished } } },
+        needs: {
+          "version-pr": {
+            outputs: { has_unpublished: hasUnpublished, dist_tag_behind: distTagBehind },
+          },
+        },
       }),
       expected,
     );
@@ -81,32 +83,6 @@ test("release.yml drops empty changesets before the publish action reads them", 
   );
   const action = steps.findIndex((step) => step.uses?.startsWith("changesets/action@"));
   assert.ok(drop !== -1 && drop < action);
-});
-
-const NPM_INSTALL = "npm install --global npm@";
-
-test("release.yml moves the Effect dist-tag after the publish, with an npm that can do it with OIDC", () => {
-  const steps = release.jobs.publish.steps;
-  const publish = steps.findIndex((step) => step.uses?.startsWith("changesets/action@"));
-  const install = steps.findIndex((step) => step.run?.startsWith(NPM_INSTALL));
-  const move = steps.findIndex((step) =>
-    step.run?.includes(".github/scripts/move-effect-dist-tag.mjs"),
-  );
-  assert.ok(publish !== -1 && publish < install && install < move);
-  const npmVersion = steps[install].run.slice(NPM_INSTALL.length).trim();
-  assert.ok(semver.satisfies(npmVersion, ">=11.21.0 <12.0.0 || >=12.2.0"), npmVersion);
-});
-
-test("the dist-tag that a release moves names the Effect major of the library's peer range", () => {
-  const { peerDependencies } = readJson("../../packages/effect-grpc/package.json");
-  assert.equal(peerDependencies.effect, "catalog:peer");
-  const { catalogs } = load(
-    readFileSync(new URL("../../pnpm-workspace.yaml", import.meta.url), "utf8"),
-  );
-  const range = catalogs.peer.effect;
-  const major = /^effect-v(\d+)$/.exec(EFFECT_DIST_TAG)?.[1];
-  assert.ok(major !== undefined, EFFECT_DIST_TAG);
-  assert.ok(semver.subset(range, `^${major}.0.0`), `${EFFECT_DIST_TAG} and ${range}`);
 });
 
 const snapshotComment = (association) => ({
