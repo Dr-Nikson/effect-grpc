@@ -28,7 +28,9 @@ const HelloWorldAPIServiceLive: effectProto.HelloWorldAPIService = {
       `faceTheError called, now you(${request.name}) will face the consequences!`,
     );
 
-    return yield* GrpcException.create(Code.FailedPrecondition, "Face the consequences!");
+    return yield* GrpcException.create(Code.FailedPrecondition, "Face the consequences!").pipe(
+      GrpcException.withData({ name: request.name, consequences: ["no greeting"] }),
+    );
   }),
 
   faceTheDefect: Effect.fn("HelloWorldAPIServiceLive.faceTheDefect")(function* (

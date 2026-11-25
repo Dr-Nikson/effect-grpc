@@ -751,7 +751,15 @@ function generateEffectService(
         f.print("  ", method.localName, "(");
         f.print("    request: ", importMessageInitShape, "<typeof ", inputDesc, ">,");
         f.print("    meta: Meta");
-        f.print("  ): ", importEffect, ".Effect<", outputType, ">;");
+        f.print(
+          "  ): ",
+          importEffect,
+          ".Effect<",
+          outputType,
+          ", ",
+          importGrpcException,
+          ".GrpcException>;",
+        );
         return;
       default:
         f.print(

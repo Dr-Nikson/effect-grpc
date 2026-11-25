@@ -99,6 +99,7 @@ Run doctor first whenever anything looks off. If doctor reports FAIL on a stale 
 | Command | What it runs | Stable handle |
 | --- | --- | --- |
 | `.claude/skills/verify/scripts/control-example call grpc GetGreeting '{"name":"Ada"}'` | `buf curl --protocol grpc --http2-prior-knowledge --schema packages/example/proto` | exit 0, or 8 × the gRPC status code (72 means `failed_precondition`) |
+| `.claude/skills/verify/scripts/control-example call grpc-web GetGreeting '{"name":"Ada"}'` | `buf curl --protocol grpcweb --http2-prior-knowledge --schema packages/example/proto` | exit 0, or 8 × the gRPC status code, as for `grpc` |
 | `.claude/skills/verify/scripts/control-example call connect GetGreeting '{"name":"Ada"}'` | `curl --http2-prior-knowledge` with Connect JSON | `http_status=` 200, 400 or 404, plus the JSON body |
 | `.claude/skills/verify/scripts/control-example call http1 GetGreeting` | the same curl request without HTTP/2 | rejected: `Received HTTP/0.9 when not allowed` |
 | `.claude/skills/verify/scripts/control-example client` | the README client, `node dist/client.js` | stdout, stderr and exit code |
@@ -110,7 +111,7 @@ Run doctor first whenever anything looks off. If doctor reports FAIL on a stale 
 | `.claude/skills/verify/scripts/control-example connect-method` | an HTTP/2 CONNECT request, then a normal call over each protocol, through [hostile-requests.mjs](scripts/hostile-requests.mjs) | `verdict=PASS` when the reply is 405 with an ended stream and the next calls are served |
 | `.claude/skills/verify/scripts/control-example taken-port` | a second `node dist/server.js` on the instance's host and port, stopped by `timeout` after 10 s | `verdict=PASS` when it exits on its own with a failure code within 5 s, its output names `EADDRINUSE` and `AddressInUse`, and the instance still answers a `GetGreeting` call |
 
-`call` takes a protocol (`grpc`, `connect` or `http1`), a proto method name on the route `/com.example.v1.HelloWorldAPI/<Method>`, and an optional JSON request that defaults to `{"name":"verify"}`. `probe` takes `getGreeting` or `faceTheError` and an optional name.
+`call` takes a protocol (`grpc`, `grpc-web`, `connect` or `http1`), a proto method name on the route `/com.example.v1.HelloWorldAPI/<Method>`, and an optional JSON request that defaults to `{"name":"verify"}`. `probe` takes `getGreeting` or `faceTheError` and an optional name.
 
 The handler's log line is the server-side proof. For example, a `GetGreeting` call logs `getGreeting called, this is really cool!` with `method: 'com.example.v1.HelloWorldAPI/GetGreeting'`.
 

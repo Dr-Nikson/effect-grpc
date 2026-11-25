@@ -1,6 +1,8 @@
 // packages/e2e-tests/src/index.test.ts
-import { Cause, Effect, Exit, Layer, Option, References, Result } from "effect";
+import { Effect, Layer, Option, References } from "effect";
 
+import { Code } from "@connectrpc/connect";
+import { GrpcException } from "@dr_nikson/effect-grpc";
 import { describe, expect, it } from "@effect/vitest";
 
 import * as namingTestProto from "./generated/com/example/v1/naming_test_service_effect.js";
@@ -51,42 +53,30 @@ describe("E2E gRPC Client-Server Tests", () => {
       }).pipe(Effect.provide(serverServiceLayer)),
   );
 
-  it.live("should handle error from faceTheError RPC", () =>
-    Effect.gen(function* () {
-      // Create and start server
-      const server = yield* createServer();
-      const address = yield* server.listen({ host: "127.0.0.1", port: 0 });
-      yield* Effect.logInfo(`Test server listening on port ${address.port}`);
+  it.live(
+    "fails faceTheError with the handler's GrpcException as a typed failure, with no data",
+    () =>
+      Effect.gen(function* () {
+        const server = yield* createServer();
+        const address = yield* server.listen({ host: "127.0.0.1", port: 0 });
 
-      const result = yield* Effect.gen(function* () {
-        // Get client and make request that should fail
-        const client = yield* effectProto.HelloWorldAPIClientTag;
-        const result = yield* Effect.exit(client.faceTheError({ name: "TestUser" }, null));
+        const error = yield* Effect.gen(function* () {
+          const client = yield* effectProto.HelloWorldAPIClientTag;
+          return yield* Effect.flip(client.faceTheError({ name: "TestUser" }, null));
+        }).pipe(Effect.provide(clientLayer(address)), Effect.scoped);
 
-        return result;
-      }).pipe(Effect.provide(clientLayer(address)), Effect.scoped);
-
-      // Verify it failed with expected error
-      if (!Exit.isFailure(result)) {
-        return expect(false, "The result should be a failure").toBeTruthy();
-      }
-
-      const errorOption = Result.getSuccess(Cause.findDefect(result.cause));
-      if (Option.isNone(errorOption)) {
-        return expect(false, "The result should be Cause#Die").toBeTruthy();
-      }
-
-      const error = errorOption.value;
-      const errorString = String(error);
-      return expect(errorString).toContain("face the consequences");
-    }).pipe(
-      Effect.provide(
-        Layer.empty.pipe(
-          Layer.provideMerge(serverServiceLayer),
-          Layer.provideMerge(Layer.succeed(References.MinimumLogLevel, "Debug")),
+        expect(error).toBeInstanceOf(GrpcException.GrpcException);
+        expect(error.code).toBe(Code.FailedPrecondition);
+        expect(error.message).toBe("Sorry TestUser, you must face the consequences!");
+        expect(error.data).toEqual(Option.none());
+      }).pipe(
+        Effect.provide(
+          Layer.empty.pipe(
+            Layer.provideMerge(serverServiceLayer),
+            Layer.provideMerge(Layer.succeed(References.MinimumLogLevel, "Debug")),
+          ),
         ),
       ),
-    ),
   );
 });
 

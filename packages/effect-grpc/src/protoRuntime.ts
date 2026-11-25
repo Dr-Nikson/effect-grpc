@@ -13,6 +13,8 @@ import type { RequestMeta } from "./client.js";
  *
  * Maps gRPC service method shapes to their corresponding executor functions,
  * providing type safety for method calls. Currently, supports unary RPC calls.
+ * Each function fails with `GrpcException` for every failed call: a status the server sent,
+ * a transport failure such as a closed port, and a passed deadline.
  *
  * @example
  * ```typescript
@@ -43,7 +45,7 @@ export type ClientExecutor<RuntimeShape extends GenServiceMethods> = {
 type UnaryClientExecutorFn<I extends DescMessage, O extends DescMessage> = (
   request: MessageInitShape<I>,
   meta?: RequestMeta,
-) => Effect.Effect<MessageShape<O>>;
+) => Effect.Effect<MessageShape<O>, GrpcException.GrpcException>;
 
 /**
  * Executor interface that provides methods for executing gRPC service operations within Effect programs.

@@ -1,5 +1,6 @@
 // packages/effect-grpc/src/grpcException.ts
 import { Data } from "effect";
+import type { Option, Schema } from "effect";
 
 import type { Code, ConnectError } from "@connectrpc/connect";
 
@@ -9,8 +10,12 @@ import * as internal from "./grpcException.internal.js";
  * A high-level error type for gRPC operations in Effect programs.
  *
  * GrpcException is a tagged error that extends Data.TaggedError, designed as part of the DSL
- * for gRPC error handling. It focuses on application-level concerns (code, message, description, cause)
- * rather than low-level wire-format details.
+ * for gRPC error handling. It focuses on application-level concerns (code, message, data,
+ * description, cause) rather than low-level wire-format details.
+ *
+ * A handler fails with it, and the server sends its code, its message and its data. A generated
+ * client method fails with it for every failed call: a status the server sent, a transport failure
+ * such as a closed port, and a passed deadline.
  *
  * @example
  * ```typescript
@@ -27,20 +32,17 @@ import * as internal from "./grpcException.internal.js";
  * // Use in Effect programs with catchTag
  * const program = Effect.gen(function* () {
  *   yield* notFoundError; // The error is yieldable
- *   yield* Effect.fail(notFoundError);
  * }).pipe(
- *   Effect.catchTag(GrpcException, (error) => {
- *     console.log(`gRPC error [${Code[error.code]}]: ${error.message}`);
- *     return Effect.succeed("recovered");
- *   })
+ *   Effect.catchTag("@dr_nikson/effect-grpc/grpcException/GrpcException", (error) =>
+ *     Effect.succeed(`recovered from ${Code[error.code]}: ${error.message}`)
+ *   )
  * );
  *
+ * // Attach JSON data, which the client of the call receives
+ * const withData = GrpcException.withData(notFoundError, { userId: "u-1" });
+ *
  * // Convert from unknown error
- * try {
- *   // some operation
- * } catch (error) {
- *   yield* GrpcException.from(Code.Internal, error);
- * }
+ * const fromUnknown = (error: unknown) => GrpcException.from(Code.Internal, error);
  *
  * // Add context with description
  * const enriched = GrpcException.withDescription(
@@ -66,6 +68,14 @@ export class GrpcException extends Data.TaggedError(
   readonly message: string;
 
   /**
+   * JSON data that travels with the status, or `Option.none()` when there is none.
+   *
+   * A handler sets it with `withData`. The server sends it as one `google.protobuf.Value` in the
+   * status details, over gRPC, gRPC-web and Connect, and the client of the call reads it here.
+   */
+  readonly data: Option.Option<Schema.Json>;
+
+  /**
    * Optional description providing additional context about the error.
    * This can be used to add higher-level context without modifying the original message.
    *
@@ -81,6 +91,20 @@ export class GrpcException extends Data.TaggedError(
    */
   readonly cause?: unknown;
 }> {
+  /**
+   * Takes the fields of the exception. `data` is optional, and an exception made without it has
+   * `Option.none()`.
+   */
+  constructor(init: {
+    readonly code: Code;
+    readonly message: string;
+    readonly data?: Option.Option<Schema.Json>;
+    readonly description?: string;
+    readonly cause?: unknown;
+  }) {
+    super(internal.withDefaultData(init));
+  }
+
   /**
    * Returns a formatted error message including the status code, message, and description (if present).
    * This is called automatically when the error is converted to a string.
@@ -99,14 +123,14 @@ export class GrpcException extends Data.TaggedError(
    *   "User not found"
    * );
    * console.log(error1.toString());
-   * // Output: "[not_found] User not found"
+   * // Output: "[5] User not found"
    *
    * const error2 = GrpcException.withDescription(
    *   error1,
    *   "Database query failed"
    * );
    * console.log(error2.toString());
-   * // Output: "[not_found] User not found (Database query failed)"
+   * // Output: "[5] User not found (Database query failed)"
    * ```
    */
   toString(): string {
@@ -161,11 +185,12 @@ export const create: {
 
 /**
  * Converts any value into a GrpcException, following these rules:
- * - If the cause is a ConnectError, wraps it preserving code and message
+ * - If the cause is a ConnectError, wraps it preserving code and message, and reads the data from
+ *   the first `google.protobuf.Value` detail that decodes. With no such detail there is no data.
  * - For other Errors, creates a GrpcException with the error message and sets it as cause
  * - For other values, converts to string and uses as message
  *
- * @param code - The gRPC status code to use (required)
+ * @param fallbackCode - The gRPC status code for a cause that is not a ConnectError (required)
  * @param cause - The error/value to convert (native Error, ConnectError, or any value)
  * @returns A GrpcException instance
  *
@@ -193,7 +218,7 @@ export const create: {
  * ```
  */
 export const from: {
-  (code: Code, cause: unknown): GrpcException;
+  (fallbackCode: Code, cause: unknown): GrpcException;
 } = internal.from;
 
 /**
@@ -225,11 +250,50 @@ export const withDescription: {
 } = internal.withDescription;
 
 /**
+ * Sets or replaces the data of a GrpcException. The data is any JSON value, and it travels to the
+ * client of the call. Returns a new GrpcException with the same code, message, description and
+ * cause.
+ *
+ * The server sends the data as one `google.protobuf.Value` in the status details: in the
+ * `grpc-status-details-bin` trailer over gRPC and gRPC-web, and in the error body over Connect.
+ * Over gRPC the trailer counts against HTTP/2's header limits, so keep the data small. The data
+ * goes out as `JSON.stringify` writes it, so `NaN` becomes `null`. Data that `JSON.stringify`
+ * refuses, such as a cycle, is not sent, and neither is data nested about 100 or more levels
+ * deep. `from` reads data nested about 50 or more levels deep as `Option.none()`, even with a
+ * higher `binaryOptions.recursionLimit` in the client config.
+ *
+ * @param error - The GrpcException to modify
+ * @param data - The JSON data to send
+ * @returns A new GrpcException with the data
+ *
+ * @example
+ * ```typescript
+ * import { Effect } from "effect";
+ * import { GrpcException } from "@dr_nikson/effect-grpc";
+ * import { Code } from "@connectrpc/connect";
+ *
+ * const failure = Effect.fail(
+ *   GrpcException.create(Code.FailedPrecondition, "Account is locked").pipe(
+ *     GrpcException.withData({ accountId: "a-1", unlocksAt: "2026-12-01" })
+ *   )
+ * );
+ * ```
+ *
+ * @category Error Handling
+ * @since 4.0.0
+ */
+export const withData: {
+  (data: Schema.Json): (error: GrpcException) => GrpcException;
+  (error: GrpcException, data: Schema.Json): GrpcException;
+} = internal.withData;
+
+/**
  * Converts a GrpcException to a ConnectError for use with Connect-RPC.
  * This is useful when you need to throw or return errors in Connect-RPC handlers.
  *
- * Only the code, message, and cause are preserved. Description is not included
- * as ConnectError doesn't have a corresponding field.
+ * The code, the message and the cause are preserved, and the data becomes one
+ * `google.protobuf.Value` detail, except data that `withData` says is not sent. Description is not
+ * included as ConnectError doesn't have a corresponding field.
  *
  * @param error - The GrpcException to convert
  * @returns A ConnectError instance

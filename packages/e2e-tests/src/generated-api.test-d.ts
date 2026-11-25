@@ -1,9 +1,10 @@
 // packages/e2e-tests/src/generated-api.test-d.ts
 import { Effect } from "effect";
-import type { Context, Layer, Scope } from "effect";
+import type { Context, Layer, Option, Schema, Scope } from "effect";
 import { describe, expectTypeOf, test } from "vitest";
 
 import type { MessageInitShape } from "@bufbuild/protobuf";
+import type { Code } from "@connectrpc/connect";
 import { EffectGrpcClient, EffectGrpcServer } from "@dr_nikson/effect-grpc";
 import type { GrpcException } from "@dr_nikson/effect-grpc";
 
@@ -109,11 +110,11 @@ describe("the server API generated for HelloWorldAPI", () => {
 });
 
 describe("the client API generated for HelloWorldAPI", () => {
-  test("the client interface has one method per unary rpc, taking the request's init shape and Meta, with no error channel", () => {
+  test("the client interface has one method per unary rpc, taking the request's init shape and Meta, and failing with GrpcException", () => {
     type Call = (
       request: MessageInitShape<typeof GetGreetingRequestSchema>,
       meta: AuthMeta,
-    ) => Effect.Effect<GetGreetingResponse>;
+    ) => Effect.Effect<GetGreetingResponse, GrpcException.GrpcException>;
 
     expectTypeOf<keyof effectProto.HelloWorldAPIClient<AuthMeta>>().toEqualTypeOf<
       "getGreeting" | "faceTheError"
@@ -124,12 +125,26 @@ describe("the client API generated for HelloWorldAPI", () => {
     expectTypeOf<effectProto.HelloWorldAPIClient>();
 
     expectTypeOf(authClient.getGreeting({}, { token: "t0k" })).toEqualTypeOf<
-      Effect.Effect<GetGreetingResponse>
+      Effect.Effect<GetGreetingResponse, GrpcException.GrpcException>
     >();
     // @ts-expect-error a call takes its meta argument
     authClient.getGreeting({});
     // @ts-expect-error the meta has the client's Meta type
     authClient.faceTheError({}, { token: 42 });
+  });
+
+  test("a caller that catches GrpcException by its tag is left with no error to handle, and reads the code and the data", () => {
+    const handled = authClient.faceTheError({ name: "Ada" }, { token: "t0k" }).pipe(
+      Effect.map((response) => response.greeting),
+      Effect.catchTag("@dr_nikson/effect-grpc/grpcException/GrpcException", (error) => {
+        expectTypeOf(error.code).toEqualTypeOf<Code>();
+        expectTypeOf(error.message).toEqualTypeOf<string>();
+        expectTypeOf(error.data).toEqualTypeOf<Option.Option<Schema.Json>>();
+        return Effect.succeed(error.message);
+      }),
+    );
+
+    expectTypeOf(handled).toEqualTypeOf<Effect.Effect<string>>();
   });
 
   test("the client tags hold a client of their Meta", () => {
@@ -164,11 +179,11 @@ describe("the client API generated for HelloWorldAPI", () => {
     >();
   });
 
-  test("makeExecutor, called the way the generated client layer calls it, gives each method an optional RequestMeta and no error channel", () => {
+  test("makeExecutor, called the way the generated client layer calls it, gives each method an optional RequestMeta and GrpcException as its failure", () => {
     type ExecutorCall = (
       request: MessageInitShape<typeof GetGreetingRequestSchema>,
       meta?: EffectGrpcClient.RequestMeta,
-    ) => Effect.Effect<GetGreetingResponse>;
+    ) => Effect.Effect<GetGreetingResponse, GrpcException.GrpcException>;
 
     const program = Effect.gen(function* () {
       const config = yield* effectProto.HelloWorldAPIConfigTag;
