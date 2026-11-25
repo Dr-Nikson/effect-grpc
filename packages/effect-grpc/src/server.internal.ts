@@ -46,7 +46,7 @@ export function makeGrpcService<
 
 const grpcDefaultMaxReceiveMessageBytes = 4 * 1024 * 1024;
 
-/** Connect accepts no larger value, because Node's zlib and protobuf-es stop at 4 GiB. */
+/** Connect accepts no larger value. */
 const largestReadMaxBytes = 0xffffffff;
 
 type RequestListener = (req: http2.Http2ServerRequest, res: http2.Http2ServerResponse) => void;
@@ -108,8 +108,7 @@ const closeUnreadRequest = (stream: http2.ServerHttp2Stream): void => {
   if (localClose === 1) {
     stream.close(http2.constants.NGHTTP2_NO_ERROR);
   } else if (state !== http2.constants.NGHTTP2_STREAM_STATE_IDLE) {
-    // A socket write still holds the END_STREAM. Node reports a stream that nghttp2 has already
-    // freed, because both sides ended, as idle.
+    // Node reports a stream that nghttp2 has already freed, because both sides ended, as idle.
     setTimeout(closeUnreadRequest, 100, stream);
     return;
   }

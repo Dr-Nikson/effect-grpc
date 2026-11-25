@@ -66,7 +66,6 @@ export const connect = (url: string): Effect.Effect<http2.ClientHttp2Session, ne
 
 const largestWindow = 2 ** 31 - 1;
 
-/** The server can send up to 2 GiB on this session before the client reads any of it. */
 export const connectWithLargestWindows = (
   url: string,
 ): Effect.Effect<http2.ClientHttp2Session, never, Scope.Scope> =>
@@ -163,10 +162,6 @@ export const getGreeting = (
 ): Effect.Effect<RawReply> =>
   exchange(session, protocol, authority, name, contentType, authorityHeader, "answer");
 
-/**
- * Unlike getGreeting, waits for the server to close the stream and never cancels it after the
- * answer, as curl and buf curl wait while their upload is blocked.
- */
 export const getGreetingUntilClosed = (
   session: http2.ClientHttp2Session,
   protocol: Protocol,

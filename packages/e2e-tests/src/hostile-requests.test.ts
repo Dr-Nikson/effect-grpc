@@ -119,8 +119,6 @@ const sessionTo = (baseUrl: string) =>
     (sessionManager) => Effect.sync(() => sessionManager.abort()),
   );
 
-// Stands in for a throw that no known request causes: reading this authority from a request throws
-// inside the server's request listener.
 const throwingAuthority = (thrown: string) =>
   Effect.acquireRelease(
     Effect.fromNullable(
@@ -146,8 +144,6 @@ const throwingAuthority = (thrown: string) =>
       ),
   );
 
-// A TCP proxy that can stop reading what the server sends, so the server's socket writes stay in
-// progress.
 const stallingProxy = (target: number) =>
   Effect.acquireRelease(
     Effect.async<{
