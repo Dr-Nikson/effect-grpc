@@ -9,6 +9,7 @@ import { REFUSAL_MESSAGES, decideSnapshot, runSnapshotValidation } from "./snaps
 const fixture = (name) =>
   JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8"));
 const tags = fixture("snapshot-tags.json");
+const refusedTags = [...tags.invalid, ...tags.channels];
 const scenarios = fixture("snapshot-requests.json");
 
 const REPOSITORY = "Dr-Nikson/effect-grpc";
@@ -71,7 +72,7 @@ for (const tag of tags.valid) {
   });
 }
 
-for (const tag of tags.invalid) {
+for (const tag of refusedTags) {
   test(`tag ${JSON.stringify(tag)} fails validation before any GitHub lookup`, async () => {
     const { evidence, lookups } = recordingEvidence(GREEN);
     assert.deepEqual(await decideSnapshot(dispatch(tag), evidence), {
@@ -80,6 +81,12 @@ for (const tag of tags.invalid) {
       reply: false,
     });
     assert.deepEqual(lookups, []);
+  });
+}
+
+for (const tag of tags.channels) {
+  test(`the tag refusal tells the requester that ${tag} is a release channel`, () => {
+    assert.ok(REFUSAL_MESSAGES.tag.includes(`\`${tag}\``));
   });
 }
 
@@ -118,7 +125,7 @@ for (const tag of tags.valid) {
   });
 }
 
-for (const tag of tags.invalid) {
+for (const tag of refusedTags) {
   test(`/snapshot followed by ${JSON.stringify(tag)} never asks for that tag`, async () => {
     const { evidence } = recordingEvidence(GREEN);
     const decision = await decideSnapshot(comment(`/snapshot ${tag}`), evidence);
