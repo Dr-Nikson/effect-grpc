@@ -19,7 +19,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import semver from "semver";
 
-import { evaluate, runs } from "./workflow-expressions.mjs";
+import { evaluate, expand, runs } from "./workflow-expressions.mjs";
 
 const { tag, sha, accepted, refused } = JSON.parse(
   readFileSync(new URL("./fixtures/snapshot-versions.json", import.meta.url), "utf8"),
@@ -59,6 +59,8 @@ const COMMENT = {
   },
 };
 
+const expandEnv = (env = {}, contexts) =>
+  Object.fromEntries(Object.entries(env).map(([name, value]) => [name, expand(value, contexts)]));
 const readLines = (path) =>
   existsSync(path) ? readFileSync(path, "utf8").split("\n").filter(Boolean) : [];
 const splitAtEquals = (line) => [
@@ -74,7 +76,9 @@ function shellCommand(step, script) {
 
 /**
  * Runs steps of the snapshot job in order, as the runner does. A step runs while its `if:` holds,
- * and a failed step fails the job unless its `continue-on-error` holds.
+ * and a failed step fails the job unless its `continue-on-error` holds. Each step gets the trigger
+ * as the runner gives it: the event in `GITHUB_EVENT_NAME` and `GITHUB_EVENT_PATH`, the validate
+ * job's outputs, and the `env:` of the workflow, the job and the step.
  */
 function runSteps(
   steps,
@@ -88,6 +92,8 @@ function runSteps(
     mkdirSync(join(dir, "packages/effect-grpc"), { recursive: true });
     const manifest = join(dir, "packages/effect-grpc/package.json");
     writeFileSync(manifest, JSON.stringify({ version: before }));
+    const eventFile = join(dir, "event.json");
+    writeFileSync(eventFile, JSON.stringify(github.event));
     if (preMode) {
       mkdirSync(join(dir, ".changeset"));
       writeFileSync(join(dir, ".changeset/pre.json"), JSON.stringify({ mode: "pre" }));
@@ -95,8 +101,16 @@ function runSteps(
     const contexts = {
       github,
       inputs: github.event.inputs ?? {},
-      needs: { validate: { outputs: { kind: "allowed", tag, sha } } },
-      env: { SNAPSHOT_TAG: tag, SNAPSHOT_SHA: sha },
+      needs: {
+        validate: {
+          outputs: {
+            kind: "allowed",
+            reply: String(github.event_name === "issue_comment"),
+            tag,
+            sha,
+          },
+        },
+      },
       steps: Object.fromEntries(
         job.steps
           .slice(0, job.steps.indexOf(steps[0]))
@@ -107,6 +121,7 @@ function runSteps(
         ["job", "runner", "strategy", "matrix", "vars", "secrets"].map((name) => [name, {}]),
       ),
     };
+    contexts.env = expandEnv({ ...workflow.env, ...job.env }, contexts);
     let status = "success";
     let last = { status: undefined, stdout: "", stderr: "" };
     for (const step of steps) {
@@ -117,12 +132,14 @@ function runSteps(
         cwd: dir,
         encoding: "utf8",
         env: {
+          ...contexts.env,
+          ...expandEnv(step.env, contexts),
           PATH: `${join(dir, "bin")}${delimiter}${process.env.PATH}`,
-          SNAPSHOT_TAG: tag,
-          SNAPSHOT_SHA: sha,
+          GITHUB_EVENT_NAME: github.event_name,
+          GITHUB_EVENT_PATH: eventFile,
           GITHUB_OUTPUT: join(dir, "github-output"),
           PUBLISHED: join(dir, "published"),
-          CHANGESETS_WRITES: changesetsWrites,
+          CHANGESETS_VERSION_TEMPLATE: changesetsWrites.replaceAll(tag, "{tag}"),
         },
       });
       const failed = last.status !== 0 && !evaluate(step["continue-on-error"] ?? false, contexts);
