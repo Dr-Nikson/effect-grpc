@@ -4,8 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { test } from "node:test";
 
-import { Evaluator, Lexer, Parser, data } from "@actions/expressions";
-import { truthy } from "@actions/expressions/result";
+import { runs } from "./workflow-expressions.mjs";
 
 const readJson = (path) => JSON.parse(readFileSync(new URL(path, import.meta.url), "utf8"));
 const readWorkflow = (name) =>
@@ -18,37 +17,6 @@ const release = readWorkflow("release.yml");
 const snapshot = readWorkflow("snapshot-release.yml");
 const events = readJson("./fixtures/workflow-events.json");
 const associations = readJson("./fixtures/comment-associations.json");
-
-/**
- * The evaluator knows no job status, so always() is true and success() and failure()
- * follow `status`.
- *
- * @param {string | undefined} condition
- * @param {Record<string, unknown>} contexts
- * @param {"success" | "failure"} [status]
- */
-function runs(condition, contexts, status = "success") {
-  if (condition === undefined) return true;
-  const expression = /^\s*\$\{\{([\s\S]*)\}\}\s*$/.exec(condition)?.[1] ?? condition;
-  const functions = Object.entries({
-    always: true,
-    success: status === "success",
-    failure: status === "failure",
-    cancelled: false,
-  }).map(([name, value]) => ({
-    name,
-    minArgs: 0,
-    maxArgs: 0,
-    call: () => new data.BooleanData(value),
-  }));
-  const ast = new Parser(
-    new Lexer(expression).lex().tokens,
-    Object.keys(contexts),
-    functions,
-  ).parse();
-  const context = JSON.parse(JSON.stringify(contexts), data.reviver);
-  return truthy(new Evaluator(ast, context, new Map(functions.map((f) => [f.name, f]))).evaluate());
-}
 
 for (const { name, workflow_run, runs: expected } of events.releaseRuns) {
   test(`release.yml ${expected ? "starts" : "skips"} the version job for ${name}`, () => {
