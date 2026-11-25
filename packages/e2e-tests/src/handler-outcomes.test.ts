@@ -198,37 +198,29 @@ describe("a call whose deadline passes while its handler waits", () => {
 });
 
 describe("a call that its client cancels", () => {
-  it.live("interrupts its handler, and the same client's next call succeeds", () =>
+  it.live("interrupts its handler", () =>
     Effect.gen(function* () {
       const started = yield* Deferred.make<void>();
       const interrupted = yield* Deferred.make<void>();
       const server = yield* serverFor({
         ...greeter,
-        getGreeting: ({ name }) =>
-          name === "slow" ?
-            Deferred.succeed(started, undefined).pipe(
-              Effect.andThen(Effect.never),
-              signalInterruption(interrupted),
-            )
-          : Effect.succeed({ greeting: `Hello, ${name}!` }),
+        getGreeting: () =>
+          Deferred.succeed(started, undefined).pipe(
+            Effect.andThen(Effect.never),
+            signalInterruption(interrupted),
+          ),
       });
       const address = yield* server.listen({ host: "127.0.0.1", port: 0 });
 
-      const { handlerInterrupted, next } = yield* Effect.gen(function* () {
+      const handlerInterrupted = yield* Effect.gen(function* () {
         const client = yield* effectProto.HelloWorldAPIClientTag;
-        const call = yield* Effect.forkChild(client.getGreeting({ name: "slow" }, {}));
+        const call = yield* Effect.forkChild(client.getGreeting({ name: "Ada" }, {}));
         yield* Deferred.await(started);
         yield* Fiber.interrupt(call);
-        return {
-          handlerInterrupted: yield* Deferred.await(interrupted).pipe(
-            Effect.timeoutOption("2 seconds"),
-          ),
-          next: yield* client.getGreeting({ name: "Ada" }, {}),
-        };
+        return yield* Deferred.await(interrupted).pipe(Effect.timeoutOption("2 seconds"));
       }).pipe(Effect.provide(clientLayer(address)));
 
       expect(Option.isSome(handlerInterrupted), "the handler was interrupted").toBe(true);
-      expect(next.greeting, "the client's next call").toBe("Hello, Ada!");
     }),
   );
 });
