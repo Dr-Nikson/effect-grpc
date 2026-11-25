@@ -106,7 +106,7 @@ IMPORTANT: refer to the best practices and coding standards described in @agents
 
 ### Testing
 - Use Vitest as the test runner (`vitest.config.ts`)
-- Write each test to the rules under Tests in `agents/CODING_STANDARDS.md`: it checks behavior that a user observes, through code that `protoc-gen-effect` generates.
+- Write each test to the rules under Tests in `agents/CODING_STANDARDS.md`: it checks behavior that a user observes, and a test of the server, the client or the code generator runs through code that `protoc-gen-effect` generates.
 - Write a type test in a `*.test-d.ts` file as a program that a user writes: the code that compiles, and with `@ts-expect-error`, the code that must not compile.
 - A test of a module that needs no generated code, such as `grpcException`, lives next to that module in `packages/effect-grpc/src`. A test of the server, the client or the code generator lives in `packages/e2e-tests/src`. That package generates its code from `packages/e2e-tests/proto` with `protoc-gen-effect` and imports the library by its package name, as a user does.
 - Use Vitest's typecheck-only mode for type testing:
