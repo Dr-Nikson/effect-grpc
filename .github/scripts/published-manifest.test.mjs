@@ -48,10 +48,10 @@ test("npm installs the library next to effect and @effect/opentelemetry from 4.0
 
 test("the dist-tag that a release moves names the Effect major of the published effect peer", (t) => {
   const { peerDependencies } = packedManifest(t);
-  const major = /^effect-v(\d+)$/.exec(EFFECT_DIST_TAG)?.[1];
-  assert.ok(major !== undefined, EFFECT_DIST_TAG);
+  const major = Number(/^effect-v(\d+)$/.exec(EFFECT_DIST_TAG)?.[1]);
+  assert.ok(Number.isInteger(major), EFFECT_DIST_TAG);
   assert.ok(
-    semver.subset(peerDependencies.effect, `^${major}.0.0`),
+    semver.subset(peerDependencies.effect, `>=${major}.0.0 <${major + 1}.0.0`),
     `${EFFECT_DIST_TAG} and ${peerDependencies.effect}`,
   );
 });
