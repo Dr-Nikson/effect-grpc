@@ -1,0 +1,43 @@
+{
+  "tag": "pr-62",
+  "sha": "1092b7f3ad43a293c48e61af1334444674f5148e",
+  "accepted": [
+    "3.1.0-0.pr-62.1092b7f3ad43a293c48e61af1334444674f5148e",
+    "3.0.0-0.pr-62.1092b7f3ad43a293c48e61af1334444674f5148e",
+    "4.0.0-0.pr-62.1092b7f3ad43a293c48e61af1334444674f5148e"
+  ],
+  "refused": [
+    {
+      "name": "the old form, which a branch without the new config produces",
+      "version": "0.0.0-pr-62-1092b7f3ad43a293c48e61af1334444674f5148e"
+    },
+    {
+      "name": "the calculated version with the old template",
+      "version": "3.0.0-pr-62-1092b7f3ad43a293c48e61af1334444674f5148e"
+    },
+    {
+      "name": "a snapshot without the 0 identifier, which would sort above the alphas",
+      "version": "3.0.0-pr-62.1092b7f3ad43a293c48e61af1334444674f5148e"
+    },
+    {
+      "name": "the package version when no changeset applied",
+      "version": "3.0.0-alpha.5"
+    },
+    {
+      "name": "a snapshot of another tag",
+      "version": "3.0.0-0.mvp.1092b7f3ad43a293c48e61af1334444674f5148e"
+    },
+    {
+      "name": "a snapshot of another commit",
+      "version": "3.0.0-0.pr-62.2222222222222222222222222222222222222222"
+    },
+    {
+      "name": "a snapshot whose tag only ends like the requested one",
+      "version": "3.0.0-0.xpr-62.1092b7f3ad43a293c48e61af1334444674f5148e"
+    },
+    {
+      "name": "a snapshot with text after the commit",
+      "version": "3.0.0-0.pr-62.1092b7f3ad43a293c48e61af1334444674f5148e.1"
+    }
+  ]
+}

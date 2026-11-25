@@ -86,6 +86,19 @@
     "expect": { "kind": "refused", "reason": "tag", "reply": true, "lookups": 0 }
   },
   {
+    "name": "a collaborator's /snapshot effect-v4 is refused with a reply, because that tag is a release channel",
+    "event": {
+      "eventName": "issue_comment",
+      "sha": "448c926bb07e5bac8f41cef3f0d3d5490d663770",
+      "payload": {
+        "action": "created",
+        "comment": { "body": "/snapshot effect-v4", "author_association": "COLLABORATOR" },
+        "issue": { "number": 83, "pull_request": { "url": "https://api.github.com/repos/Dr-Nikson/effect-grpc/pulls/83" } }
+      }
+    },
+    "expect": { "kind": "refused", "reason": "tag", "reply": true, "lookups": 0 }
+  },
+  {
     "name": "more than one word after /snapshot is refused with a reply",
     "event": {
       "eventName": "issue_comment",
