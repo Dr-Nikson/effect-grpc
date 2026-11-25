@@ -38,12 +38,9 @@ describe("README check", () => {
     expect(status).toBe(1);
   });
 
-  it("generates one compile error for a service that has streaming rpcs (#76)", () => {
+  it("compiles the code generated for a service that has streaming rpcs (#100)", () => {
     const { status, stdout } = check("streaming-rpc.md");
-    expect(stdout).toMatch(
-      /error TS2739: src\/generated\/example\/v1\/chat_effect\.ts:\d+:\d+ .* is missing the following properties .*: watch, upload, talk/,
-    );
-    expect(stdout).toContain("streaming-rpc.md: 1 problem(s)");
-    expect(status).toBe(1);
+    expect(stdout).toMatch(/streaming-rpc\.md: [1-9]\d* TypeScript blocks compile/);
+    expect(status).toBe(0);
   });
 });

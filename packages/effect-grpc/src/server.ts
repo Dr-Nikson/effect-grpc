@@ -287,6 +287,9 @@ export type GrpcServiceTypeId = typeof internal.grpcServiceTypeId;
  * Represents a gRPC service with a specific tag, Protocol Buffer definition, and context type.
  * This interface binds together the service definition and its implementation.
  *
+ * Its implementation is a {@link GrpcServiceImplementation}: a handler for each unary method, and
+ * the server answers UNIMPLEMENTED for any other method that has none.
+ *
  * Note: GrpcService instances are typically created by the protoc-gen-effect code generator
  * when processing .proto files, rather than being manually constructed.
  *
@@ -324,8 +327,39 @@ export interface GrpcService<Tag, Proto extends GenService<GenServiceMethods>, C
 
   readonly definition: Proto;
 
-  implementation(executor: ServerExecutor<Ctx>): ServiceImpl<Proto>;
+  implementation(executor: ServerExecutor<Ctx>): GrpcServiceImplementation<Proto>;
 }
+
+type UnaryMethodKeys<Proto extends GenService<GenServiceMethods>> = {
+  [K in keyof Proto["method"]]: Proto["method"][K]["methodKind"] extends "unary" ? K : never;
+}[keyof Proto["method"]];
+
+/**
+ * The handlers of a {@link GrpcService}, typed like Connect's `ServiceImpl` for `Proto`. A unary
+ * method needs a handler. Any other method may be left out, and the server answers a call to it with
+ * UNIMPLEMENTED on gRPC, gRPC-web and Connect.
+ *
+ * @template Proto - The Protocol Buffer service definition generated from .proto files
+ *
+ * @example
+ * ```typescript
+ * import { Effect } from "effect"
+ * import { EffectGrpcServer } from "@dr_nikson/effect-grpc"
+ * import { ChatService } from "./gen/chat_pb.js" // Send is unary and Watch is server-streaming
+ *
+ * const implementation = (
+ *   exec: EffectGrpcServer.ServerExecutor<unknown>,
+ * ): EffectGrpcServer.GrpcServiceImplementation<typeof ChatService> => ({
+ *   send: (req, ctx) =>
+ *     exec.unary("example.v1.ChatService/Send", req, ctx, (req) => Effect.succeed({ id: req.text })),
+ * })
+ * ```
+ */
+export type GrpcServiceImplementation<Proto extends GenService<GenServiceMethods>> = Pick<
+  ServiceImpl<Proto>,
+  UnaryMethodKeys<Proto>
+> &
+  Partial<ServiceImpl<Proto>>;
 
 /**
  * Creates a new GrpcService instance with the specified tag and Protocol Buffer definition.
@@ -360,6 +394,6 @@ export const GrpcService: {
     tag: Tag,
     definition: Proto,
   ): <Ctx>(
-    implementation: (exec: ServerExecutor<Ctx>) => ServiceImpl<Proto>,
+    implementation: (exec: ServerExecutor<Ctx>) => GrpcServiceImplementation<Proto>,
   ) => GrpcService<Tag, Proto, Ctx>;
 } = internal.makeGrpcService;
