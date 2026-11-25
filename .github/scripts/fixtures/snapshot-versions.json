@@ -36,6 +36,10 @@
       "version": "3.0.0-0.xpr-62.1092b7f3ad43a293c48e61af1334444674f5148e"
     },
     {
+      "name": "a snapshot whose first identifier only ends in 0",
+      "version": "3.0.0-alpha.10.pr-62.1092b7f3ad43a293c48e61af1334444674f5148e"
+    },
+    {
       "name": "a snapshot with text after the commit",
       "version": "3.0.0-0.pr-62.1092b7f3ad43a293c48e61af1334444674f5148e.1"
     }
