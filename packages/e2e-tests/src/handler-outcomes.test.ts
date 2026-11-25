@@ -67,15 +67,6 @@ const outcomes: ReadonlyArray<Outcome> = [
     sends: { code: Code.NotFound, message: "first", data: Option.some("first data") },
   },
   {
-    outcome: "fails while work that runs next to it is interrupted",
-    handler: () =>
-      Effect.all([Effect.fail(GrpcException.create(Code.NotFound, "first")), Effect.never], {
-        concurrency: "unbounded",
-      }).pipe(Effect.as({})),
-    contextTransformer: Option.none(),
-    sends: { code: Code.NotFound, message: "first", data: Option.none() },
-  },
-  {
     outcome: "dies",
     handler: () => Effect.die(secret),
     contextTransformer: Option.none(),

@@ -9,7 +9,6 @@ import { EffectGrpcServer, GrpcException } from "@dr_nikson/effect-grpc";
 import { describe, expect, it } from "@effect/vitest";
 
 import * as raw from "./raw-unary.js";
-import type { GetGreetingRequest } from "./generated/com/example/v1/hello_world_api_pb.js";
 import { clientLayer, effectProto, greet, serverFor } from "./test-fixtures.js";
 
 const greeter: effectProto.HelloWorldAPIService = {
@@ -19,11 +18,6 @@ const greeter: effectProto.HelloWorldAPIService = {
 
 const signalThenWait = (started: Deferred.Deferred<void>, release: Deferred.Deferred<void>) =>
   Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(release)));
-
-const heldUntil =
-  (started: Deferred.Deferred<void>, release: Deferred.Deferred<void>) =>
-  ({ name }: GetGreetingRequest) =>
-    signalThenWait(started, release).pipe(Effect.as({ greeting: `Hello, ${name}!` }));
 
 const textOf = (message: unknown): string =>
   (Array.isArray(message) ? message : [message]).map(String).join(" ");
@@ -235,111 +229,90 @@ describe("GrpcServer at shutdown", () => {
   );
 
   it.live(
-    "tells a client whose call runs to send no new calls, lets the call finish, and stops when it ends",
+    "under Layer.launch, tells a busy client to send no new calls, finishes its call, then stops before it releases the layer that its handler uses",
     () =>
       Effect.gen(function* () {
+        const events: Array<string> = [];
         const started = yield* Deferred.make<void>();
         const release = yield* Deferred.make<void>();
         const goaway = yield* Deferred.make<void>();
-        const serverScope = yield* childScope;
+        const bound = yield* Deferred.make<EffectGrpcServer.GrpcServerAddress>();
         yield* Effect.addFinalizer(() => Deferred.succeed(release, undefined));
-        const server = yield* serverFor({ ...greeter, getGreeting: heldUntil(started, release) });
-        const address = yield* server
-          .listen({ host: "127.0.0.1", port: 0 })
-          .pipe(Scope.provide(serverScope));
+
+        const greetingsLayer = Layer.effect(
+          Greetings,
+          Effect.acquireRelease(
+            Effect.sync(() => ({ open: true })),
+            (store) =>
+              Effect.sync(() => {
+                store.open = false;
+                events.push("the greetings store closed");
+              }),
+          ).pipe(
+            Effect.map((store) =>
+              Greetings.of({
+                greetingFor: (name) =>
+                  Effect.sync(() => (store.open ? `Hello, ${name}!` : "the store is closed")),
+              }),
+            ),
+          ),
+        );
+        const serviceLayer = Layer.unwrap(
+          Effect.gen(function* () {
+            const greetings = yield* Greetings;
+            return effectProto.helloWorldAPIServiceLiveLayer(effectProto.HelloWorldAPIServiceTag, {
+              ...greeter,
+              getGreeting: ({ name }) =>
+                signalThenWait(started, release).pipe(
+                  Effect.andThen(greetings.greetingFor(name)),
+                  Effect.tap(() => Effect.sync(() => events.push("the call ended"))),
+                  Effect.map((greeting) => ({ greeting })),
+                ),
+            });
+          }),
+        );
+        const serverLayer = Layer.effectDiscard(
+          Effect.gen(function* () {
+            const service = yield* effectProto.HelloWorldAPIServiceTag;
+            const server = EffectGrpcServer.GrpcServerBuilder().withService(service).build();
+            yield* Deferred.succeed(bound, yield* server.listen({ host: "127.0.0.1", port: 0 }));
+          }),
+        );
+        const stopLine = Logger.layer([
+          Logger.make(({ message }) => {
+            if (textOf(message) === "gRPC server stopped") events.push("gRPC server stopped");
+          }),
+        ]);
+
+        const launched = yield* Effect.forkChild(
+          Layer.launch(
+            serverLayer.pipe(Layer.provide(serviceLayer.pipe(Layer.provide(greetingsLayer)))),
+          ).pipe(Effect.provide(stopLine)),
+        );
+        const address = yield* Deferred.await(bound);
         const session = yield* raw.connect(address.url);
         session.once("goaway", () => Deferred.doneUnsafe(goaway, Effect.void));
-
         const call = yield* Effect.forkChild(
           raw.getGreeting(session, "grpc", new URL(address.url).host, "Ada"),
         );
         yield* Deferred.await(started);
-        const stopping = yield* Effect.forkDetach(Scope.close(serverScope, Exit.void));
+
+        const stopping = yield* Effect.forkChild(Fiber.interrupt(launched));
         const toldToStop = yield* Deferred.await(goaway).pipe(Effect.timeoutOption("1 second"));
         const nextCall = yield* Effect.flip(greet(address, "Bob"));
         yield* Deferred.succeed(release, undefined);
         const reply = yield* Fiber.join(call);
-        const stopped = yield* Fiber.await(stopping).pipe(Effect.timeoutOption("1 second"));
+        const stopped = yield* Fiber.join(stopping).pipe(Effect.timeoutOption("1 second"));
 
         expect(Option.isSome(toldToStop), "the client got GOAWAY while its call ran").toBe(true);
         expect(nextCall.code, "a call after the shutdown began").toBe(Code.Unavailable);
-        expect(reply.greeting, "the call in flight").toBe("Hello, Ada!");
-        expect(Option.isSome(stopped), "the server stopped once the call ended").toBe(true);
+        expect(reply.greeting, "the call in flight read an open store").toBe("Hello, Ada!");
+        expect(Option.isSome(stopped), "the program stopped once the call ended").toBe(true);
+        expect(events).toEqual([
+          "the call ended",
+          "gRPC server stopped",
+          "the greetings store closed",
+        ]);
       }),
-  );
-
-  it.live("stops, as a launched layer, before it releases the layer that its handler uses", () =>
-    Effect.gen(function* () {
-      const events: Array<string> = [];
-      const started = yield* Deferred.make<void>();
-      const release = yield* Deferred.make<void>();
-      const stopping = yield* Deferred.make<void>();
-      const bound = yield* Deferred.make<EffectGrpcServer.GrpcServerAddress>();
-      yield* Effect.addFinalizer(() => Deferred.succeed(release, undefined));
-
-      const greetingsLayer = Layer.effect(
-        Greetings,
-        Effect.acquireRelease(
-          Effect.sync(() => ({ open: true })),
-          (store) =>
-            Effect.sync(() => {
-              store.open = false;
-              events.push("the greetings store closed");
-            }),
-        ).pipe(
-          Effect.map((store) =>
-            Greetings.of({
-              greetingFor: (name) =>
-                Effect.sync(() => (store.open ? `Hello, ${name}!` : "the store is closed")),
-            }),
-          ),
-        ),
-      );
-      const serviceLayer = Layer.unwrap(
-        Effect.gen(function* () {
-          const greetings = yield* Greetings;
-          return effectProto.helloWorldAPIServiceLiveLayer(effectProto.HelloWorldAPIServiceTag, {
-            ...greeter,
-            getGreeting: ({ name }) =>
-              signalThenWait(started, release).pipe(
-                Effect.andThen(greetings.greetingFor(name)),
-                Effect.map((greeting) => ({ greeting })),
-              ),
-          });
-        }),
-      );
-      const serverLayer = Layer.effectDiscard(
-        Effect.gen(function* () {
-          const service = yield* effectProto.HelloWorldAPIServiceTag;
-          const server = EffectGrpcServer.GrpcServerBuilder().withService(service).build();
-          yield* Deferred.succeed(bound, yield* server.listen({ host: "127.0.0.1", port: 0 }));
-        }),
-      );
-      const stopLines = Logger.layer([
-        Logger.make(({ message }) => {
-          if (textOf(message) === "gRPC server is stopping...") {
-            Deferred.doneUnsafe(stopping, Effect.void);
-          }
-          if (textOf(message) === "gRPC server stopped") events.push("gRPC server stopped");
-        }),
-      ]);
-
-      const launched = yield* Effect.forkChild(
-        Layer.launch(
-          serverLayer.pipe(Layer.provide(serviceLayer.pipe(Layer.provide(greetingsLayer)))),
-        ).pipe(Effect.provide(stopLines)),
-      );
-      const call = yield* Effect.forkChild(greet(yield* Deferred.await(bound), "Ada"));
-      yield* Deferred.await(started);
-      const interrupting = yield* Effect.forkChild(Fiber.interrupt(launched));
-      yield* Deferred.await(stopping);
-      yield* Deferred.succeed(release, undefined);
-
-      expect((yield* Fiber.join(call)).greeting, "the call in flight read an open store").toBe(
-        "Hello, Ada!",
-      );
-      yield* Fiber.join(interrupting);
-      expect(events).toEqual(["gRPC server stopped", "the greetings store closed"]);
-    }),
   );
 });
