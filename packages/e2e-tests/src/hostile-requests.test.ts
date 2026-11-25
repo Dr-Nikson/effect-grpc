@@ -30,9 +30,11 @@ import { EffectGrpcClient, EffectGrpcServer } from "@dr_nikson/effect-grpc";
 import { describe, expect, it } from "@effect/vitest";
 
 import * as effectProto from "./generated/com/example/v1/hello_world_api_effect.js";
+import * as namingProto from "./generated/com/example/v1/naming_test_service_effect.js";
 import * as raw from "./raw-unary.js";
 import fixtures from "./fixtures/hostile-requests.json" with { type: "json" };
 import { HelloWorldAPI } from "./generated/com/example/v1/hello_world_api_pb.js";
+import { NamingTestService } from "./generated/com/example/v1/naming_test_service_pb.js";
 import { StreamingTestService } from "./generated/com/example/v1/streaming_test_service_pb.js";
 import { Port, PortLive } from "./test-fixtures.js";
 
@@ -115,6 +117,33 @@ const sessionTo = (baseUrl: string) =>
   Effect.acquireRelease(
     Effect.sync(() => new Http2SessionManager(baseUrl)),
     (sessionManager) => Effect.sync(() => sessionManager.abort()),
+  );
+
+// Stands in for a throw that no known request causes: reading this authority from a request throws
+// inside the server's request listener.
+const throwingAuthority = (thrown: string) =>
+  Effect.acquireRelease(
+    Effect.fromNullable(
+      Object.getOwnPropertyDescriptor(http2.Http2ServerRequest.prototype, "authority"),
+    ).pipe(
+      Effect.orDie,
+      Effect.tap((original) =>
+        Effect.sync(() =>
+          Object.defineProperty(http2.Http2ServerRequest.prototype, "authority", {
+            configurable: true,
+            get(this: http2.Http2ServerRequest): unknown {
+              const authority: unknown = original.get?.call(this);
+              if (authority === thrown) throw new Error("thrown inside the request listener");
+              return authority;
+            },
+          }),
+        ),
+      ),
+    ),
+    (original) =>
+      Effect.sync(() =>
+        Object.defineProperty(http2.Http2ServerRequest.prototype, "authority", original),
+      ),
   );
 
 // A TCP proxy that can stop reading what the server sends, so the server's socket writes stay in
@@ -340,6 +369,61 @@ describe("Hostile requests (issue #61)", () => {
         yield* expectServing(session, port);
       }
     }).pipe(Effect.provide(PortLive)),
+  );
+
+  it.scopedLive("resets only the stream of a request that throws inside the listener", () =>
+    Effect.gen(function* () {
+      const { authority } = fixtures.throwingRequest;
+      yield* throwingAuthority(authority);
+      const port = yield* serve("127.0.0.1");
+      const session = yield* raw.connect(`http://127.0.0.1:${port}`);
+
+      for (const protocol of raw.protocols) {
+        const reply = yield* call(session, protocol, authority);
+        expect(reply.rstCode, `a request that throws in the listener, over ${protocol}`).toBe(
+          http2.constants.NGHTTP2_INTERNAL_ERROR,
+        );
+        yield* expectServing(session, port);
+      }
+    }).pipe(Effect.provide(PortLive)),
+  );
+
+  it.scopedLive("serves every service the server is built with", () =>
+    Effect.gen(function* () {
+      const port = yield* Port;
+      const server = EffectGrpcServer.GrpcServerBuilder()
+        .withService(yield* effectProto.HelloWorldAPIServiceTag)
+        .withService(yield* namingProto.NamingTestServiceTag)
+        .build();
+      yield* Effect.forkScoped(server.run({ host: "127.0.0.1", port }));
+      yield* Effect.sleep("1 second");
+      const baseUrl = `http://127.0.0.1:${port}`;
+      const transport = createGrpcTransport({ baseUrl, sessionManager: yield* sessionTo(baseUrl) });
+
+      const answers = yield* Effect.promise(async () => ({
+        helloWorld: (await createClient(HelloWorldAPI, transport).getGreeting({ name: "Ada" }))
+          .greeting,
+        namingTest: (await createClient(NamingTestService, transport).echo({ message: "Ada" }))
+          .message,
+      }));
+      expect(answers, "one call to each service on one connection").toEqual({
+        helloWorld: "Hello, Ada",
+        namingTest: "echo Ada",
+      });
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          PortLive,
+          effectProto.helloWorldAPIServiceLiveLayer(effectProto.HelloWorldAPIServiceTag, {
+            getGreeting: (request) => Effect.succeed({ greeting: `Hello, ${request.name}` }),
+            faceTheError: (request) => Effect.succeed({ greeting: request.name }),
+          }),
+          namingProto.namingTestServiceLiveLayer(namingProto.NamingTestServiceTag, {
+            echo: (request) => Effect.succeed({ message: `echo ${request.message}` }),
+          }),
+        ),
+      ),
+    ),
   );
 
   it.scopedLive("an empty authority is reset by HTTP/2 before the server sees it", () =>
