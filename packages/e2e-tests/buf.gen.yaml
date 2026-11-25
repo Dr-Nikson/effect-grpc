@@ -10,3 +10,5 @@ plugins:
   - local: protoc-gen-effect
     opt: target=ts,import_extension=js
     out: src/generated
+    exclude_types:
+      - com.example.v1.StreamingTestService
