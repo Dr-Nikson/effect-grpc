@@ -1,15 +1,8 @@
 // .github/scripts/fixtures/fake-release-tools.mjs
-// Stands in for npm and pnpm in the release job tests: `node fake-release-tools.mjs npm|pnpm ...`.
-// FAKE_REGISTRY names the registry's JSON file, which every run shares. FAKE_RUNNER names the job's
-// JSON file, which holds the version of the npm on PATH: setup-node's npm until
-// `npm install --global npm@<version>` replaces it. Facts of npm and the registry that the release
-// relies on:
+// Facts of npm and the registry that the release relies on:
 // - npm 11 before 11.21.0 and npm 12 before 12.2.0 cannot change a dist-tag with OIDC.
 // - The registry refuses a dist-tag change while "Allow npm dist-tag" is off.
 // - A dist-tag points only at a published version, and a version is published once.
-// `pnpm changeset:publish` publishes, with the npm on PATH, every public workspace package whose
-// version is not on the registry. Dist-tags change only through `npm dist-tag add`, and the
-// registry records each such request in `distTagRequests`.
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -35,6 +28,12 @@ const saveRegistry = () => writeFileSync(registryFile, JSON.stringify(registry, 
 function splitSpec(spec = "") {
   const at = spec.lastIndexOf("@");
   return at > 0 ? [spec.slice(0, at), spec.slice(at + 1)] : [spec, undefined];
+}
+
+function optionValue(name) {
+  const index = args.findIndex((arg) => arg === name || arg.startsWith(`${name}=`));
+  if (index === -1) return undefined;
+  return args[index] === name ? args[index + 1] : args[index].slice(name.length + 1);
 }
 
 function workspacePackages() {
@@ -83,6 +82,7 @@ const npm = {
     if (name !== registry.name) fail(`E404 ${name} is not in the registry`);
     if (version in registry.versions) fail(`E403 ${name}@${version} is already published`);
     registry.versions[version] = { publishedWith: runner.npm };
+    registry.distTags[optionValue("--tag") ?? "latest"] = version;
     saveRegistry();
   },
 };
@@ -100,13 +100,18 @@ const pnpm = {
     console.log(JSON.stringify(packages));
   },
   "changeset:publish"() {
+    const pre =
+      existsSync(".changeset/pre.json") ?
+        JSON.parse(readFileSync(".changeset/pre.json", "utf8"))
+      : undefined;
+    const tag = pre?.mode === "pre" ? ["--tag", pre.tag] : [];
     for (const { dir, name, version, private: hidden } of workspacePackages()) {
       if (hidden) continue;
       if (version in registry.versions) {
         console.log(`${name}@${version} is already published`);
         continue;
       }
-      const { status } = spawnSync("npm", ["publish"], { cwd: dir, stdio: "inherit" });
+      const { status } = spawnSync("npm", ["publish", ...tag], { cwd: dir, stdio: "inherit" });
       if (status !== 0) process.exit(status ?? 1);
     }
   },

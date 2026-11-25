@@ -1,5 +1,6 @@
 {
   "setupNodeNpm": "11.19.1",
+  "oidcDistTagNpm": "11.21.0",
   "latest": "3.0.0-alpha.5",
   "tagMoves": [
     {

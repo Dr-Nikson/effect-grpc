@@ -6,6 +6,7 @@ import {
   chmodSync,
   copyFileSync,
   cpSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -23,7 +24,7 @@ import { Evaluator, Lexer, Parser, data } from "@actions/expressions";
 
 import { evaluate, runs } from "./workflow-expressions.mjs";
 
-const { setupNodeNpm, latest, tagMoves, refused } = JSON.parse(
+const { setupNodeNpm, oidcDistTagNpm, latest, tagMoves, refused } = JSON.parse(
   readFileSync(new URL("./fixtures/dist-tag-manifests.json", import.meta.url), "utf8"),
 );
 const workflow = load(readFileSync(new URL("../workflows/release.yml", import.meta.url), "utf8"));
@@ -33,12 +34,14 @@ const publishJob = workflow.jobs.publish;
 const NAME = "@dr_nikson/effect-grpc";
 const TAG = "effect-v4";
 const repoPath = (path) => fileURLToPath(new URL(`../../${path}`, import.meta.url));
+const PRE = repoPath(".changeset/pre.json");
+const pre = existsSync(PRE) ? JSON.parse(readFileSync(PRE, "utf8")) : undefined;
+const PUBLISH_TAG = pre?.mode === "pre" ? pre.tag : "latest";
 const FAKE_TOOLS = fileURLToPath(new URL("./fixtures/fake-release-tools.mjs", import.meta.url));
 const SHELLS = { bash: "bash --noprofile --norc -eo pipefail {0}", sh: "sh -e {0}" };
 const NO_VERSION_PR = { published: "false", publishedPackages: "[]", hasChangesets: "false" };
 const OPEN_VERSION_PR = { ...NO_VERSION_PR, hasChangesets: "true", pullRequestNumber: "101" };
 
-/** What each action of the release jobs does here: the command it runs, or nothing. */
 const ACTIONS = {
   "actions/checkout": () => undefined,
   "pnpm/action-setup": () => undefined,
@@ -59,7 +62,6 @@ function tempDir(t, prefix) {
   return dir;
 }
 
-/** A registry that holds the Effect 3 build under `latest`, and `tagged` under effect-v4. */
 function registry(t, { tagged, published = [], allowDistTag = true }) {
   const file = join(tempDir(t, "release-registry-"), "registry.json");
   const versions = [latest, ...published, ...(tagged === undefined ? [] : [tagged])];
@@ -80,16 +82,13 @@ const readRegistry = (file) => JSON.parse(readFileSync(file, "utf8"));
 const updateRegistry = (file, change) =>
   writeFileSync(file, JSON.stringify({ ...readRegistry(file), ...change }));
 
-/**
- * A checkout of a release commit as the release jobs see it, with the library's manifest, a copy
- * of .github and the changesets config, and the fake npm and pnpm first on PATH.
- */
 function checkout(t, registryFile, manifest) {
   const root = tempDir(t, "release-checkout-");
   cpSync(repoPath(".github"), join(root, ".github"), { recursive: true });
   symlinkSync(repoPath("node_modules"), join(root, "node_modules"));
   mkdirSync(join(root, ".changeset"));
   copyFileSync(repoPath(".changeset/config.json"), join(root, ".changeset/config.json"));
+  if (pre !== undefined) copyFileSync(PRE, join(root, ".changeset/pre.json"));
   mkdirSync(join(root, "packages/effect-grpc/dist"), { recursive: true });
   writeFileSync(join(root, "packages/effect-grpc/package.json"), JSON.stringify(manifest));
   mkdirSync(join(root, "bin"));
@@ -114,7 +113,6 @@ function environment({ root, registryFile }, outputFile, env = {}) {
   };
 }
 
-/** A `${{ }}` template of `env:` or `outputs:`, filled in as the runner fills it in. */
 function interpolate(template, contexts) {
   return String(template).replace(/\$\{\{([\s\S]*?)\}\}/g, (_, expression) => {
     const ast = new Parser(new Lexer(expression).lex().tokens, Object.keys(contexts), []).parse();
@@ -134,11 +132,6 @@ function readOutputs(file) {
   return Object.fromEntries(lines.map((line) => line.split(/=(.*)/s, 2)));
 }
 
-/**
- * Runs steps on a fresh runner, as GitHub does: a step runs while its `if:` holds, its `env:` is
- * filled in, it writes its outputs to its own GITHUB_OUTPUT, and a failed step fails the job
- * unless its `continue-on-error` holds.
- */
 function runSteps(release, job, steps, contexts) {
   writeFileSync(join(release.root, "runner.json"), JSON.stringify({ npm: setupNodeNpm }));
   let result = "success";
@@ -188,7 +181,6 @@ const contexts = (extra) => ({
   ...extra,
 });
 
-/** The version job's steps after the changesets action, which reported `changesets`. */
 function runVersionJob(release, changesets) {
   const context = contexts({
     steps: { changesets: { outputs: changesets, outcome: "success", conclusion: "success" } },
@@ -206,7 +198,6 @@ function runVersionJob(release, changesets) {
   );
 }
 
-/** The publish job, if its `if:` lets it start after a version job with these outputs. */
 function runPublishJob(release, versionOutputs) {
   const needs = { "version-pr": { result: "success", outputs: versionOutputs } };
   if (!runs(publishJob.if, contexts({ needs }))) return { ran: false };
@@ -216,14 +207,13 @@ function runPublishJob(release, versionOutputs) {
   };
 }
 
-/** A run of release.yml, which "Re-run all jobs" repeats. */
 function releaseRun(release, changesets = NO_VERSION_PR) {
   const versionOutputs = runVersionJob(release, changesets);
   return { versionOutputs, publish: runPublishJob(release, versionOutputs) };
 }
 
 for (const { name, tagged, release, after } of tagMoves) {
-  test(`${name}: a release of ${release} publishes it and leaves ${TAG} on ${after}`, (t) => {
+  test(`${name}: a release of ${release} publishes it under ${PUBLISH_TAG} and leaves ${TAG} on ${after}`, (t) => {
     const registryFile = registry(t, { tagged });
     const { publish } = releaseRun(checkout(t, registryFile, library(release)));
     assert.equal(publish.result, "success", publish.log);
@@ -233,7 +223,7 @@ for (const { name, tagged, release, after } of tagMoves) {
       { publishedWith: setupNodeNpm },
       "setup-node's npm publishes",
     );
-    assert.deepEqual(distTags, { latest, [TAG]: after });
+    assert.deepEqual(distTags, { latest, [PUBLISH_TAG]: release, [TAG]: after });
   });
 }
 
@@ -262,7 +252,7 @@ for (const [rerun, again] of [
     assert.equal(second.result, "success", second.log);
     const { versions, distTags } = readRegistry(registryFile);
     assert.deepEqual(versions, published.versions);
-    assert.deepEqual(distTags, { latest, [TAG]: "4.0.0-alpha.1" });
+    assert.deepEqual(distTags, { ...published.distTags, [TAG]: "4.0.0-alpha.1" });
   });
 }
 
@@ -291,11 +281,10 @@ test("while a version PR is open, no publish job starts, even with effect-v4 beh
   assert.equal(readRegistry(registryFile).distTags[TAG], "4.0.0-alpha.1");
 });
 
-/** Runs the script as the release steps do, from the checkout root, with an npm that has OIDC. */
 function runScript(t, manifest, args) {
   const registryFile = registry(t, { tagged: "4.0.0-alpha.0", published: ["4.0.0-alpha.1"] });
   const release = checkout(t, registryFile, manifest);
-  writeFileSync(join(release.root, "runner.json"), JSON.stringify({ npm: "11.21.0" }));
+  writeFileSync(join(release.root, "runner.json"), JSON.stringify({ npm: oidcDistTagNpm }));
   const { status, stdout } = spawnSync(
     process.execPath,
     [".github/scripts/move-effect-dist-tag.mjs", ...args],
