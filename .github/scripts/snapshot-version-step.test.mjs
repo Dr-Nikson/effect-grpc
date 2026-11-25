@@ -21,6 +21,9 @@ const { tag, sha, accepted, refused } = JSON.parse(
 const { steps } = load(
   readFileSync(new URL("../workflows/snapshot-release.yml", import.meta.url), "utf8"),
 ).jobs.snapshot;
+const { snapshot: snapshotSettings } = JSON.parse(
+  readFileSync(new URL("../../.changeset/config.json", import.meta.url), "utf8"),
+);
 
 const versionStep = steps.find((step) => step.run?.includes("changeset version --snapshot"));
 const publishStep = steps.find((step) => step.id === "publish");
@@ -82,6 +85,13 @@ for (const { name, version } of refused) {
     assert.ok(result.stdout.includes(version), "the error names the version it found");
   });
 }
+
+test("the changesets snapshot settings give a calculated version that ends the way the version step checks", () => {
+  assert.equal(snapshotSettings.useCalculatedVersion, true);
+  const ending = snapshotSettings.prereleaseTemplate.replace("{tag}", tag).replace("{commit}", sha);
+  const result = runStep(versionStep, `3.0.0-${ending}`);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+});
 
 test("a failed version step stops the job before the publish step", () => {
   assert.ok(steps.indexOf(versionStep) < steps.indexOf(publishStep));

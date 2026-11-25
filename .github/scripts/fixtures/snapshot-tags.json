@@ -44,12 +44,6 @@
     "${{ github.token }}",
     "snаpshot",
     "abcdefghijklmnopqrstuvwxyz-123456",
-    "latest",
-    "alpha",
-    "beta",
-    "rc",
-    "effect-v3",
-    "effect-v4",
     "x",
     "vx",
     "v1",
@@ -59,5 +53,6 @@
     "vv10",
     "vvv0",
     "vvvvvvv2"
-  ]
+  ],
+  "channels": ["latest", "alpha", "beta", "rc", "effect-v3", "effect-v4"]
 }
