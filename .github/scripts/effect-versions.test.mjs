@@ -2,7 +2,7 @@
 import { dump } from "js-yaml";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { test } from "node:test";
@@ -31,43 +31,47 @@ const FAKE_NPM = [
 
 function runScript(args, { lockfile = lockfileOf(cli.installed), npmStatus = 0 } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "effect-versions-"));
-  const bin = join(dir, "bin");
-  const checkout = join(dir, "checkout");
-  const githubOutput = join(dir, "github-output");
-  mkdirSync(bin);
-  mkdirSync(join(checkout, "packages", "effect-grpc"), { recursive: true });
-  writeFileSync(join(bin, "npm"), FAKE_NPM);
-  chmodSync(join(bin, "npm"), 0o755);
-  writeFileSync(githubOutput, "");
-  writeFileSync(join(checkout, "package.json"), JSON.stringify(cli.manifest));
-  writeFileSync(
-    join(checkout, "packages", "effect-grpc", "package.json"),
-    JSON.stringify(cli.library),
-  );
-  writeFileSync(join(checkout, "pnpm-workspace.yaml"), dump(cli.workspace));
-  writeFileSync(join(checkout, "pnpm-lock.yaml"), dump(lockfile));
-  const { status, stderr } = spawnSync(process.execPath, [script, ...args], {
-    cwd: checkout,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      PATH: `${bin}${delimiter}${process.env.PATH}`,
-      GITHUB_OUTPUT: githubOutput,
-      NPM_VERSIONS: JSON.stringify(cli.published),
-      NPM_STATUS: String(npmStatus),
-    },
-  });
-  return {
-    status,
-    stderr,
-    output: Object.fromEntries(
-      readFileSync(githubOutput, "utf8")
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => line.split("=")),
-    ),
-    manifest: JSON.parse(readFileSync(join(checkout, "package.json"), "utf8")),
-  };
+  try {
+    const bin = join(dir, "bin");
+    const checkout = join(dir, "checkout");
+    const githubOutput = join(dir, "github-output");
+    mkdirSync(bin);
+    mkdirSync(join(checkout, "packages", "effect-grpc"), { recursive: true });
+    writeFileSync(join(bin, "npm"), FAKE_NPM);
+    chmodSync(join(bin, "npm"), 0o755);
+    writeFileSync(githubOutput, "");
+    writeFileSync(join(checkout, "package.json"), JSON.stringify(cli.manifest));
+    writeFileSync(
+      join(checkout, "packages", "effect-grpc", "package.json"),
+      JSON.stringify(cli.library),
+    );
+    writeFileSync(join(checkout, "pnpm-workspace.yaml"), dump(cli.workspace));
+    writeFileSync(join(checkout, "pnpm-lock.yaml"), dump(lockfile));
+    const { status, stderr } = spawnSync(process.execPath, [script, ...args], {
+      cwd: checkout,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${bin}${delimiter}${process.env.PATH}`,
+        GITHUB_OUTPUT: githubOutput,
+        NPM_VERSIONS: JSON.stringify(cli.published),
+        NPM_STATUS: String(npmStatus),
+      },
+    });
+    return {
+      status,
+      stderr,
+      output: Object.fromEntries(
+        readFileSync(githubOutput, "utf8")
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => line.split("=")),
+      ),
+      manifest: JSON.parse(readFileSync(join(checkout, "package.json"), "utf8")),
+    };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 for (const {
