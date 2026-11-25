@@ -1,5 +1,5 @@
 // packages/e2e-tests/src/index.test.ts
-import { Cause, Effect, Exit, Layer, LogLevel, Logger, Option } from "effect";
+import { Cause, Effect, Exit, Layer, Option, References, Result } from "effect";
 
 import { describe, expect, it } from "@effect/vitest";
 
@@ -7,7 +7,7 @@ import * as namingTestProto from "./generated/com/example/v1/naming_test_service
 import { clientLayer, createServer, effectProto, serverServiceLayer } from "./test-fixtures.js";
 
 describe("E2E gRPC Client-Server Tests", () => {
-  it.scopedLive("should successfully call getGreeting RPC", () =>
+  it.live("should successfully call getGreeting RPC", () =>
     Effect.gen(function* () {
       // Create and start server
       const server = yield* createServer();
@@ -29,13 +29,13 @@ describe("E2E gRPC Client-Server Tests", () => {
       Effect.provide(
         Layer.empty.pipe(
           Layer.provideMerge(serverServiceLayer),
-          Layer.provideMerge(Logger.minimumLogLevel(LogLevel.Debug)),
+          Layer.provideMerge(Layer.succeed(References.MinimumLogLevel, "Debug")),
         ),
       ),
     ),
   );
 
-  it.scopedLive(
+  it.live(
     "returns the greeting for an empty name when getGreeting gets an empty request (#28)",
     () =>
       Effect.gen(function* () {
@@ -51,7 +51,7 @@ describe("E2E gRPC Client-Server Tests", () => {
       }).pipe(Effect.provide(serverServiceLayer)),
   );
 
-  it.scopedLive("should handle error from faceTheError RPC", () =>
+  it.live("should handle error from faceTheError RPC", () =>
     Effect.gen(function* () {
       // Create and start server
       const server = yield* createServer();
@@ -71,7 +71,7 @@ describe("E2E gRPC Client-Server Tests", () => {
         return expect(false, "The result should be a failure").toBeTruthy();
       }
 
-      const errorOption = Cause.dieOption(result.cause);
+      const errorOption = Result.getSuccess(Cause.findDefect(result.cause));
       if (Option.isNone(errorOption)) {
         return expect(false, "The result should be Cause#Die").toBeTruthy();
       }
@@ -83,7 +83,7 @@ describe("E2E gRPC Client-Server Tests", () => {
       Effect.provide(
         Layer.empty.pipe(
           Layer.provideMerge(serverServiceLayer),
-          Layer.provideMerge(Logger.minimumLogLevel(LogLevel.Debug)),
+          Layer.provideMerge(Layer.succeed(References.MinimumLogLevel, "Debug")),
         ),
       ),
     ),

@@ -1,5 +1,5 @@
 // packages/example/src/server.ts
-import { Context, Effect, Layer, LogLevel, Logger } from "effect";
+import { Context, Effect, Layer, References } from "effect";
 
 import { Code } from "@connectrpc/connect";
 import { EffectGrpcServer, GrpcException } from "@dr_nikson/effect-grpc";
@@ -10,7 +10,7 @@ import * as effectProto from "./generated/com/example/v1/hello_world_api_effect.
 import * as proto from "./generated/com/example/v1/hello_world_api_pb.js";
 
 const HelloWorldAPITag = effectProto.HelloWorldAPIServiceTag;
-type HelloWorldAPITag = Context.Tag.Identifier<typeof HelloWorldAPITag>;
+type HelloWorldAPITag = Context.Service.Identifier<typeof HelloWorldAPITag>;
 
 const HelloWorldAPIServiceLive: effectProto.HelloWorldAPIService = {
   getGreeting(request: proto.GetGreetingRequest) {
@@ -60,8 +60,7 @@ const prog = Effect.gen(function* () {
 
 const layer = Layer.empty.pipe(
   Layer.provideMerge(debugApiLayer),
-  Layer.provideMerge(Layer.scope),
-  Layer.provide(Logger.minimumLogLevel(LogLevel.Trace)),
+  Layer.provideMerge(Layer.succeed(References.MinimumLogLevel, "Trace")),
 );
 
-NodeRuntime.runMain(Effect.provide(prog, layer));
+NodeRuntime.runMain(Effect.provide(prog, layer).pipe(Effect.scoped));

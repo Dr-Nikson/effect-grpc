@@ -95,6 +95,44 @@ Create a PR as usual. The changeset file will be reviewed along with your code.
    - GitHub Actions automatically publishes to npm
    - Creates Git tags (e.g., `@dr_nikson/effect-grpc@0.2.0`)
    - Creates GitHub releases with changelog
+   - Moves the `effect-v4` dist-tag to the new version (see below)
+
+### Versions
+
+The version of `@dr_nikson/effect-grpc` follows [semver](https://semver.org/). Changesets computes it from the pending changesets, and it does not follow Effect's major version as a rule. The Effect line a release works with is its `effect` peer range, `^4.0.7`, and the package needs Node.js 22.19 or later. On Effect 4.0.0 and 4.0.1 the server stops at startup, and on 4.0.2 to 4.0.6 a call whose deadline passes gets another status code.
+
+The pending changesets include major ones, so the next release is a major, `4.0.0-alpha.0`. The `version` field holds `3.0.0`, the base that changesets bumps, and no `3.0.0` is published. A major bump of a prerelease of `3.0.0` gives `3.0.0`, so from the last published version, `3.0.0-alpha.5`, changesets would compute `3.0.0-alpha.6`.
+
+### The `effect-v4` dist-tag
+
+Every release for Effect 4 also moves the `effect-v4` dist-tag, so `npm install @dr_nikson/effect-grpc@effect-v4` installs the newest one. Prereleases count. After `changeset publish`, the `publish` job of `release.yml` runs `.github/scripts/move-effect-dist-tag.mjs`. The script reads the version in `packages/effect-grpc/package.json`, and it refuses a manifest that is not the library's. It runs `npm dist-tag add @dr_nikson/effect-grpc@<version> effect-v4` only when `effect-v4` is not set or points to an older version, in semver order. So a rerun of a release, or of an older release, leaves the tag where it is.
+
+The `version-pr` job runs the same script with `--check`. When `effect-v4` points to an older version than the manifest, the `publish` job runs even if every version is already on npm. It publishes nothing and moves the tag, after the `npm-publish` approval.
+
+The step needs two things:
+
+- **npm 11.21.0 or later on npm 11, or 12.2.0 or later on npm 12.** Earlier npm cannot change a dist-tag with OIDC. The job installs `npm@11.21.0` after the publish, so the publish keeps the npm that `actions/setup-node` provides.
+- **Allow npm dist-tag** in the trusted publisher configuration of the package on npmjs.com. This setting lives on npmjs.com, not in this repository. It is off by default, and permission to publish does not grant it.
+
+Without that setting, the step fails after npm has published the version, and the run turns red. Turn the setting on, then rerun the workflow with **Re-run all jobs** or **Re-run failed jobs** while CI keeps the build artifact, for 7 days. A later run of the workflow that creates or updates no version PR also moves the tag. To move it by hand, use an npm account that can publish the package:
+
+```bash
+npm dist-tag add @dr_nikson/effect-grpc@<version> effect-v4
+```
+
+### Move `latest` after the first release for Effect 4
+
+The repository is in pre mode with the tag `alpha` (see `.changeset/pre.json`), so `changeset publish` publishes each version under `alpha` and does not move `latest`. `latest` points to `3.0.0-alpha.5`, the Effect 3 build, until someone moves it. The install line in `README.md` names the package without a version, so npm resolves the version that `latest` points to.
+
+After the release workflow publishes `4.0.0-alpha.0`, move `latest` to it:
+
+```bash
+npm dist-tag add @dr_nikson/effect-grpc@4.0.0-alpha.0 latest
+```
+
+Run the command with an npm account that can publish the package. Later 4.x alphas also publish under `alpha`, so `latest` stays on `4.0.0-alpha.0` until someone moves it again.
+
+The release workflow moves only `effect-v4`, so this step is manual.
 
 ### Manual Release (if needed)
 
@@ -120,6 +158,9 @@ pnpm release
 
 # 6. Push changes and tags
 git push --follow-tags
+
+# 7. Move the effect-v4 dist-tag (see "The effect-v4 dist-tag")
+node .github/scripts/move-effect-dist-tag.mjs
 ```
 
 ## Beta/Pre-release Workflow
@@ -231,7 +272,7 @@ Published files (from `package.json` `files` field):
 The package is published with:
 - **Public access** - Anyone can install from npm
 - **Provenance** - npm package provenance for security/supply chain verification
-- **Node.js 22+** - Minimum supported version
+- **Node.js 22.19+** - Minimum supported version
 
 ## Scripts Reference
 

@@ -54,17 +54,22 @@ test("release.yml checks npm whenever the action opened no version PR, also when
   );
 });
 
-test("release.yml publishes only after the version job found an unpublished version", () => {
+test("release.yml publishes only after the version job found an unpublished version or an effect-v4 tag behind the release", () => {
   const { needs, if: condition } = release.jobs.publish;
   assert.equal(needs, "version-pr");
-  for (const [hasUnpublished, expected] of [
-    ["true", true],
-    ["false", false],
-    ["", false],
+  for (const [hasUnpublished, distTagBehind, expected] of [
+    ["true", "false", true],
+    ["false", "true", true],
+    ["false", "false", false],
+    ["", "", false],
   ]) {
     assert.equal(
       runs(condition, {
-        needs: { "version-pr": { outputs: { has_unpublished: hasUnpublished } } },
+        needs: {
+          "version-pr": {
+            outputs: { has_unpublished: hasUnpublished, dist_tag_behind: distTagBehind },
+          },
+        },
       }),
       expected,
     );

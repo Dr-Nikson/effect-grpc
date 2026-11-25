@@ -19,7 +19,7 @@ This file defines the core project structure and coding standards for the Effect
 - Key configuration files at the root include:
   - `package.json`: Defines workspaces and root dependencies. It uses pnpm as a package manager.
   - `tsconfig.base.json`: Base TypeScript configuration inherited by packages.
-  - `eslint.config.js`: ESLint configuration (typescript-eslint, Prettier compatibility, and `no-console`, so library code logs through the Effect logger).
+  - `eslint.config.js`: ESLint configuration (typescript-eslint, Prettier compatibility, and `no-console`, so library code logs through the Effect logger). In the library it also forbids an import of the root of `@effect/opentelemetry`, which loads optional OpenTelemetry packages. Import a module of it, such as `@effect/opentelemetry/OtelTracer`.
   - `.prettierrc.cjs`: Prettier code formatting rules.
   - `README.md`: Project overview for gRPC Protobuf capabilities for Effect ecosystem.
 
@@ -65,7 +65,7 @@ When developing new features or making changes, follow this iterative process:
 
 5. **Fix Compilation Errors:** If the build fails, address the TypeScript errors reported by the compiler. Repeat steps 1-3 until the package compiles successfully.
 
-6. **Run Type Tests and Unit Tests:** Execute the type tests and the runtime unit tests using Vitest for modules you have modified. Ensure you are using Node.js v22+ as specified in `engines`. Run the test commands from the **root directory**:
+6. **Run Type Tests and Unit Tests:** Execute the type tests and the runtime unit tests using Vitest for modules you have modified. Ensure you are using Node.js 22.19 or later, as specified in `engines`. Run the test commands from the **root directory**:
     ```bash
     # Run type tests for specific package
     pnpm --filter ./packages/effect-grpc run test:types
@@ -96,7 +96,7 @@ When developing new features or making changes, follow this iterative process:
 
 IMPORTANT: refer to the best practices and coding standards described in @agents/CODING_STANDARDS.md when write code. 
 
-- Use strict TypeScript type checking with Node.js v22+ requirement
+- Use strict TypeScript type checking with a Node.js 22.19 or later requirement
 - Document all public exports with JSDoc comments: add comprehensive examples of usage when needed 
 - Add file name (with path from the repo-root) at the beginning of each file 
 - Follow Effect library patterns and conventions
@@ -140,7 +140,7 @@ IMPORTANT: refer to the best practices and coding standards described in @agents
 - Package manager is locked to pnpm@10.16.1
 - Use catalog: references for shared dependencies
 - Workspace references use `workspace:` prefix
-- Engine requirement: Node.js >= 22
+- Engine requirement: Node.js >= 22.19, which Effect 4's platform packages need
 
 ### Security
 - Never commit API keys or sensitive credentials

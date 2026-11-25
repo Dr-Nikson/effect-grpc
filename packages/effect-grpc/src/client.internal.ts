@@ -1,5 +1,5 @@
 // packages/effect-grpc/src/client.internal.ts
-import { Context, Effect, Either, Layer } from "effect";
+import { Context, Effect, Layer, Result } from "effect";
 import type { Span } from "effect/Tracer";
 
 import type { DescMessage, MessageInitShape, MessageShape } from "@bufbuild/protobuf";
@@ -31,7 +31,7 @@ export const grpcClientRuntimeTypeId = Symbol("@dr_nikson/effect-grpc/GrpcClient
 /**
  * @internal
  */
-export const grpcClientRuntimeTag = Context.GenericTag<T.GrpcClientRuntime, T.GrpcClientRuntime>(
+export const grpcClientRuntimeTag = Context.Service<T.GrpcClientRuntime, T.GrpcClientRuntime>(
   grpcClientRuntimeTypeId.toString(),
 );
 
@@ -122,7 +122,7 @@ type UnaryFn<I extends DescMessage, O extends DescMessage> = (
  * @returns New Headers object with trace context injected, preserving original headers
  */
 function injectTraceContext(span: Span, headers: Headers): Headers {
-  return Either.try(() => {
+  return Result.try(() => {
     // Copy existing headers to preserve user-provided headers (auth tokens, etc.)
     // new Headers(headers) copies all entries from the source Headers object
     const newHeaders = new Headers(headers);
@@ -144,7 +144,7 @@ function injectTraceContext(span: Span, headers: Headers): Headers {
     propagator.inject(otelContext, newHeaders, headerSetter);
 
     return newHeaders;
-  }).pipe(Either.getOrElse(() => headers));
+  }).pipe(Result.getOrElse(() => headers));
 }
 
 function makeExecutorMethod<Shape extends GenServiceMethods>(
@@ -195,7 +195,7 @@ function makeExecutorMethod<Shape extends GenServiceMethods>(
  * @internal
  */
 export function makeGrpcClientConfigTag<Service extends string>(service: Service) {
-  return Context.GenericTag<T.GrpcClientConfig<Service>, T.GrpcClientConfig<Service>>(
+  return Context.Service<T.GrpcClientConfig<Service>, T.GrpcClientConfig<Service>>(
     `@dr_nikson/effect-grpc/GrpcClientConfig<${service}>`,
   );
 }

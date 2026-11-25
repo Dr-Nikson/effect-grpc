@@ -37,4 +37,13 @@ describe("README check", () => {
     expect(stdout).toContain("js-fence.md:3:1 error fence: fence this js block as typescript");
     expect(status).toBe(1);
   });
+
+  it("generates one compile error for a service that has streaming rpcs (#76)", () => {
+    const { status, stdout } = check("streaming-rpc.md");
+    expect(stdout).toMatch(
+      /error TS2739: src\/generated\/example\/v1\/chat_effect\.ts:\d+:\d+ .* is missing the following properties .*: watch, upload, talk/,
+    );
+    expect(stdout).toContain("streaming-rpc.md: 1 problem(s)");
+    expect(status).toBe(1);
+  });
 });

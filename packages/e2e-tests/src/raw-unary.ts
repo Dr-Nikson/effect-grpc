@@ -70,7 +70,7 @@ export const connectWithLargestWindows = (
   url: string,
 ): Effect.Effect<http2.ClientHttp2Session, never, Scope.Scope> =>
   Effect.acquireRelease(
-    Effect.async<http2.ClientHttp2Session>((resume) => {
+    Effect.callback<http2.ClientHttp2Session>((resume) => {
       const session = http2
         .connect(url, { settings: { initialWindowSize: largestWindow } })
         .on("error", () => {});
@@ -91,7 +91,7 @@ const exchange = (
   authorityHeader: ":authority" | "host",
   until: "answer" | "close",
 ): Effect.Effect<RawReply> =>
-  Effect.async<RawReply>((resume) => {
+  Effect.callback<RawReply>((resume) => {
     const message = toBinary(GetGreetingRequestSchema, create(GetGreetingRequestSchema, { name }));
     const stream = session.request({
       ":method": "POST",

@@ -20,10 +20,20 @@ Type-safe gRPC and Protocol Buffer support for the Effect ecosystem
 
 ## Installation
 
+effect-grpc needs `effect` ^4.0.7 and Node.js 22.19 or later. On Effect 4.0.0 and 4.0.1 the server stops at startup, and on 4.0.2 to 4.0.6 a call whose deadline passes gets another status code.
+
+Install `@effect/opentelemetry` and `@effect/platform-node` at the release of `effect`. Each Effect package needs `effect` at its own release or later, so with a newer one npm stops with `ERESOLVE`. `@effect/platform-node` 4.0.7 to 4.1.1 accept any newer `@effect/platform-node-shared`, and npm installs the newest one even when its `effect` peer is not met. With `effect` 4.0.7, the Quick Start's import of `@effect/platform-node` then crashes at load. npm users on such a release pin `@effect/platform-node-shared` to their `effect` release with `overrides` in `package.json`:
+
+```json
+"overrides": { "@effect/platform-node-shared": "4.0.7" }
+```
+
 ```bash
-npm install @dr_nikson/effect-grpc
-# gRPC runtime deps  
-npm install @bufbuild/protobuf  @connectrpc/connect
+npm install @dr_nikson/effect-grpc effect @effect/opentelemetry
+# gRPC runtime deps
+npm install @bufbuild/protobuf @connectrpc/connect
+# Runs the Quick Start programs on Node.js
+npm install @effect/platform-node
 ```
 
 For code generation, you'll also need:
@@ -105,7 +115,7 @@ This will generate TypeScript files in `src/generated/example/v1/` with full Eff
 
 ```typescript
 // src/server.ts
-import { Effect, Layer, LogLevel, Logger } from "effect";
+import { Effect, Layer, References } from "effect";
 import { EffectGrpcServer } from "@dr_nikson/effect-grpc";
 import { NodeRuntime } from "@effect/platform-node";
 
@@ -146,22 +156,23 @@ const program = Effect.gen(function* () {
 // Provide dependencies and run
 const layer = Layer.empty.pipe(
   Layer.provideMerge(helloServiceLayer),
-  Layer.provideMerge(Layer.scope),
-  Layer.provideMerge(Logger.minimumLogLevel(LogLevel.Info))
+  Layer.provideMerge(Layer.succeed(References.MinimumLogLevel, "Info"))
 );
 
-NodeRuntime.runMain(Effect.provide(program, layer));
+NodeRuntime.runMain(Effect.provide(program, layer).pipe(Effect.scoped));
 ```
 
 The server binds `127.0.0.1` instead of `localhost`. Node can bind `localhost` to `::1`, and a client on an IPv4-only host then dials `127.0.0.1` and gets `ECONNREFUSED`.
 
 `listen` succeeds with the address the server bound. Pass `port: 0` to let the OS pick a free port, and read it from the result. The server also logs it, as in `gRPC server listening on http://127.0.0.1:41234`.
 
+`Effect.scoped` gives `listen` its scope. Ctrl+C or SIGTERM interrupts the program, so the scope closes and the server stops. The process then exits with code 130, which is the code `runMain` of Effect 4 gives a program that a signal stopped. To exit with another code, pass `teardown` to `runMain`.
+
 ### 5. Implement the Client
 
 ```typescript
 // src/client.ts
-import { Effect, Layer, Logger, LogLevel } from "effect";
+import { Effect, Layer, References } from "effect";
 import { EffectGrpcClient } from "@dr_nikson/effect-grpc";
 import { NodeRuntime } from "@effect/platform-node";
 
@@ -196,7 +207,7 @@ const program = Effect.gen(function* () {
 const dependencies = Layer.empty.pipe(
   Layer.provideMerge(helloClientLayer),
   Layer.provideMerge(EffectGrpcClient.liveGrpcClientRuntimeLayer()),
-  Layer.provideMerge(Logger.minimumLogLevel(LogLevel.Info))
+  Layer.provideMerge(Layer.succeed(References.MinimumLogLevel, "Info"))
 );
 
 NodeRuntime.runMain(Effect.provide(program, dependencies));
@@ -317,7 +328,7 @@ Fluent builder interface for constructing gRPC servers.
 **Methods:**
 - `withContextTransformer<Ctx1>(f: (originalCtx: HandlerContext, ctx: Ctx) => Effect.Effect<Ctx1>): GrpcServerBuilder<Ctx1, never>` - Transform the handler context. The first parameter is the original Connect-RPC HandlerContext, the second is the current context (`unknown` before the first transformer). Must be called before adding services.
 - `withService<S>(service: S): GrpcServerBuilder<Ctx, Services | Tag<S>>` - Add a service (enforces unique tags)
-- `build(options?: GrpcServerOptions): GrpcServer<Services>` - Build the server (requires at least one service). `options.readMaxBytes` is the largest request message the server reads, in bytes, 4 MiB by default. A larger message gets `RESOURCE_EXHAUSTED`. `build` throws `Cause.IllegalArgumentException` unless the value is a whole number from 1 to 4294967295.
+- `build(options?: GrpcServerOptions): GrpcServer<Services>` - Build the server (requires at least one service). `options.readMaxBytes` is the largest request message the server reads, in bytes, 4 MiB by default. A larger message gets `RESOURCE_EXHAUSTED`. `build` throws `Cause.IllegalArgumentError` unless the value is a whole number from 1 to 4294967295.
 
 **Example:**
 ```typescript
@@ -496,7 +507,7 @@ Creates a Context tag for service-specific configuration.
 **Parameters:**
 - `service` - Fully-qualified service name
 
-**Returns:** `Context.Tag<GrpcClientConfig<Service>, GrpcClientConfig<Service>>`
+**Returns:** `Context.Service<GrpcClientConfig<Service>, GrpcClientConfig<Service>>`
 
 **Example:**
 ```typescript
@@ -886,18 +897,18 @@ interface User {
   name: string;
 }
 
-// Define a database service tag
-class DatabaseService extends Context.Tag("DatabaseService")<
+// Define a database service
+class DatabaseService extends Context.Service<
   DatabaseService,
   {
     readonly getUser: (id: string) => Effect.Effect<User>;
     readonly listUsers: () => Effect.Effect<Array<User>>;
   }
->() {}
+>()("DatabaseService") {}
 
 // Service implementation class with constructor
 class UserServiceLive implements effectProto.UserService {
-  constructor(private readonly db: Context.Tag.Service<typeof DatabaseService>) {}
+  constructor(private readonly db: Context.Service.Shape<typeof DatabaseService>) {}
 
   getUser(request: proto.GetUserRequest) {
     return this.db.getUser(request.userId).pipe(
@@ -913,7 +924,7 @@ class UserServiceLive implements effectProto.UserService {
 }
 
 // Wire dependencies through constructor
-const userServiceLayer = Layer.unwrapEffect(
+const userServiceLayer = Layer.unwrap(
   Effect.gen(function* () {
     const db = yield* DatabaseService;
     const serviceImpl = new UserServiceLive(db);
@@ -1016,16 +1027,18 @@ When you make a gRPC call, trace context automatically flows from client to serv
 **1. Add OpenTelemetry dependencies:**
 
 ```bash
-npm install @effect/opentelemetry @opentelemetry/api @opentelemetry/sdk-trace-node
-# Plus your preferred exporter
-npm install @opentelemetry/exporter-trace-otlp-http
+# The OpenTelemetry SDK packages that NodeSdk of @effect/opentelemetry loads.
+# @effect/opentelemetry 4.1 accepts versions 2.x of the SDK packages, and 0.203 to 0.299 of the logs packages.
+npm install @opentelemetry/sdk-trace-node@2 @opentelemetry/sdk-trace-base@2 @opentelemetry/sdk-metrics@2 @opentelemetry/resources@2 @opentelemetry/sdk-logs@0.223 @opentelemetry/api-logs@0.223
+# Plus your preferred exporter, from the same line
+npm install @opentelemetry/exporter-trace-otlp-http@0.223
 ```
 
 **2. Configure the OpenTelemetry SDK:**
 
 ```typescript
 import { Effect, Layer } from "effect";
-import { NodeSdk } from "@effect/opentelemetry";
+import * as NodeSdk from "@effect/opentelemetry/NodeSdk";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 

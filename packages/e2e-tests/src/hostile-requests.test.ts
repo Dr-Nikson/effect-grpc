@@ -4,7 +4,6 @@ import {
   Context,
   Duration,
   Effect,
-  ExecutionStrategy,
   Exit,
   Fiber,
   Layer,
@@ -118,7 +117,7 @@ const sessionTo = (baseUrl: string) =>
 
 const throwingAuthority = (thrown: string) =>
   Effect.acquireRelease(
-    Effect.fromNullable(
+    Effect.fromNullishOr(
       Object.getOwnPropertyDescriptor(http2.Http2ServerRequest.prototype, "authority"),
     ).pipe(
       Effect.orDie,
@@ -143,7 +142,7 @@ const throwingAuthority = (thrown: string) =>
 
 const stallingProxy = (target: number) =>
   Effect.acquireRelease(
-    Effect.async<{
+    Effect.callback<{
       readonly port: number;
       readonly reading: (on: boolean) => void;
       readonly close: () => void;
@@ -275,7 +274,7 @@ async function* paced(chunk: Chunk, messages: number, pauseMs: number): AsyncIte
 }
 
 describe("Hostile requests (issue #61)", () => {
-  it.scopedLive("reads each served authority as the host the fixture names", () =>
+  it.live("reads each served authority as the host the fixture names", () =>
     Effect.gen(function* () {
       const port = yield* serve("127.0.0.1");
       const session = yield* raw.connect(`http://127.0.0.1:${port}`);
@@ -290,7 +289,7 @@ describe("Hostile requests (issue #61)", () => {
     }),
   );
 
-  it.scopedLive.skipIf(!ipv6LoopbackBinds)(
+  it.live.skipIf(!ipv6LoopbackBinds)(
     "serves the generated client at an IPv6 literal address (needs an IPv6 loopback address)",
     () =>
       Effect.gen(function* () {
@@ -312,7 +311,7 @@ describe("Hostile requests (issue #61)", () => {
       }),
   );
 
-  it.scopedLive("answers each rejected authority with INVALID_ARGUMENT and keeps serving", () =>
+  it.live("answers each rejected authority with INVALID_ARGUMENT and keeps serving", () =>
     Effect.gen(function* () {
       const port = yield* serve("127.0.0.1");
       const session = yield* raw.connect(`http://127.0.0.1:${port}`);
@@ -324,7 +323,7 @@ describe("Hostile requests (issue #61)", () => {
     }),
   );
 
-  it.scopedLive("reads the authority from host when :authority is absent", () =>
+  it.live("reads the authority from host when :authority is absent", () =>
     Effect.gen(function* () {
       const port = yield* serve("127.0.0.1");
       const session = yield* raw.connect(`http://127.0.0.1:${port}`);
@@ -342,7 +341,7 @@ describe("Hostile requests (issue #61)", () => {
     }),
   );
 
-  it.scopedLive("keeps serving after a 10 KiB authority", () =>
+  it.live("keeps serving after a 10 KiB authority", () =>
     Effect.gen(function* () {
       const port = yield* serve("127.0.0.1");
       const session = yield* raw.connect(`http://127.0.0.1:${port}`);
@@ -362,7 +361,7 @@ describe("Hostile requests (issue #61)", () => {
     }),
   );
 
-  it.scopedLive("resets only the stream of a request that throws inside the listener", () =>
+  it.live("resets only the stream of a request that throws inside the listener", () =>
     Effect.gen(function* () {
       const { authority } = fixtures.throwingRequest;
       yield* throwingAuthority(authority);
@@ -379,7 +378,7 @@ describe("Hostile requests (issue #61)", () => {
     }),
   );
 
-  it.scopedLive("serves every service the server is built with", () =>
+  it.live("serves every service the server is built with", () =>
     Effect.gen(function* () {
       const server = EffectGrpcServer.GrpcServerBuilder()
         .withService(yield* effectProto.HelloWorldAPIServiceTag)
@@ -414,7 +413,7 @@ describe("Hostile requests (issue #61)", () => {
     ),
   );
 
-  it.scopedLive("an empty authority is reset by HTTP/2 before the server sees it", () =>
+  it.live("an empty authority is reset by HTTP/2 before the server sees it", () =>
     Effect.gen(function* () {
       const port = yield* serve("127.0.0.1");
       const session = yield* raw.connect(`http://127.0.0.1:${port}`);
@@ -429,7 +428,7 @@ describe("Hostile requests (issue #61)", () => {
     }),
   );
 
-  it.scopedLive("limits each request message to 4 MiB and keeps serving", () =>
+  it.live("limits each request message to 4 MiB and keeps serving", () =>
     Effect.gen(function* () {
       const port = yield* serve("127.0.0.1");
       const baseUrl = `http://127.0.0.1:${port}`;
@@ -482,7 +481,7 @@ describe("Hostile requests (issue #61)", () => {
     }),
   );
 
-  it.scopedLive("limits each request message to the readMaxBytes the server is built with", () =>
+  it.live("limits each request message to the readMaxBytes the server is built with", () =>
     Effect.gen(function* () {
       const { readMaxBytes, nameAtLimit, nameJustOverLimit } = fixtures.configuredMessageLimit;
       const port = yield* serve("127.0.0.1", { readMaxBytes });
@@ -503,7 +502,7 @@ describe("Hostile requests (issue #61)", () => {
     }),
   );
 
-  it.scopedLive("refuses at build a readMaxBytes outside 1 to 4294967295", () =>
+  it.live("refuses at build a readMaxBytes outside 1 to 4294967295", () =>
     Effect.gen(function* () {
       const { invalid, smallest, largest } = fixtures.readMaxBytesRange;
       const builder = EffectGrpcServer.GrpcServerBuilder().withService(
@@ -514,16 +513,16 @@ describe("Hostile requests (issue #61)", () => {
           Effect.map(
             Exit.match({
               onFailure: (cause) =>
-                Cause.isIllegalArgumentException(Cause.squash(cause)) ?
-                  "IllegalArgumentException"
-                : String(Cause.squash(cause)),
+                Cause.isIllegalArgumentError(Cause.squash(cause)) ? "IllegalArgumentError" : (
+                  String(Cause.squash(cause))
+                ),
               onSuccess: () => "built",
             }),
           ),
         ),
       );
       expect(built, `build with readMaxBytes ${invalid.join(", ")}`).toEqual(
-        invalid.map(() => "IllegalArgumentException"),
+        invalid.map(() => "IllegalArgumentError"),
       );
 
       const servedBy = (readMaxBytes: number, names: ReadonlyArray<string>) =>
@@ -558,12 +557,12 @@ describe("Hostile requests (issue #61)", () => {
     ),
   );
 
-  it.scopedLive("stops while clients that had a message refused keep their connections", () =>
+  it.live("stops while clients that had a message refused keep their connections", () =>
     Effect.gen(function* () {
       const { stopDeadlineMs } = fixtures.refusedClientsConnected;
       const name = expand(fixtures.messageLimit.nameOverLimit);
-      const serverScope = yield* Scope.fork(yield* Effect.scope, ExecutionStrategy.sequential);
-      const port = yield* serve("127.0.0.1").pipe(Scope.extend(serverScope));
+      const serverScope = yield* Scope.fork(yield* Effect.scope, "sequential");
+      const port = yield* serve("127.0.0.1").pipe(Scope.provide(serverScope));
       const baseUrl = `http://127.0.0.1:${port}`;
 
       const generated = Context.get(
@@ -587,8 +586,8 @@ describe("Hostile requests (issue #61)", () => {
         )),
       };
       // The server stops in an uninterruptible finalizer, so the deadline must not wait for it.
-      const stopped = yield* Scope.close(serverScope, Exit.void).pipe(
-        Effect.disconnect,
+      const stopping = yield* Effect.forkDetach(Scope.close(serverScope, Exit.void));
+      const stopped = yield* Fiber.join(stopping).pipe(
         Effect.timeoutOption(Duration.millis(stopDeadlineMs)),
       );
 
@@ -605,7 +604,7 @@ describe("Hostile requests (issue #61)", () => {
     }),
   );
 
-  it.scopedLive("closes a refused request that its client keeps sending", () =>
+  it.live("closes a refused request that its client keeps sending", () =>
     Effect.gen(function* () {
       const { closeDeadlineMs } = fixtures.unfinishedUpload;
       const name = expand(fixtures.messageLimit.nameOverLimit);
@@ -648,7 +647,7 @@ describe("Hostile requests (issue #61)", () => {
     }),
   );
 
-  it.scopedLive("delivers a refusal that waits behind a stalled connection", () =>
+  it.live("delivers a refusal that waits behind a stalled connection", () =>
     Effect.gen(function* () {
       const { downloadName, downloadBytes, fillMs, stallMs, closeDeadlineMs } =
         fixtures.stalledConnection;
@@ -665,9 +664,9 @@ describe("Hostile requests (issue #61)", () => {
       const authority = `127.0.0.1:${port}`;
 
       proxy.reading(false);
-      yield* Effect.fork(raw.getGreeting(session, "grpc", authority, downloadName));
+      yield* Effect.forkChild(raw.getGreeting(session, "grpc", authority, downloadName));
       yield* Effect.sleep(Duration.millis(fillMs));
-      const refused = yield* Effect.fork(
+      const refused = yield* Effect.forkChild(
         raw.getGreetingUntilClosed(
           session,
           "grpc",
@@ -676,7 +675,7 @@ describe("Hostile requests (issue #61)", () => {
         ),
       );
       yield* Effect.sleep(Duration.millis(stallMs));
-      const whileStalled = yield* Fiber.poll(refused);
+      const whileStalled = yield* Effect.sync(() => Option.fromNullishOr(refused.pollUnsafe()));
       proxy.reading(true);
       const reply = yield* Fiber.join(refused).pipe(
         Effect.timeoutOption(Duration.millis(closeDeadlineMs)),
@@ -698,7 +697,7 @@ describe("Hostile requests (issue #61)", () => {
     }),
   );
 
-  it.scopedLive("sends a client-streaming answer that is ready before the request ends", () =>
+  it.live("sends a client-streaming answer that is ready before the request ends", () =>
     Effect.gen(function* () {
       const port = yield* serveStreaming({
         ...streamingTestService,
@@ -727,7 +726,7 @@ describe("Hostile requests (issue #61)", () => {
     }),
   );
 
-  it.scopedLive("stops a bidi handler when its client cancels the call", () =>
+  it.live("stops a bidi handler when its client cancels the call", () =>
     Effect.gen(function* () {
       const { replyEveryMs, replies: expectedReplies } = fixtures.cancelledBidi;
       const running = { handlers: 0 };

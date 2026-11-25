@@ -15,4 +15,4 @@ Each factory is named `make` plus its tag's name, so `service UserService` gives
 
 **Breaking.** The tag keys change. The default service tag has the key `<ProtoId>/Service`, the default client tag has `<ProtoId>/Client`, and a factory's tag has `<ProtoId>/Service<key>` or `<ProtoId>/Client<key>`. Both default tags had the key `<ProtoId><any>`. A Context given both a service and a client of one proto service kept only the one added last, and both tags returned it. Code that uses the default tags needs no change. Regenerate every package that shares these tags, so that all of them use the new keys.
 
-The live layers now spell their provided type `Tag["Identifier"]` instead of `Context.Tag.Identifier<Tag>`. Both name the same type.
+The live layers now spell their provided type `Tag["Identifier"]` instead of `Context.Tag.Identifier<Tag>`. On Effect 3 both named the same type. Effect 4 has no `Context.Tag`.

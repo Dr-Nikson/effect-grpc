@@ -6,7 +6,7 @@ A client calls a unary method and gets the handler's response, over both the gRP
 
 - `rpc-grpc` returns the greeting for `GetGreeting` over gRPC (HTTP/2, binary protobuf).
 - `rpc-connect` returns HTTP 200 with the greeting for `GetGreeting` over Connect JSON.
-- `rpc-handler` runs the Effect handler once per call. The server logs `getGreeting called, this is really cool!` with `method: com.example.v1.HelloWorldAPI/GetGreeting`.
+- `rpc-handler` runs the Effect handler once per call. The server logs `getGreeting called, this is really cool!` with `method: 'com.example.v1.HelloWorldAPI/GetGreeting'`.
 - `rpc-payload` delivers request fields to the handler, so the greeting repeats `name`.
 
 ## How to get to it (user POV)

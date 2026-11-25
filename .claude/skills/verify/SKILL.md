@@ -76,8 +76,6 @@ Tear down with `stop` or `cleanup`:
 
 The server is stateless, so there is no data to seed.
 
-If the server exits during startup with `ERR_PACKAGE_PATH_NOT_EXPORTED … './RunnerStorage'`, the lockfile resolves stale peers of `@effect/platform-node` (`@effect/cluster` older than 0.56). The commented pins in the `pnpm-workspace.yaml` catalog fix that.
-
 ## Doctor
 
 ```sh
@@ -113,7 +111,7 @@ Run doctor first whenever anything looks off. If doctor reports FAIL on a stale 
 
 `call` takes a protocol (`grpc`, `connect` or `http1`), a proto method name on the route `/com.example.v1.HelloWorldAPI/<Method>`, and an optional JSON request that defaults to `{"name":"verify"}`. `probe` takes `getGreeting` or `faceTheError` and an optional name.
 
-The handler's log line is the server-side proof. For example, a `GetGreeting` call logs `getGreeting called, this is really cool!` with `method: com.example.v1.HelloWorldAPI/GetGreeting`.
+The handler's log line is the server-side proof. For example, a `GetGreeting` call logs `getGreeting called, this is really cool!` with `method: 'com.example.v1.HelloWorldAPI/GetGreeting'`.
 
 ## Evidence
 
@@ -158,7 +156,7 @@ The evidence stays where it was.
 
 ## Known failures on this base
 
-None. Every journey passed on 2026-11-24 on branch `v4/p06-typed-tags` (PR #89), in this devcontainer (Node 24, where `localhost` resolves to `::1` first). When a journey fails on a base, list it here with the date, the branch and the symptom, and keep its correct expected result. Do not edit a journey to match a bug.
+None. Every journey passed on 2026-11-24 on branch `v4/p15-effect-v4`, on Effect 4.1.5, in this devcontainer (Node 24, where `localhost` resolves to `::1` first). When a journey fails on a base, list it here with the date, the branch and the symptom, and keep its correct expected result. Do not edit a journey to match a bug.
 
 ## Helpers
 

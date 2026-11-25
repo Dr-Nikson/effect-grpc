@@ -34,13 +34,13 @@ test("GrpcClientConfig.makeTag gives each service a tag that only a layer for th
 
   const liveLayerFn: {
     <
-      CfgTag extends Context.Tag<
+      CfgTag extends Context.Service<
         Client.GrpcClientConfig<"com.example.v1.HelloWorldAPI">,
         Client.GrpcClientConfig<"com.example.v1.HelloWorldAPI">
       >,
     >(
       configTag: CfgTag,
-    ): Layer.Layer<Service1, never, Context.Tag.Identifier<CfgTag>>;
+    ): Layer.Layer<Service1, never, CfgTag["Identifier"]>;
   } = null as any;
 
   expectTypeOf(liveLayerFn).toBeCallableWith(Service1ConfigTag);

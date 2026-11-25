@@ -14,18 +14,12 @@
     "effect": "catalog:",
     "@bufbuild/protobuf": "catalog:",
     "@connectrpc/connect": "catalog:",
-    "@dr_nikson/effect-grpc": "workspace:3.0.0-alpha.5"
+    "@dr_nikson/effect-grpc": "workspace:3.0.0"
   },
   "devDependencies": {
     "@bufbuild/buf": "catalog:",
     "@bufbuild/protoc-gen-es": "catalog:",
-    "@effect/cluster": "catalog:",
-    "@effect/experimental": "catalog:",
-    "@effect/platform": "catalog:",
     "@effect/platform-node": "catalog:",
-    "@effect/rpc": "catalog:",
-    "@effect/sql": "catalog:",
-    "@effect/workflow": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

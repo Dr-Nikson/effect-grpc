@@ -71,7 +71,7 @@ export interface GrpcClientRuntime {
  * @category Client
  * @since 0.2.0
  */
-export const GrpcClientRuntime: Context.Tag<GrpcClientRuntime, GrpcClientRuntime> =
+export const GrpcClientRuntime: Context.Service<GrpcClientRuntime, GrpcClientRuntime> =
   internal.grpcClientRuntimeTag;
 
 /**
@@ -208,7 +208,7 @@ export const GrpcClientConfig: {
 
   makeTag<Service extends string>(
     service: Service,
-  ): Context.Tag<GrpcClientConfig<Service>, GrpcClientConfig<Service>>;
+  ): Context.Service<GrpcClientConfig<Service>, GrpcClientConfig<Service>>;
 } = Object.assign(internal.makeGrpcClientConfig.bind(null), {
   makeTag: internal.makeGrpcClientConfigTag,
 });

@@ -1,4 +1,4 @@
-import { Effect, Runtime } from "effect";
+import { Context, Effect } from "effect";
 
 import type { DescMessage, MessageInitShape, MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
@@ -94,7 +94,7 @@ export interface ServerExecutor<Ctx> {
  * @internal
  */
 export const ServerExecutor: {
-  (runtime: Runtime.Runtime<never>): ServerExecutor<any>;
+  (context: Context.Context<never>): ServerExecutor<any>;
 } = internal.ServerExecutorLive.make;
 
 /**
