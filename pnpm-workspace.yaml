@@ -32,8 +32,9 @@ catalogs:
     "@bufbuild/protoc-gen-es": ^2.17.0
     '@bufbuild/protobuf': ^2.17.0
     '@connectrpc/connect': ^2.3.0
-    # The first release that the library's tests pass on. 4.0.0 and 4.0.1 load @opentelemetry/resources, so
-    # the server cannot start, and 4.0.2 to 4.0.6 send another status or message in two cases that the unit
-    # tests pin. Its own peer on effect is ^4.0.7, so the two need effect 4.0.7 or later.
+    # The library's tests pass from 4.0.7, with effect and this package at the same release. 4.0.0 and
+    # 4.0.1 of this package load @opentelemetry/resources, so the server cannot start. With 4.0.2 to 4.0.6 of
+    # both, two cases that the unit tests pin send another status or message. Its own peer on effect is
+    # ^4.0.7, so an install needs effect 4.0.7 or later.
     '@effect/opentelemetry': ^4.0.7
     effect: ^4.0.0

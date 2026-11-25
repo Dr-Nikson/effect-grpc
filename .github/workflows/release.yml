@@ -202,9 +202,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # npm 11.21.0 is the first npm that changes a dist-tag with OIDC (npm/cli#10056). A root
-      # dependency would put it first on PATH for the publish too, so the pin lives here, after
-      # the publish, and the publish keeps the npm that setup-node provides.
+      # npm 11.21.0 is the first npm 11 that changes a dist-tag with OIDC (npm/cli#10056). It is
+      # installed after the publish, so nothing before it changes. zizmor asks for a lockfile entry
+      # instead, but a root dependency would also replace the npm that `changeset publish` calls for
+      # `npm info` and `npm profile get`.
       - name: Install npm for dist-tags
         run: npm install --global npm@11.21.0 # zizmor: ignore[adhoc-packages]
 

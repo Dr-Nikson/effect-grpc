@@ -9,14 +9,6 @@ export const EFFECT_DIST_TAG = "effect-v4";
 const SEMVER =
   /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
-/**
- * Builds the arguments of the `npm` command that points the Effect dist-tag at the version in a
- * package manifest. The version reaches npm's argument list, so only a plain semver version passes.
- *
- * @param {{ name?: unknown, version?: unknown } | null | undefined} manifest the parsed package.json
- *   of the library that the release published
- * @returns {string[]}
- */
 export function distTagArguments(manifest) {
   if (manifest?.name !== PACKAGE_NAME) {
     throw new Error(

@@ -28,13 +28,6 @@ const FAKE_NPM = [
   "",
 ].join("\n");
 
-/**
- * Runs the script with a stand-in `npm` first on PATH. The stand-in records its arguments and
- * exits with `npmStatus`.
- *
- * @param {unknown} manifest
- * @param {number} npmStatus
- */
 function runWithFakeNpm(manifest, npmStatus) {
   const dir = mkdtempSync(join(tmpdir(), "dist-tag-"));
   const bin = join(dir, "bin");
