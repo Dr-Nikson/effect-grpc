@@ -7,8 +7,7 @@
   "exclude": [
     "node_modules/**/*",
     "dist/**/*",
-    "src/**/*.test-d.ts",
-    "src/**/*.test.ts"
+    "src/**/*.test-d.ts"
   ],
   "compilerOptions": {
     "rootDir": "./src",

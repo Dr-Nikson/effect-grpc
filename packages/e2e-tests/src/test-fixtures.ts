@@ -1,5 +1,5 @@
 // packages/e2e-tests/src/test-fixtures.ts
-import { Effect, Layer } from "effect";
+import { Context, Effect, Layer } from "effect";
 
 import { Code } from "@connectrpc/connect";
 import { EffectGrpcClient, EffectGrpcServer, GrpcException } from "@dr_nikson/effect-grpc";
@@ -62,6 +62,36 @@ export function clientLayer(
       Layer.provide(EffectGrpcClient.liveGrpcClientRuntimeLayer()),
     );
 }
+
+export class TestServer extends Context.Tag("e2e/TestServer")<
+  TestServer,
+  EffectGrpcServer.GrpcServerAddress
+>() {}
+
+export function testServer(listen: {
+  readonly host: string;
+  readonly port: number;
+}): Layer.Layer<
+  TestServer,
+  EffectGrpcServer.GrpcServerBindError,
+  effectProto.HelloWorldAPIServiceTag["Identifier"]
+> {
+  return Layer.scoped(
+    TestServer,
+    Effect.flatMap(createServer(), (server) => server.listen(listen)),
+  );
+}
+
+/**
+ * Provide it inside `testServer`. The server's stop waits for open sessions, so the client's
+ * session has to close first. Build no server inside it: the generated client and service tags
+ * share one key, so a server built there would read the client as its service.
+ */
+export const testClient: Layer.Layer<
+  effectProto.HelloWorldAPIClientTag["Identifier"],
+  never,
+  TestServer
+> = Layer.unwrapEffect(Effect.map(TestServer, clientLayer));
 
 // Re-export proto types for convenience
 export { effectProto };
