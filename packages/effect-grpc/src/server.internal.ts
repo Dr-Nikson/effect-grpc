@@ -1,5 +1,15 @@
 // packages/effect-grpc/src/server.internal.ts
-import { Effect, ExecutionStrategy, Exit, Option, Predicate, Record, Scope, Types } from "effect";
+import {
+  Cause,
+  Effect,
+  ExecutionStrategy,
+  Exit,
+  Option,
+  Predicate,
+  Record,
+  Scope,
+  Types,
+} from "effect";
 import http2 from "node:http2";
 
 import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
@@ -9,7 +19,8 @@ import type {
   HandlerContext,
   ServiceImpl,
 } from "@connectrpc/connect";
-import { createContextValues } from "@connectrpc/connect";
+import { Code, createContextValues } from "@connectrpc/connect";
+import type { ConnectNodeAdapterOptions } from "@connectrpc/connect-node";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 
 import * as GrpcException from "./grpcException.js";
@@ -42,6 +53,106 @@ export function makeGrpcService<
     } as T.GrpcService<Tag, Proto, Ctx>;
   };
 }
+
+const grpcDefaultMaxReceiveMessageBytes = 4 * 1024 * 1024;
+
+/** Connect accepts no larger value. */
+const largestReadMaxBytes = 0xffffffff;
+
+type RequestListener = (req: http2.Http2ServerRequest, res: http2.Http2ServerResponse) => void;
+
+/**
+ * Node's HTTP/2 client strips the brackets from an IPv6 literal when it builds `:authority`, so it
+ * sends `::1:8000` for `http://[::1]:8000`. `::1:8000` is also a complete IPv6 address, but a
+ * valid authority must bracket an IPv6 address, and Node's client always appends the port.
+ */
+const readAuthority = (authority: string): Option.Option<string> =>
+  URL.canParse(`http://${authority}`) ?
+    Option.some(authority)
+  : Option.liftPredicate(authority.replace(/^(.+):(\d+)$/, "[$1]:$2"), (bracketed) =>
+      URL.canParse(`http://${bracketed}`),
+    );
+
+/**
+ * A gRPC or gRPC-web client reads the status from an HTTP 200 response. connect-go clients, buf
+ * curl among them, also reject a content type that names a codec other than the request's, so the
+ * reply echoes it.
+ */
+const refuseMalformedAuthority = (
+  req: http2.Http2ServerRequest,
+  res: http2.Http2ServerResponse,
+): void => {
+  const message = "malformed request authority";
+  const grpc = Option.fromNullable(req.headers["content-type"]).pipe(
+    Option.filter((contentType) =>
+      /^application\/grpc(?:-web(?:-text)?)?(?:\+(?:json(?:; ?charset=utf-?8)?|proto))?$/i.test(
+        contentType,
+      ),
+    ),
+  );
+  if (Option.isSome(grpc)) {
+    // Headers set before end() leave in one HEADERS frame that ends the stream, which is a gRPC
+    // trailers-only response. writeHead() would send them without END_STREAM.
+    res.statusCode = 200;
+    res.setHeader("content-type", grpc.value);
+    res.setHeader("grpc-status", String(Code.InvalidArgument));
+    res.setHeader("grpc-message", encodeURIComponent(message));
+    res.end();
+    return;
+  }
+  res.statusCode = 400;
+  res.setHeader("content-type", "application/json");
+  res.end(JSON.stringify({ code: "invalid_argument", message }));
+};
+
+/**
+ * connect-node stops reading a request it refuses or answers before the request ends. The client
+ * then keeps sending, and Node keeps the stream until its request is read to the end, so graceful
+ * shutdown waits for it. Once the response's END_STREAM has been serialized, RFC 9113 section 8.1
+ * lets the server reset the request with NO_ERROR, and destroying the stream releases it. Node has
+ * no event for that moment, and destroying the stream earlier drops the response.
+ */
+const closeUnreadRequest = (stream: http2.ServerHttp2Stream): void => {
+  if (stream.destroyed) return;
+  const { localClose, state } = stream.state;
+  if (localClose === 1) {
+    stream.close(http2.constants.NGHTTP2_NO_ERROR);
+  } else if (state !== http2.constants.NGHTTP2_STREAM_STATE_IDLE) {
+    // Node reports a stream that nghttp2 has already freed, because both sides ended, as idle.
+    setTimeout(closeUnreadRequest, 100, stream);
+    return;
+  }
+  stream.destroy();
+};
+
+/**
+ * connect-node builds each request's URL from its authority synchronously inside the listener, and
+ * Node turns a throw there into an uncaught exception that stops the process.
+ */
+const makeRequestListener = (
+  options: Pick<ConnectNodeAdapterOptions, "routes" | "interceptors" | "contextValues"> & {
+    readonly readMaxBytes: number;
+  },
+): RequestListener => {
+  const handler = connectNodeAdapter(options);
+  return (req, res) => {
+    res.stream.once("finish", () => {
+      if (!res.stream.readableEnded) setTimeout(closeUnreadRequest, 10, res.stream);
+    });
+    try {
+      const authority = readAuthority(req.authority);
+      if (Option.isNone(authority)) {
+        refuseMalformedAuthority(req, res);
+        return;
+      }
+      // Connect reads req.authority, and Node's getter returns this header first.
+      if (authority.value !== req.authority) req.headers[":authority"] = authority.value;
+      handler(req, res);
+    } catch {
+      res.stream.close(http2.constants.NGHTTP2_INTERNAL_ERROR);
+    }
+  };
+};
 
 type ListenOptions = Parameters<T.GrpcServer<unknown>["listen"]>[0];
 
@@ -178,6 +289,7 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
     public readonly transformation: (
       executor: ProtoRuntime.ServerExecutor<HandlerContext>,
     ) => ProtoRuntime.ServerExecutor<Ctx>,
+    public readonly readMaxBytes: number,
   ) {}
 
   readonly _Services: Types.Contravariant<Services> = (a) => a;
@@ -187,13 +299,15 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
   ): Effect.Effect<T.GrpcServerAddress, T.GrpcServerBindError, Scope.Scope> {
     const routes = this.routes.bind(this);
     const makeExecutor = this.makeExecutor.bind(this);
+    const { readMaxBytes } = this;
 
     return Effect.gen(function* () {
       const executor = yield* makeExecutor();
       const handler = yield* Effect.sync(() =>
-        connectNodeAdapter({
+        makeRequestListener({
           routes: routes(executor),
           interceptors: [],
+          readMaxBytes,
           contextValues(req): ContextValues {
             // TODO: implement proper request transformations
             console.log("Creating context values for request", req.url);
@@ -289,15 +403,13 @@ class EffectGrpcServerLive<in Services, Ctx> implements T.GrpcServer<Services> {
     });
   }
 
-  private routes(
-    executor: ProtoRuntime.ServerExecutor<Ctx>,
-  ): (router: ConnectRouter) => ConnectRouter {
+  private routes(executor: ProtoRuntime.ServerExecutor<Ctx>): (router: ConnectRouter) => void {
     const allServices: T.GrpcService<any, any, Ctx>[] = Object.values(this.services);
 
     return (router: ConnectRouter) => {
-      return allServices.reduce((router, service: T.GrpcService<any, any, Ctx>) => {
-        return router.service(service.definition, service.implementation(executor));
-      }, router);
+      for (const service of allServices) {
+        router.service(service.definition, service.implementation(executor));
+      }
     };
   }
 
@@ -353,11 +465,23 @@ export class ConnectEsGprcServerBuilder<Ctx, Services>
     });
   }
 
-  build<This extends T.GrpcServerBuilder<Ctx, Services>>(this: This): T.GrpcServer<Services> {
+  build<This extends T.GrpcServerBuilder<Ctx, Services>>(
+    this: This,
+    { readMaxBytes = grpcDefaultMaxReceiveMessageBytes }: T.GrpcServerOptions = {},
+  ): T.GrpcServer<Services> {
+    if (!Number.isInteger(readMaxBytes) || readMaxBytes < 1 || readMaxBytes > largestReadMaxBytes) {
+      throw new Cause.IllegalArgumentException(
+        `readMaxBytes must be an integer from 1 to ${largestReadMaxBytes}, got ${readMaxBytes}`,
+      );
+    }
     const executorTransformation = ProtoRuntime.ServerExecutorTransformer().transformContext<Ctx>(
       this.transformCtx,
     );
 
-    return new EffectGrpcServerLive(this.services, executorTransformation.transformation);
+    return new EffectGrpcServerLive(
+      this.services,
+      executorTransformation.transformation,
+      readMaxBytes,
+    );
   }
 }

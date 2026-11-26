@@ -1,0 +1,120 @@
+{
+  "servedAuthorities": [
+    {
+      "case": "the form Node's HTTP/2 client sends for http://[::1]:50051",
+      "authority": "::1:50051",
+      "urlHost": "[::1]:50051"
+    },
+    {
+      "case": "the form Node sends for a four-digit port, which is also a valid IPv6 address on its own",
+      "authority": "::1:8080",
+      "urlHost": "[::1]:8080"
+    },
+    {
+      "case": "an unbracketed global IPv6 address and port",
+      "authority": "2001:db8::1:8443",
+      "urlHost": "[2001:db8::1]:8443"
+    },
+    {
+      "case": "an unbracketed IPv4-mapped IPv6 address and port",
+      "authority": "::ffff:127.0.0.1:8080",
+      "urlHost": "[::ffff:7f00:1]:8080"
+    },
+    {
+      "case": "a bracketed IPv6 address and port",
+      "authority": "[::1]:50051",
+      "urlHost": "[::1]:50051"
+    },
+    {
+      "case": "an IPv4 address and port",
+      "authority": "127.0.0.1:50051",
+      "urlHost": "127.0.0.1:50051"
+    },
+    {
+      "case": "a host name and port",
+      "authority": "localhost:50051",
+      "urlHost": "localhost:50051"
+    }
+  ],
+  "rejectedAuthorities": [
+    { "case": "an out-of-range port", "authority": "localhost:99999" },
+    { "case": "a non-numeric port", "authority": "localhost:abc" },
+    { "case": "an unclosed IPv6 bracket", "authority": "[::1" },
+    { "case": "an unbracketed IPv6 address with an out-of-range port", "authority": "::1:99999" },
+    { "case": "an unbracketed IPv6 address with no port", "authority": "::1" },
+    { "case": "an unbracketed IPv6 address with a zone ID", "authority": "fe80::1%eth0:8080" }
+  ],
+  "grpcContentTypes": [
+    "application/grpc",
+    "application/grpc+proto",
+    "application/grpc+json; charset=utf-8",
+    "application/grpc-web",
+    "application/grpc-web+proto",
+    "application/grpc-web-text+proto"
+  ],
+  "longAuthorities": [
+    {
+      "case": "a 10 KiB host name, which is a valid authority",
+      "authority": { "repeat": "a", "times": 10240 },
+      "served": true
+    },
+    {
+      "case": "a 10 KiB run of digits, which is not a valid authority",
+      "authority": { "repeat": "1", "times": 10240 },
+      "served": false
+    }
+  ],
+  "emptyAuthority": "",
+  "ipv6Loopback": "::1",
+  "messageLimit": {
+    "limitBytes": 4194304,
+    "nameAtLimit": { "repeat": "x", "times": 4194299 },
+    "nameJustOverLimit": { "repeat": "x", "times": 4194300 },
+    "nameOverLimit": { "repeat": "x", "times": 5242880 }
+  },
+  "configuredMessageLimit": {
+    "case": "a server built with readMaxBytes of 5 MiB, so a message over the 4 MiB default is served",
+    "readMaxBytes": 5242880,
+    "nameAtLimit": { "repeat": "x", "times": 5242875 },
+    "nameJustOverLimit": { "repeat": "x", "times": 5242876 }
+  },
+  "earlyAnswer": {
+    "case": "a client-streaming handler that answers after the first message, while its client sends one message every 200 ms under a 1 second deadline",
+    "message": "next",
+    "messages": 10,
+    "pauseMs": 200,
+    "deadlineMs": 1000,
+    "answer": "first 4"
+  },
+  "cancelledBidi": {
+    "case": "a bidi handler that replies every 20 ms until it is stopped, and a client that cancels the call after three replies",
+    "replyEveryMs": 20,
+    "replies": ["reply 0", "reply 1", "reply 2"]
+  },
+  "refusedClientsConnected": {
+    "case": "the generated client and connect-node's gRPC, gRPC-web and Connect clients each get one 5 MiB message refused and keep their connections while the server stops",
+    "stopDeadlineMs": 2000
+  },
+  "unfinishedUpload": {
+    "case": "a client that keeps sending a 5 MiB message after the server refused it, waiting for the server to close the stream as curl and buf curl do",
+    "closeDeadlineMs": 2000
+  },
+  "readMaxBytesRange": {
+    "case": "readMaxBytes values outside 1 to 4294967295, as Number() reads them, and the two bounds",
+    "invalid": ["NaN", "0", "-1", "1.5", "4294967296", "Infinity"],
+    "smallest": 1,
+    "largest": 4294967295
+  },
+  "throwingRequest": {
+    "case": "a request whose authority getter throws inside the request listener, standing in for a throw that no known request causes",
+    "authority": "listener-throws.test:50051"
+  },
+  "stalledConnection": {
+    "case": "a 16 MiB answer fills a connection whose client stops reading for a second, and the server refuses a 5 MiB message on that connection meanwhile",
+    "downloadName": "download",
+    "downloadBytes": 16777216,
+    "fillMs": 300,
+    "stallMs": 1000,
+    "closeDeadlineMs": 5000
+  }
+}
