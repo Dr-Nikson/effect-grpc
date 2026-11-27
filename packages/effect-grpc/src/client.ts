@@ -9,9 +9,9 @@ import type { Http2SessionOptions } from "@connectrpc/connect-node";
 import type { Compression } from "@connectrpc/connect/protocol";
 
 import * as internal from "./client.internal.js";
-import type { ClientExecutor } from "./protoRuntime.js";
+import type * as ProtoRuntime from "./protoRuntime.js";
 
-export type { ClientExecutor };
+export type { ClientExecutor } from "./protoRuntime.js";
 
 export type GrpcClientRuntimeTypeId = typeof internal.grpcClientRuntimeTypeId;
 
@@ -46,8 +46,8 @@ export interface GrpcClientRuntime {
   makeExecutor<Shape extends GenServiceMethods>(
     serviceDefinition: GenService<Shape>,
     methodNames: ReadonlyArray<keyof GenService<Shape>["method"]>,
-    config: GrpcClientConfig<never>,
-  ): Effect.Effect<ClientExecutor<Shape>, never, Scope.Scope>;
+    config: GrpcClientConfig<any>,
+  ): Effect.Effect<ProtoRuntime.ClientExecutor<Shape>, never, Scope.Scope>;
 }
 /**
  * Context tag for accessing the GrpcClient service.

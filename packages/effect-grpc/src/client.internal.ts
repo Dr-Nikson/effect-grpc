@@ -41,7 +41,7 @@ export const grpcClientRuntimeTag = Context.GenericTag<T.GrpcClientRuntime, T.Gr
  * The session manager is automatically aborted when the scope closes.
  * This is important because otherwise we might stuck waiting for the connections to timeout
  */
-function createManagedSessionManager(config: T.GrpcClientConfig<never>) {
+function createManagedSessionManager(config: T.GrpcClientConfig<any>) {
   return Effect.acquireRelease(
     Effect.sync(
       () => new Http2SessionManager(config.baseUrl, config.pingOptions, config.http2SessionOptions),
@@ -60,7 +60,7 @@ export function liveGrpcClientRuntime(): Layer.Layer<T.GrpcClientRuntime> {
     makeExecutor<Shape extends GenServiceMethods>(
       serviceDefinition: GenService<Shape>,
       methodNames: ReadonlyArray<keyof GenService<Shape>["method"]>,
-      config: T.GrpcClientConfig<never>,
+      config: T.GrpcClientConfig<any>,
     ) {
       return Effect.gen(function* () {
         // Create managed HTTP/2 session manager as a resource
