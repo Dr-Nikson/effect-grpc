@@ -65,11 +65,11 @@ When developing new features or making changes, follow this iterative process:
 
 5. **Fix Compilation Errors:** If the build fails, address the TypeScript errors reported by the compiler. Repeat steps 1-3 until the package compiles successfully.
 
-6. **Run Type Tests and Unit Tests:** Execute the type tests and the runtime unit tests using Vitest for modules you have modified. Ensure you are using Node.js v22+ as specified in `engines`. Run the test commands from the **root directory**:
+6. **Run Type Tests and Tests:** Execute the type tests and the runtime tests using Vitest for modules you have modified. Ensure you are using Node.js v22+ as specified in `engines`. Run the test commands from the **root directory**:
     ```bash
     # Run type tests for specific package
     pnpm --filter ./packages/effect-grpc run test:types
-    # Run the library's runtime unit tests (src/**/*.test.ts)
+    # Run the library's runtime tests (src/**/*.test.ts)
     pnpm --filter ./packages/effect-grpc run test
     ```
 
@@ -112,7 +112,8 @@ IMPORTANT: refer to the best practices and coding standards described in @agents
   ```bash
   pnpm run test:types # Uses vitest --typecheck.only
   ```
-- The library's runtime unit tests live in `packages/effect-grpc/src/**/*.test.ts`. The build leaves them out of `dist/`, and CI runs them through `pnpm -r run test`. From another directory, run them with `pnpm --dir <checkout>/packages/effect-grpc run test`.
+- Runtime tests live in `packages/effect-grpc/src/*.test.ts`. They use `@effect/vitest`, assert what a user of the generated code sees, and build servers and clients as Layers on port 0 (`src/testing/harness.ts`).
+- The generated code imports `@dr_nikson/effect-grpc` by name, which resolves to `dist`, so the runtime tests run against the built package. `pnpm run test` compiles the library, generates the test code from `proto/` into `src/generated` (git-ignored), type-checks the tests, and then runs them. The build leaves the tests, the harness and the generated code out of `dist`.
 
 ### GitHub Workflows
 - After changing `.github/workflows` or `.github/scripts`, run both checks from the root. Each must pass:

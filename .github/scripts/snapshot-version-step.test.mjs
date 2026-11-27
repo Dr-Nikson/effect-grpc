@@ -174,7 +174,6 @@ function changesetsSnapshot() {
     packages: [
       ["@dr_nikson/effect-grpc", UNVERSIONED],
       ["@dr_nikson/effect-grpc-example", "0.1.0"],
-      ["@dr_nikson/effect-grpc-e2e-tests", "0.1.0"],
     ].map(([name, version]) => ({ dir: `/repo/${name}`, packageJson: { name, version } })),
   };
   const { releases } = assembleReleasePlan(

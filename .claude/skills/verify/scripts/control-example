@@ -9,8 +9,7 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd -P)
 REPO=$(cd "$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)" && pwd -P)
 LIB=$REPO/packages/effect-grpc
 EXAMPLE=$REPO/packages/example
-E2E=$REPO/packages/e2e-tests
-FIXTURES=$E2E/src/fixtures/hostile-requests.json
+FIXTURES=$REPO/.claude/skills/verify/fixtures/hostile-requests.json
 DEFAULT_HOST=127.0.0.1
 EXAMPLE_DEFAULT_PORT=8000
 HOST_ENV=EFFECT_GRPC_EXAMPLE_HOST
@@ -210,7 +209,7 @@ stale_report() { # prints one STALE line per out-of-date artifact; status 1 when
     out=$LIB/dist/${f#"$LIB/src/"}
     out=${out%.ts}.js
     if [ ! -f "$out" ] || [ "$f" -nt "$out" ]; then echo "STALE lib: ${out#"$REPO/"} is older than ${f#"$REPO/"}"; bad=1; fi
-  done < <(find "$LIB/src" -name '*.ts' ! -name '*.d.ts' ! -name '*.test-d.ts' ! -name '*.test.ts')
+  done < <(find "$LIB/src" -name '*.ts' ! -name '*.d.ts' ! -name '*.test-d.ts' ! -name '*.test.ts' ! -path "$LIB/src/generated/*" ! -path "$LIB/src/testing/*")
   for f in server client address; do
     if [ ! -f "$EXAMPLE/dist/$f.js" ] || [ "$EXAMPLE/src/$f.ts" -nt "$EXAMPLE/dist/$f.js" ]; then echo "STALE example: packages/example/dist/$f.js"; bad=1; fi
   done
@@ -500,10 +499,11 @@ cmd_codegen() {
   r=$(ensure_run)
   f=$(next_evidence "$r" codegen)
   {
-    echo "# codegen at $(date -u +%FT%TZ): pnpm -r run build (each package build regenerates its bindings)"
+    echo "# codegen at $(date -u +%FT%TZ): pnpm -r run build (the example's build regenerates its bindings), then pnpm run generate:proto in packages/effect-grpc (its tests use those bindings)"
     (cd "$REPO" && pnpm -r run build) 2>&1 || rc=$?
+    (cd "$LIB" && pnpm run generate:proto) 2>&1 || rc=$?
     echo "build_exit_code=$rc"
-    for pkg in "$EXAMPLE" "$E2E"; do
+    for pkg in "$EXAMPLE" "$LIB"; do
       echo "## generated files in ${pkg#"$REPO/"}"
       (cd "$pkg" && find src/generated -type f | sort) || echo "(none: src/generated is missing)"
       while IFS= read -r g; do
@@ -529,12 +529,12 @@ run_hostile_driver() {
   err=$(mktemp)
   local cmd=(env HOSTILE_URL="$BASE_URL" HOSTILE_FIXTURES="$FIXTURES" HOSTILE_MODE="$mode"
     timeout 60 sh -c 'node --input-type=module <"$1"' sh "$SCRIPT_DIR/hostile-requests.mjs")
-  (cd "$E2E" && "${cmd[@]}") >"$out" 2>"$err" || rc=$?
+  (cd "$EXAMPLE" && "${cmd[@]}") >"$out" 2>"$err" || rc=$?
   sleep 0.3
   if instance_alive "$r"; then alive=yes; fi
   {
     echo "# $slug at $(date -u +%FT%TZ) url=$BASE_URL port=$PORT: the $mode checks of hostile-requests.mjs, with inputs from ${FIXTURES#"$REPO/"}"
-    printf '$ cd %q &&' "$E2E"
+    printf '$ cd %q &&' "$EXAMPLE"
     printf ' %q' "${cmd[@]}"
     echo
     echo "driver_exit_code=$rc"
@@ -680,7 +680,7 @@ Usage: control-example <command> [arguments] [--port <n>] [--host <address>] [--
   hostile-authority                          send the fixture's authority cases over gRPC and Connect; check each reply
   message-limit                              send messages at and over the 4 MiB limit; check each reply
   connect-method                             send an HTTP/2 CONNECT request; check that it gets 405 and the next calls work
-  taken-port                                 start a second example on this instance's port; check it fails fast
+  taken-port                                start a second example on this instance's port; check it fails fast
   stop                                       SIGTERM this checkout's instance; record the shutdown
   cleanup                                    stop if running, drop instance state, keep evidence
   evidence                                   print this checkout's current evidence directory

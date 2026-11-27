@@ -1,3 +1,4 @@
+# Generates the code that the library's tests run against. The output is git-ignored.
 # Learn more: https://buf.build/docs/configuration/v2/buf-gen-yaml
 version: v2
 inputs:
@@ -6,8 +7,7 @@ plugins:
   - local: protoc-gen-es
     opt: target=ts,import_extension=js
     out: src/generated
-  - local: protoc-gen-effect
+  # A package gets no .bin entry for its own bin, so run the built plugin directly.
+  - local: [node, bin/protoc-gen-effect]
     opt: target=ts,import_extension=js
     out: src/generated
-    exclude_types:
-      - com.example.v1.StreamingTestService
