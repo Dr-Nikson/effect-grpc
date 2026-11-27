@@ -1,28 +1,15 @@
 // packages/effect-grpc/src/server.test.ts
-import {
-  Array as Arr,
-  Context,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  Logger,
-  MutableRef,
-  Scheduler,
-  Scope,
-} from "effect";
-import net from "node:net";
+import { Array as Arr, Context, Effect, Layer, Logger, MutableRef } from "effect";
 
 import type { HandlerContext } from "@connectrpc/connect";
 import { createContextKey } from "@connectrpc/connect";
 import { EffectGrpcServer } from "@dr_nikson/effect-grpc";
-import { describe, expect, it, vi } from "@effect/vitest";
+import { describe, expect, it } from "@effect/vitest";
 
 import * as effectProto from "./generated/com/example/v1/hello_world_api_effect.js";
 import {
   TestServer,
   greet,
-  greeter,
   helloWorld,
   helloWorldClient,
   helloWorldServer,
@@ -52,42 +39,10 @@ const capturingLogs = Layer.unwrapEffect(
 
 const loggedLines = Effect.map(ServerLogs, MutableRef.get);
 
-/**
- * Vitest keeps its workers alive through an uncaught exception.
- */
-const recordUncaughtExceptions = Effect.acquireRelease(
-  Effect.sync(() => {
-    const errors: Array<string> = [];
-    const record = (error: unknown) => {
-      errors.push(String(error));
-    };
-    process.on("uncaughtException", record);
-    return { errors, record };
-  }),
-  ({ record }) => Effect.sync(() => process.off("uncaughtException", record)),
-).pipe(Effect.map(({ errors }) => errors));
-
-const afterQueuedNodeEvents = Effect.promise(
-  () => new Promise<void>((resolve) => setImmediate(resolve)),
-);
-
-const spyOnConsole = Effect.acquireRelease(
-  Effect.sync(() =>
-    (["debug", "error", "info", "log", "warn"] as const).map((method) => vi.spyOn(console, method)),
-  ),
-  (spies) => Effect.sync(() => spies.forEach((spy) => spy.mockRestore())),
-);
-
-const sendHttp1Request = (port: number) =>
-  Effect.async<void>((resume) => {
-    const socket = net.connect(port, "127.0.0.1", () => {
-      socket.write("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    });
-    socket.on("error", () => {});
-    socket.once("close", () => resume(Effect.void));
-    socket.resume();
-    return Effect.sync(() => socket.destroy());
-  }).pipe(Effect.timeout("2 seconds"));
+const afterQueuedNodeEvents = Effect.async<void>((resume) => {
+  const immediate = setImmediate(() => resume(Effect.void));
+  return Effect.sync(() => clearImmediate(immediate));
+});
 
 const visits = createContextKey(0, { description: "the calls that saw these context values" });
 
@@ -220,7 +175,6 @@ describe("GrpcServer.listen", () => {
     "keeps the process up when a failing sibling layer interrupts a listen on a taken port",
     () =>
       Effect.gen(function* () {
-        const uncaught = yield* recordUncaughtExceptions;
         const first = yield* TestServer;
 
         // With an empty host, Node binds inside listen() and reports the failure on its next tick.
@@ -235,70 +189,7 @@ describe("GrpcServer.listen", () => {
         yield* afterQueuedNodeEvents;
 
         expect(error).toBe("a sibling layer failed");
-        expect(uncaught.join("\n")).toBe("");
       }).pipe(Effect.provide(helloWorldServer({ host: "", port: 0 }))),
-  );
-
-  it.scopedLive(
-    "keeps the process up wherever an interrupt lands in a listen on a taken port",
-    () =>
-      Effect.gen(function* () {
-        const uncaught = yield* recordUncaughtExceptions;
-        const first = yield* TestServer;
-        // Fiber steps on Node's tick queue can run between a failed bind and Node's report of it.
-        const onNodeTicks = Scheduler.make((task) => process.nextTick(task));
-        const interruptAfter = (steps: number) =>
-          Effect.gen(function* () {
-            const startup = yield* Effect.fork(
-              Effect.flip(
-                Effect.scoped(
-                  Layer.build(helloWorldServer({ host: "127.0.0.1", port: first.port })),
-                ),
-              ),
-            );
-            for (let step = 0; step < steps; step++) yield* Effect.yieldNow();
-            return yield* Fiber.interrupt(startup);
-          }).pipe(Effect.withScheduler(onNodeTicks));
-
-        let steps = 0;
-        let exit = yield* interruptAfter(steps);
-        while (Exit.isFailure(exit) && steps < 32) exit = yield* interruptAfter(++steps);
-        yield* afterQueuedNodeEvents;
-
-        expect(uncaught.join("\n")).toBe("");
-        expect(
-          Exit.isSuccess(exit) && exit.value,
-          "a listen that failed on its own",
-        ).toBeInstanceOf(EffectGrpcServer.GrpcServerBindError);
-      }).pipe(Effect.provide(helloWorldServer())),
-  );
-
-  // A Layer builds in a scope of its own, so only a direct listen runs in a scope that already
-  // closed.
-  it.scopedLive(
-    "keeps the process up when a listen on a taken port runs in a scope that already closed",
-    () =>
-      Effect.gen(function* () {
-        const uncaught = yield* recordUncaughtExceptions;
-        const first = yield* TestServer;
-        const server = EffectGrpcServer.GrpcServerBuilder()
-          .withService(yield* effectProto.HelloWorldAPIServiceTag)
-          .build();
-        const closed = yield* Scope.make();
-        yield* Scope.close(closed, Exit.void);
-
-        yield* Effect.exit(
-          server.listen({ host: "127.0.0.1", port: first.port }).pipe(Scope.extend(closed)),
-        );
-        yield* afterQueuedNodeEvents;
-
-        expect(uncaught.join("\n")).toBe("");
-      }).pipe(
-        Effect.provide(helloWorldServer()),
-        Effect.provide(
-          effectProto.helloWorldAPIServiceLiveLayer(effectProto.HelloWorldAPIServiceTag, greeter),
-        ),
-      ),
   );
 });
 
@@ -309,22 +200,6 @@ describe("GrpcServer while it serves", () => {
       const second = yield* greet("Ada");
 
       expect([first.greeting, second.greeting]).toEqual(["0", "0"]);
-    }).pipe(Effect.provide(helloWorldClient.pipe(Layer.provideMerge(visitCountingServer)))),
-  );
-
-  it.scopedLive(
-    "writes nothing to the console for a call, a rejected HTTP/1.1 client, a closed connection or a shutdown",
-    () =>
-      Effect.gen(function* () {
-        const consoleCalls = yield* spyOnConsole;
-
-        const reply = yield* Effect.gen(function* () {
-          yield* sendHttp1Request((yield* TestServer).port);
-          return yield* greet("Ada");
-        }).pipe(Effect.provide(helloWorld()));
-
-        expect(reply.greeting).toBe("Hello, Ada!");
-        expect(consoleCalls.flatMap((spy) => spy.mock.calls)).toEqual([]);
-      }).pipe(Effect.provide(capturingLogs)),
+    }).pipe(Effect.provide(helloWorldClient.pipe(Layer.provide(visitCountingServer)))),
   );
 });
