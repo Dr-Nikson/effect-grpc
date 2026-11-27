@@ -176,11 +176,8 @@ function makeExecutorMethod<Shape extends GenServiceMethods>(
           const clientMethod = client[methodName].bind(client) as UnaryFn<any, any>;
 
           return clientMethod(req, {
-            // timeoutMs: null,
             headers,
             signal,
-            // onHeader: null,
-            // onTrailer: null,
             contextValues: createContextValues(),
           } as CallOptions);
         });

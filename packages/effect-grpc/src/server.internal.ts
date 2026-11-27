@@ -361,10 +361,10 @@ export class ConnectEsGprcServerBuilder<Ctx, Services>
   implements T.GrpcServerBuilder<Ctx, Services>
 {
   constructor(
-    public readonly transformCtx: (
+    private readonly transformCtx: (
       handlerCtx: HandlerContext,
     ) => Effect.Effect<Ctx, GrpcException.GrpcException>,
-    public readonly services: Record<string, T.GrpcService<any, any, Ctx>>,
+    private readonly services: Record<string, T.GrpcService<any, any, Ctx>>,
   ) {}
 
   static get empty(): T.GrpcServerBuilder<unknown, never> {
