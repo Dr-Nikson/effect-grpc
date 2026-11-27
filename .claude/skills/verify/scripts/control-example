@@ -210,7 +210,7 @@ stale_report() { # prints one STALE line per out-of-date artifact; status 1 when
     out=$LIB/dist/${f#"$LIB/src/"}
     out=${out%.ts}.js
     if [ ! -f "$out" ] || [ "$f" -nt "$out" ]; then echo "STALE lib: ${out#"$REPO/"} is older than ${f#"$REPO/"}"; bad=1; fi
-  done < <(find "$LIB/src" -name '*.ts' ! -name '*.d.ts' ! -name '*.test-d.ts' ! -name '*.test.ts')
+  done < <(find "$LIB/src" -name '*.ts' ! -name '*.d.ts' ! -name '*.test-d.ts' ! -name '*.test.ts' ! -path "$LIB/src/generated/*" ! -path "$LIB/src/testing/*")
   for f in server client address; do
     if [ ! -f "$EXAMPLE/dist/$f.js" ] || [ "$EXAMPLE/src/$f.ts" -nt "$EXAMPLE/dist/$f.js" ]; then echo "STALE example: packages/example/dist/$f.js"; bad=1; fi
   done
