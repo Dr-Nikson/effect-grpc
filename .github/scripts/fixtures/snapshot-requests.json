@@ -1,0 +1,204 @@
+[
+  {
+    "name": "a collaborator's /snapshot on a same-repo PR uses the push CI run, not the pull_request run listed first",
+    "event": {
+      "eventName": "issue_comment",
+      "sha": "448c926bb07e5bac8f41cef3f0d3d5490d663770",
+      "payload": {
+        "action": "created",
+        "comment": { "body": "/snapshot", "author_association": "COLLABORATOR" },
+        "issue": { "number": 83, "pull_request": { "url": "https://api.github.com/repos/Dr-Nikson/effect-grpc/pulls/83" } }
+      }
+    },
+    "pullRequest": { "sha": "1092b7f3ad43a293c48e61af1334444674f5148e", "repository": "Dr-Nikson/effect-grpc" },
+    "runs": [
+      { "id": 45314334420, "event": "pull_request", "conclusion": "success", "headSha": "1092b7f3ad43a293c48e61af1334444674f5148e" },
+      { "id": 45314327524, "event": "push", "conclusion": "success", "headSha": "1092b7f3ad43a293c48e61af1334444674f5148e" }
+    ],
+    "artifacts": {
+      "45314334420": [{ "name": "build-artifacts-16ae5ca38965dddbb8566ac7d5797d0904ed0af7", "expired": false }],
+      "45314327524": [{ "name": "build-artifacts-1092b7f3ad43a293c48e61af1334444674f5148e", "expired": false }]
+    },
+    "expect": {
+      "kind": "allowed",
+      "tag": "pr-83",
+      "sha": "1092b7f3ad43a293c48e61af1334444674f5148e",
+      "runId": 45314327524,
+      "artifact": "build-artifacts-1092b7f3ad43a293c48e61af1334444674f5148e",
+      "prNumber": 83,
+      "reply": true
+    }
+  },
+  {
+    "name": "an owner names a tag after /snapshot, and later lines of the comment are ignored",
+    "event": {
+      "eventName": "issue_comment",
+      "sha": "448c926bb07e5bac8f41cef3f0d3d5490d663770",
+      "payload": {
+        "action": "created",
+        "comment": { "body": "/snapshot mvp\nTrying the new client here.", "author_association": "OWNER" },
+        "issue": { "number": 83, "pull_request": { "url": "https://api.github.com/repos/Dr-Nikson/effect-grpc/pulls/83" } }
+      }
+    },
+    "pullRequest": { "sha": "1092b7f3ad43a293c48e61af1334444674f5148e", "repository": "Dr-Nikson/effect-grpc" },
+    "runs": [{ "id": 45314327524, "event": "push", "conclusion": "success", "headSha": "1092b7f3ad43a293c48e61af1334444674f5148e" }],
+    "artifacts": { "45314327524": [{ "name": "build-artifacts-1092b7f3ad43a293c48e61af1334444674f5148e", "expired": false }] },
+    "expect": { "kind": "allowed", "tag": "mvp", "prNumber": 83, "reply": true }
+  },
+  {
+    "name": "a dispatch with the default tag snapshots the dispatched commit",
+    "event": {
+      "eventName": "workflow_dispatch",
+      "sha": "1092b7f3ad43a293c48e61af1334444674f5148e",
+      "payload": { "inputs": { "tag": "snapshot" }, "ref": "refs/heads/v4/p01-e2e-verify-isolation" }
+    },
+    "runs": [{ "id": 45314327524, "event": "push", "conclusion": "success", "headSha": "1092b7f3ad43a293c48e61af1334444674f5148e" }],
+    "artifacts": { "45314327524": [{ "name": "build-artifacts-1092b7f3ad43a293c48e61af1334444674f5148e", "expired": false }] },
+    "expect": {
+      "kind": "allowed",
+      "tag": "snapshot",
+      "sha": "1092b7f3ad43a293c48e61af1334444674f5148e",
+      "runId": 45314327524,
+      "prNumber": null,
+      "reply": false
+    }
+  },
+  {
+    "name": "a dispatch with tag Bad..Tag is refused before any GitHub lookup",
+    "event": {
+      "eventName": "workflow_dispatch",
+      "sha": "1092b7f3ad43a293c48e61af1334444674f5148e",
+      "payload": { "inputs": { "tag": "Bad..Tag" }, "ref": "refs/heads/v4/p03-workflow-hardening" }
+    },
+    "expect": { "kind": "refused", "reason": "tag", "reply": false, "lookups": 0 }
+  },
+  {
+    "name": "a collaborator's invalid tag is refused with a reply and no GitHub lookup",
+    "event": {
+      "eventName": "issue_comment",
+      "sha": "448c926bb07e5bac8f41cef3f0d3d5490d663770",
+      "payload": {
+        "action": "created",
+        "comment": { "body": "/snapshot Bad..Tag", "author_association": "COLLABORATOR" },
+        "issue": { "number": 83, "pull_request": { "url": "https://api.github.com/repos/Dr-Nikson/effect-grpc/pulls/83" } }
+      }
+    },
+    "expect": { "kind": "refused", "reason": "tag", "reply": true, "lookups": 0 }
+  },
+  {
+    "name": "a collaborator's /snapshot effect-v4 is refused with a reply, because that tag is a release channel",
+    "event": {
+      "eventName": "issue_comment",
+      "sha": "448c926bb07e5bac8f41cef3f0d3d5490d663770",
+      "payload": {
+        "action": "created",
+        "comment": { "body": "/snapshot effect-v4", "author_association": "COLLABORATOR" },
+        "issue": { "number": 83, "pull_request": { "url": "https://api.github.com/repos/Dr-Nikson/effect-grpc/pulls/83" } }
+      }
+    },
+    "expect": { "kind": "refused", "reason": "tag", "reply": true, "lookups": 0 }
+  },
+  {
+    "name": "more than one word after /snapshot is refused with a reply",
+    "event": {
+      "eventName": "issue_comment",
+      "sha": "448c926bb07e5bac8f41cef3f0d3d5490d663770",
+      "payload": {
+        "action": "created",
+        "comment": { "body": "/snapshot beta please", "author_association": "MEMBER" },
+        "issue": { "number": 83, "pull_request": { "url": "https://api.github.com/repos/Dr-Nikson/effect-grpc/pulls/83" } }
+      }
+    },
+    "expect": { "kind": "refused", "reason": "command", "reply": true, "lookups": 0 }
+  },
+  {
+    "name": "a comment that only starts with the letters /snapshot is not a request",
+    "event": {
+      "eventName": "issue_comment",
+      "sha": "448c926bb07e5bac8f41cef3f0d3d5490d663770",
+      "payload": {
+        "action": "created",
+        "comment": { "body": "/snapshots look fine to me", "author_association": "OWNER" },
+        "issue": { "number": 83, "pull_request": { "url": "https://api.github.com/repos/Dr-Nikson/effect-grpc/pulls/83" } }
+      }
+    },
+    "expect": { "kind": "ignored", "lookups": 0 }
+  },
+  {
+    "name": "a /snapshot comment on an issue that is not a pull request is not a request",
+    "event": {
+      "eventName": "issue_comment",
+      "sha": "448c926bb07e5bac8f41cef3f0d3d5490d663770",
+      "payload": {
+        "action": "created",
+        "comment": { "body": "/snapshot", "author_association": "OWNER" },
+        "issue": { "number": 62 }
+      }
+    },
+    "expect": { "kind": "ignored", "lookups": 0 }
+  },
+  {
+    "name": "a pull request whose head lives in a fork is refused",
+    "event": {
+      "eventName": "issue_comment",
+      "sha": "448c926bb07e5bac8f41cef3f0d3d5490d663770",
+      "payload": {
+        "action": "created",
+        "comment": { "body": "/snapshot", "author_association": "COLLABORATOR" },
+        "issue": { "number": 90, "pull_request": { "url": "https://api.github.com/repos/Dr-Nikson/effect-grpc/pulls/90" } }
+      }
+    },
+    "pullRequest": { "sha": "2222222222222222222222222222222222222222", "repository": "someone/effect-grpc" },
+    "expect": { "kind": "refused", "reason": "fork", "reply": true, "lookups": 1 }
+  },
+  {
+    "name": "a pull request whose head repository was deleted is refused",
+    "event": {
+      "eventName": "issue_comment",
+      "sha": "448c926bb07e5bac8f41cef3f0d3d5490d663770",
+      "payload": {
+        "action": "created",
+        "comment": { "body": "/snapshot", "author_association": "COLLABORATOR" },
+        "issue": { "number": 91, "pull_request": { "url": "https://api.github.com/repos/Dr-Nikson/effect-grpc/pulls/91" } }
+      }
+    },
+    "pullRequest": { "sha": "3333333333333333333333333333333333333333", "repository": null },
+    "expect": { "kind": "refused", "reason": "fork", "reply": true, "lookups": 1 }
+  },
+  {
+    "name": "a commit whose only green CI run came from a pull_request event is refused",
+    "event": {
+      "eventName": "issue_comment",
+      "sha": "448c926bb07e5bac8f41cef3f0d3d5490d663770",
+      "payload": {
+        "action": "created",
+        "comment": { "body": "/snapshot", "author_association": "OWNER" },
+        "issue": { "number": 83, "pull_request": { "url": "https://api.github.com/repos/Dr-Nikson/effect-grpc/pulls/83" } }
+      }
+    },
+    "pullRequest": { "sha": "1092b7f3ad43a293c48e61af1334444674f5148e", "repository": "Dr-Nikson/effect-grpc" },
+    "runs": [{ "id": 45314334420, "event": "pull_request", "conclusion": "success", "headSha": "1092b7f3ad43a293c48e61af1334444674f5148e" }],
+    "expect": { "kind": "refused", "reason": "ci", "reply": true }
+  },
+  {
+    "name": "a commit whose push CI run failed is refused",
+    "event": {
+      "eventName": "workflow_dispatch",
+      "sha": "4444444444444444444444444444444444444444",
+      "payload": { "inputs": { "tag": "snapshot" }, "ref": "refs/heads/feature" }
+    },
+    "runs": [{ "id": 7001, "event": "push", "conclusion": "failure", "headSha": "4444444444444444444444444444444444444444" }],
+    "expect": { "kind": "refused", "reason": "ci", "reply": false }
+  },
+  {
+    "name": "a green push run whose build artifact expired is refused",
+    "event": {
+      "eventName": "workflow_dispatch",
+      "sha": "5555555555555555555555555555555555555555",
+      "payload": { "inputs": { "tag": "snapshot" }, "ref": "refs/heads/feature" }
+    },
+    "runs": [{ "id": 7002, "event": "push", "conclusion": "success", "headSha": "5555555555555555555555555555555555555555" }],
+    "artifacts": { "7002": [{ "name": "build-artifacts-5555555555555555555555555555555555555555", "expired": true }] },
+    "expect": { "kind": "refused", "reason": "artifact", "reply": false }
+  }
+]

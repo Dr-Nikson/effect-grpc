@@ -16,6 +16,8 @@
     "codestyle": "prettier --check \"packages/*/src/**/*.{ts,tsx}\"",
     "codestyle:fix": "prettier --check \"packages/*/src/**/*.{ts,tsx}\" --write",
     "lint": "eslint \"packages/*/src/**/*.{ts,tsx}\" --format stylish",
+    "lint:workflows": "uvx zizmor@1.32.0 --offline .github/workflows",
+    "test:workflows": "node --test .github/scripts/*.test.mjs",
     "test": "pnpm -r run test",
     "test:types": "pnpm -r run test:types",
     "changeset": "changeset",
@@ -26,6 +28,7 @@
     "release": "pnpm run build && pnpm run test:types && pnpm run lint && pnpm run codestyle && pnpm changeset:publish"
   },
   "devDependencies": {
+    "@actions/expressions": "0.3.61",
     "@changesets/changelog-github": "^0.5.1",
     "@changesets/cli": "^2.29.7",
     "@effect/eslint-plugin": "0.3.2",
@@ -36,7 +39,9 @@
     "@types/node": "catalog:",
     "eslint": "9.35.0",
     "eslint-config-prettier": "10.1.8",
+    "js-yaml": "4.1.0",
     "prettier": "3.6.2",
+    "semver": "7.7.2",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "typescript-eslint": "8.43.0"

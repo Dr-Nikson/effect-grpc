@@ -13,6 +13,6 @@
   "ignore": ["@dr_nikson/effect-grpc-example", "@dr_nikson/effect-grpc-e2e-tests"],
   "snapshot": {
     "useCalculatedVersion": true,
-    "prereleaseTemplate": "{tag}-{commit}"
+    "prereleaseTemplate": "0.{tag}.{commit}"
   }
 }
