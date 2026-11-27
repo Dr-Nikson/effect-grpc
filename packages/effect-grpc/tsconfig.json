@@ -7,6 +7,9 @@
   "exclude": [
     "node_modules/**/*",
     "dist/**/*",
+    "src/generated/**/*",
+    "src/testing/**/*",
+    "src/**/*.test.ts",
     "src/**/*.test-d.ts"
   ],
   "compilerOptions": {

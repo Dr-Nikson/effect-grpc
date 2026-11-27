@@ -40,11 +40,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["packages/e2e-tests/**"],
-    rules: { "no-console": "off" },
-  },
-  {
-    files: ["**/*.internal.ts", "**/*.spec.ts", "**/*.test.ts"],
+    files: ["**/*.internal.ts", "**/*.spec.ts", "**/*.test.ts", "**/src/testing/**/*.ts"],
     rules: {
       "@typescript-eslint/explicit-function-return-type": "off",
     },
@@ -57,6 +53,16 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         project: "./packages/*/tsconfig.test-d.json",
+        ecmaVersion: 2020,
+        sourceType: "module",
+      }
+    }
+  },
+  {
+    files: ["**/*.test.ts", "**/src/testing/**/*.ts"],
+    languageOptions: {
+      parserOptions: {
+        project: "./packages/*/tsconfig.test.json",
         ecmaVersion: 2020,
         sourceType: "module",
       }
