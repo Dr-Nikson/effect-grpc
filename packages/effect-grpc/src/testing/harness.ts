@@ -1,7 +1,7 @@
 // packages/effect-grpc/src/testing/harness.ts
-import { Context, Effect, Layer } from "effect";
+import { Cause, Context, Effect, Layer, Option } from "effect";
 
-import { Code } from "@connectrpc/connect";
+import { Code, ConnectError } from "@connectrpc/connect";
 import { EffectGrpcClient, EffectGrpcServer, GrpcException } from "@dr_nikson/effect-grpc";
 
 import * as effectProto from "../generated/com/example/v1/hello_world_api_effect.js";
@@ -95,3 +95,11 @@ export const helloWorld = (listen?: Listen) =>
 
 export const greet = (name: string) =>
   Effect.flatMap(effectProto.HelloWorldAPIClientTag, (client) => client.getGreeting({ name }, {}));
+
+// A generated client has no error channel, so a call that the server refuses dies with the error.
+export const connectErrorOf = <A, R>(call: Effect.Effect<A, never, R>) =>
+  call.pipe(
+    Effect.sandbox,
+    Effect.flip,
+    Effect.map((cause) => Option.map(Cause.dieOption(cause), ConnectError.from)),
+  );

@@ -111,7 +111,7 @@ describe("GrpcServer.listen", () => {
     },
     {
       reason: "Other",
-      at: "an address that this host does not have",
+      at: "an address this host does not have",
       host: "192.0.2.1",
       port: 0,
       code: "EADDRNOTAVAIL",

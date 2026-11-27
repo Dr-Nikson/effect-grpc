@@ -1,11 +1,11 @@
 // packages/effect-grpc/src/client.test.ts
-import { Cause, Effect, Option } from "effect";
+import { Effect, Option } from "effect";
 
-import { Code, ConnectError } from "@connectrpc/connect";
+import { Code } from "@connectrpc/connect";
 import { describe, expect, it } from "@effect/vitest";
 
 import { HelloWorldAPIClientTag } from "./generated/com/example/v1/hello_world_api_effect.js";
-import { greet, helloWorld } from "./testing/harness.js";
+import { connectErrorOf, greet, helloWorld } from "./testing/harness.js";
 
 const faceTheError = (name: string) =>
   Effect.flatMap(HelloWorldAPIClientTag, (client) => client.faceTheError({ name }, {}));
@@ -19,11 +19,7 @@ describe("generated client calls", () => {
 
   it.live("dies with the code and message of the GrpcException that the handler failed with", () =>
     Effect.gen(function* () {
-      const refusal = yield* faceTheError("TestUser").pipe(
-        Effect.sandbox,
-        Effect.flip,
-        Effect.map((cause) => Option.map(Cause.dieOption(cause), ConnectError.from)),
-      );
+      const refusal = yield* connectErrorOf(faceTheError("TestUser"));
 
       expect(Option.map(refusal, ({ code, rawMessage }) => ({ code, rawMessage }))).toEqual(
         Option.some({
