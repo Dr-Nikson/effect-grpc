@@ -40,10 +40,6 @@ export default tseslint.config(
     },
   },
   {
-    files: ["packages/e2e-tests/**"],
-    rules: { "no-console": "off" },
-  },
-  {
     files: ["**/*.internal.ts", "**/*.spec.ts", "**/*.test.ts", "**/src/testing/**/*.ts"],
     rules: {
       "@typescript-eslint/explicit-function-return-type": "off",

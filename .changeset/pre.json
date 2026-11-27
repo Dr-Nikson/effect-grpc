@@ -3,8 +3,7 @@
   "tag": "alpha",
   "initialVersions": {
     "@dr_nikson/effect-grpc": "2.0.0",
-    "@dr_nikson/effect-grpc-example": "0.1.0",
-    "@dr_nikson/effect-grpc-e2e-tests": "0.1.0"
+    "@dr_nikson/effect-grpc-example": "0.1.0"
   },
   "changesets": [
     "fix-naming-suffix",
