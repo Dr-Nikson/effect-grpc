@@ -1,22 +1,25 @@
 // packages/effect-grpc/src/server.test.ts
-import { Array as Arr, Context, Effect, Layer, Logger, Ref } from "effect";
+import { Array as Arr, Context, Effect, Layer, Logger, MutableRef } from "effect";
 
 import { EffectGrpcServer } from "@dr_nikson/effect-grpc";
 import { describe, expect, it } from "@effect/vitest";
 
 import { TestServer, greet, helloWorld, helloWorldServer } from "./testing/harness.js";
 
-class ServerLogs extends Context.Tag("ServerLogs")<ServerLogs, Ref.Ref<ReadonlyArray<string>>>() {}
+class ServerLogs extends Context.Tag("ServerLogs")<
+  ServerLogs,
+  MutableRef.MutableRef<ReadonlyArray<string>>
+>() {}
 
 const textOf = (message: unknown): string =>
   (Arr.isArray(message) ? message : [message]).map(String).join(" ");
 
 const capturingLogs = Layer.unwrapEffect(
-  Effect.gen(function* () {
-    const lines = yield* Ref.make<ReadonlyArray<string>>([]);
-    const logger = Logger.make(({ message }) =>
-      Effect.runSync(Ref.update(lines, Arr.append(textOf(message)))),
-    );
+  Effect.sync(() => {
+    const lines = MutableRef.make<ReadonlyArray<string>>([]);
+    const logger = Logger.make(({ message }) => {
+      MutableRef.update(lines, Arr.append(textOf(message)));
+    });
     return Layer.merge(
       Logger.replace(Logger.defaultLogger, logger),
       Layer.succeed(ServerLogs, lines),
@@ -24,7 +27,7 @@ const capturingLogs = Layer.unwrapEffect(
   }),
 );
 
-const loggedLines = Effect.flatMap(ServerLogs, Ref.get);
+const loggedLines = Effect.map(ServerLogs, MutableRef.get);
 
 describe("GrpcServer.listen", () => {
   it.scopedLive(

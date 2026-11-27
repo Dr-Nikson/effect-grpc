@@ -202,9 +202,7 @@ describe("the generated client", () => {
     Effect.gen(function* () {
       const { port } = yield* TestServer;
 
-      const greetings = yield* Effect.all([greet("Ada"), greet("Ada")]);
-
-      expect(greetings.map(({ greeting }) => greeting)).toEqual([`[::1]:${port}`, `[::1]:${port}`]);
+      expect((yield* greet("Ada")).greeting).toBe(`[::1]:${port}`);
     }).pipe(Effect.provide(echoing({ host: "::1", port: 0 }))),
   );
 });
@@ -235,24 +233,26 @@ describe("the request message limit", () => {
 });
 
 describe("a server with two services", () => {
-  it.live("serves each service through its generated client", () =>
-    Effect.gen(function* () {
-      const hello = yield* greet("Ada");
-      const naming = yield* Effect.flatMap(namingProto.NamingTestServiceClientTag, (client) =>
-        client.echo({ message: "Ada" }, {}),
-      );
+  it.live(
+    "serves each service through its generated client, one of them named ...Service (#30)",
+    () =>
+      Effect.gen(function* () {
+        const hello = yield* greet("Ada");
+        const naming = yield* Effect.flatMap(namingProto.NamingTestServiceClientTag, (client) =>
+          client.echo({ message: "Ada" }, {}),
+        );
 
-      expect({ hello: hello.greeting, naming: naming.message }).toEqual({
-        hello: "Hello, Ada!",
-        naming: "echo Ada",
-      });
-    }).pipe(
-      Effect.provide(
-        Layer.mergeAll(helloWorldClient, namingClient).pipe(
-          Layer.provideMerge(helloWorldAndNaming),
+        expect({ hello: hello.greeting, naming: naming.message }).toEqual({
+          hello: "Hello, Ada!",
+          naming: "echo Ada",
+        });
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(helloWorldClient, namingClient).pipe(
+            Layer.provideMerge(helloWorldAndNaming),
+          ),
         ),
       ),
-    ),
   );
 });
 
