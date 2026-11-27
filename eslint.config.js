@@ -36,7 +36,12 @@ export default tseslint.config(
       "@typescript-eslint/no-use-before-define": ["error", { functions: false }],
       "@typescript-eslint/explicit-function-return-type": "error",
       "@typescript-eslint/no-explicit-any": "off",
+      "no-console": "error",
     },
+  },
+  {
+    files: ["packages/e2e-tests/**"],
+    rules: { "no-console": "off" },
   },
   {
     files: ["**/*.internal.ts", "**/*.spec.ts", "**/*.test.ts"],

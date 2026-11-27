@@ -51,9 +51,10 @@ function gRpcServer(): Effect.Effect<
 
 const prog = Effect.gen(function* () {
   const server = yield* gRpcServer();
+  const host = yield* address.host;
   const port = yield* address.port;
 
-  yield* server.listen({ host: address.host, port });
+  yield* server.listen({ host, port });
   return yield* Effect.never;
 });
 

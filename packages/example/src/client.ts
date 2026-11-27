@@ -14,11 +14,7 @@ const debugApiClientLayer = effectProto.helloWorldAPIClientLiveLayer(HelloWorldA
   Layer.provideMerge(
     Layer.effect(
       effectProto.HelloWorldAPIConfigTag,
-      Effect.map(address.port, (port) =>
-        EffectGrpcClient.GrpcClientConfig({
-          baseUrl: new URL(`http://${address.host}:${port}`),
-        }),
-      ),
+      Effect.map(address.baseUrl, (baseUrl) => EffectGrpcClient.GrpcClientConfig({ baseUrl })),
     ),
   ),
 );

@@ -6,7 +6,7 @@ This directory is the maintained source for verifying effect-grpc's user-facing 
 
 - Run each command as one call to `.claude/skills/verify/scripts/control-example` in the checkout under test, as [SKILL.md](../SKILL.md) describes. The commands below are written as run from that checkout's root.
 - `.claude/skills/verify/scripts/control-example build` succeeded on the tree under test.
-- The port you launch on is free. Each checkout runs one instance. Another checkout can run its own at the same time on another port.
+- Each checkout runs one instance. `launch` lets the OS pick a free port unless `--port` pins one, so another checkout can run its own instance at the same time.
 - `.claude/skills/verify/scripts/control-example launch` started the instance, and `.claude/skills/verify/scripts/control-example doctor` reports no FAIL.
 - Drive only the instance this checkout's script started. The script refuses a `--port` or `--root` that points anywhere else.
 
@@ -14,7 +14,8 @@ This directory is the maintained source for verifying effect-grpc's user-facing 
 
 - Server journeys use independent clients: `call grpc` (`buf curl`, gRPC protocol) and `call connect` (`curl`, Connect JSON over HTTP/2).
 - Name methods by their proto names on `/com.example.v1.HelloWorldAPI/<Method>`: `GetGreeting` and `FaceTheError`.
-- Never use an IPv6 literal URL or Host header (`[::1]`, `::1:<port>`) outside the hostile-authority journey, because it stops the server.
+- Dial an IPv6 literal URL (`http://[::1]:<port>`) only against an instance launched with `--host ::1`.
+- Hostile inputs come only from `packages/e2e-tests/src/fixtures/hostile-requests.json`, through the `hostile-authority` and `message-limit` commands. Never put them on a command line. The `connect-method` command sends a plain CONNECT request and reads no fixture.
 - Run the hostile-authority journey last, on its own instance.
 - Treat every command as literal, and keep JSON payloads quoted as shown.
 
@@ -40,10 +41,10 @@ Keep implementation details out of the map. Name only user paths, stable handles
 ## Features
 
 - [Code generation](./codegen.md) covers `protoc-gen-effect` output: files, export names, the no-duplicate-suffix rule, compilation, and the typed-tag factories.
-- [Server lifecycle](./server-lifecycle.md) covers startup, readiness, HTTP/2-only transport, unknown methods, graceful shutdown, and survival of a hostile `:authority`.
+- [Server lifecycle](./server-lifecycle.md) covers startup, readiness, HTTP/2-only transport, unknown methods, CONNECT requests, graceful shutdown, hostile `:authority` values, and the 4 MiB message limit.
 - [Unary RPC](./unary-rpc.md) covers `GetGreeting` over gRPC and Connect, with the handler's server-side effect.
 - [Error mapping](./error-mapping.md) covers `GrpcException` to gRPC status and Connect HTTP status, and keeping the server up afterwards.
-- [Effect client](./effect-client.md) covers the README example client and the generated client on its default tag, including how errors reach the caller.
+- [Effect client](./effect-client.md) covers the README example client and the generated client on its default tag, including how errors reach the caller and a call to an IPv6 literal address.
 
 ## Not mapped yet
 

@@ -224,7 +224,32 @@ export interface GrpcServerBuilder<Ctx, Services> {
 
   build<This extends GrpcServerBuilder<Ctx, Services>>(
     this: [Services] extends [never] ? never : This,
+    options?: GrpcServerOptions,
   ): GrpcServer<Services>;
+}
+
+/**
+ * Options for {@link GrpcServerBuilder.build}.
+ *
+ * @example
+ * ```typescript
+ * import { EffectGrpcServer } from "@dr_nikson/effect-grpc"
+ *
+ * // Accept request messages of up to 16 MiB
+ * const server = EffectGrpcServer.GrpcServerBuilder()
+ *   .withService(uploadService)
+ *   .build({ readMaxBytes: 16 * 1024 * 1024 })
+ * ```
+ */
+export interface GrpcServerOptions {
+  /**
+   * The largest request message the server reads, as a whole number of bytes from 1 to
+   * 4294967295. The server answers a larger message with `RESOURCE_EXHAUSTED`, and it checks the
+   * size on the wire and again after decompression. Defaults to 4 MiB (4194304 bytes), as in
+   * grpc-go and grpc-js. `build` throws `Cause.IllegalArgumentException` for any other value, such
+   * as `NaN` from `Number()` of an unset environment variable.
+   */
+  readonly readMaxBytes?: number;
 }
 
 /**

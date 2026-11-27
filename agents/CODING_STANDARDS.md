@@ -48,6 +48,11 @@ Each package consists of modules, for example: `packages/effect-grpc` contains m
 2. Use explicit file extensions (`.js` for imports, even when importing `.ts` files after compilation)
 
 
+## Data types
+
+1. Absent values use Effect data types such as `Option`, never `null` or `undefined`. Convert a nullable value from Node, connect or another library at that boundary with `Option.fromNullable`.
+
+
 ## Comments and JSDoc
 
 1. Do not remove any comments marked as TODO (`// TODO`) or related to TODO's

@@ -6,6 +6,7 @@ import { Code } from "@connectrpc/connect";
 import { EffectGrpcServer, GrpcException } from "@dr_nikson/effect-grpc";
 import { describe, expect, it } from "@effect/vitest";
 
+import * as raw from "./raw-unary.js";
 import { TestServer, effectProto, testClient, testServer } from "./test-fixtures.js";
 
 const service = effectProto.helloWorldAPIServiceLiveLayer(effectProto.HelloWorldAPIServiceTag, {
@@ -15,6 +16,16 @@ const service = effectProto.helloWorldAPIServiceLiveLayer(effectProto.HelloWorld
 
 const greet = (name: string) =>
   Effect.flatMap(effectProto.HelloWorldAPIClientTag, (client) => client.getGreeting({ name }, {}));
+
+const connectStatus = (url: string) =>
+  Effect.flatMap(raw.connect(url), (session) =>
+    Effect.async<number>((resume) => {
+      session
+        .request({ ":method": "CONNECT", ":authority": new URL(url).host })
+        .on("error", () => {})
+        .on("response", (headers) => resume(Effect.succeed(Number(headers[":status"]))));
+    }),
+  ).pipe(Effect.timeout("2 seconds"), Effect.scoped);
 
 const failedToBind = (listen: { readonly host: string; readonly port: number }) =>
   Effect.flip(Layer.build(testServer(listen)));
@@ -52,6 +63,21 @@ describe("GrpcServer.listen", () => {
           port: address.port,
           url: `http://127.0.0.1:${address.port}`,
         });
+        expect((yield* greet("Ada")).greeting).toBe("Hello, Ada!");
+      }).pipe(
+        Effect.provide(testClient),
+        Effect.provide(testServer({ host: "127.0.0.1", port: 0 })),
+        Effect.provide(service),
+      ),
+  );
+
+  it.scopedLive(
+    "answers an HTTP/2 CONNECT request with 405 instead of leaving its stream open, and keeps serving the generated client",
+    () =>
+      Effect.gen(function* () {
+        const { url } = yield* TestServer;
+
+        expect(yield* connectStatus(url)).toBe(405);
         expect((yield* greet("Ada")).greeting).toBe("Hello, Ada!");
       }).pipe(
         Effect.provide(testClient),
