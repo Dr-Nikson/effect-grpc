@@ -8,6 +8,8 @@ import * as GrpcException from "./grpcException.js";
 import * as ProtoRuntime from "./protoRuntime.js";
 import * as internal from "./server.internal.js";
 
+export type { ServerExecutor } from "./protoRuntime.js";
+
 /**
  * Represents a gRPC server that can run multiple services within an Effect environment.
  * The server manages the lifecycle and execution of registered gRPC services.
@@ -210,9 +212,6 @@ export type UniqueTag<S extends GrpcService<any, any, any>, Services> =
  * ```
  */
 export interface GrpcServerBuilder<Ctx, Services> {
-  readonly transformCtx: (ctx: HandlerContext) => Effect.Effect<Ctx, GrpcException.GrpcException>;
-  readonly services: Record<string & Services, GrpcService<any, any, Ctx>>;
-
   withContextTransformer<This extends GrpcServerBuilder<Ctx, Services>, Ctx1>(
     this: [Services] extends [never] ? This : never,
     f: (originalCtx: HandlerContext, ctx: Ctx) => Effect.Effect<Ctx1, GrpcException.GrpcException>,

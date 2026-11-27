@@ -16,14 +16,17 @@ import type { RequestMeta } from "./client.js";
  *
  * @example
  * ```typescript
+ * import { Effect } from "effect";
  * import { EffectGrpcClient } from "@dr_nikson/effect-grpc";
  *
- * // This type is usually inferred from service definitions
  * declare const serviceDefinition: GenService<MyServiceMethods>;
- * declare const client: EffectGrpcClient.GrpcClient;
+ * declare const config: EffectGrpcClient.GrpcClientConfig<"com.example.v1.MyService">;
  *
- * const executor = client.makeExecutor(serviceDefinition, ["getGreeting"]);
- * // executor.getGreeting is now type-safe based on the service definition
+ * const program = Effect.gen(function* () {
+ *   const runtime = yield* EffectGrpcClient.GrpcClientRuntime;
+ *   const executor = yield* runtime.makeExecutor(serviceDefinition, ["getGreeting"], config);
+ *   // executor.getGreeting is now type-safe based on the service definition
+ * });
  * ```
  *
  * @category Client
@@ -45,6 +48,7 @@ type UnaryClientExecutorFn<I extends DescMessage, O extends DescMessage> = (
 /**
  * Executor interface that provides methods for executing gRPC service operations within Effect programs.
  * The executor handles the bridge between the gRPC handler context and your custom context type.
+ * Generated code calls it once for each unary method, and application code rarely calls it directly.
  *
  * @template Ctx - The custom context type that will be provided to your service implementations
  *
@@ -55,26 +59,17 @@ type UnaryClientExecutorFn<I extends DescMessage, O extends DescMessage> = (
  *
  * interface AppContext {
  *   db: Database
- *   logger: Logger
  * }
  *
  * const userService = EffectGrpcServer.GrpcService("UserService", UserService)<AppContext>((exec) => ({
- *   // Use executor to run Effect programs
- *   getUser: (req) => exec.unary(req, ctx, (request, appCtx) =>
- *     Effect.gen(function* () {
- *       yield* appCtx.logger.info(`Getting user ${request.userId}`)
- *       const user = yield* appCtx.db.findUser(request.userId)
- *       return { user }
- *     })
- *   ),
- *
  *   // Executor handles errors and context transformation automatically
- *   createUser: (req) => exec.unary(req, ctx, (request, appCtx) =>
- *     Effect.gen(function* () {
- *       const user = yield* appCtx.db.createUser(request.userData)
- *       return { user }
- *     })
- *   )
+ *   getUser: (req, handlerCtx) =>
+ *     exec.unary("UserService/GetUser", req, handlerCtx, (request, appCtx) =>
+ *       Effect.gen(function* () {
+ *         const user = yield* appCtx.db.findUser(request.userId)
+ *         return { user }
+ *       })
+ *     )
  * }))
  * ```
  */
@@ -95,10 +90,16 @@ export interface ServerExecutor<Ctx> {
     prog: (req: In, ctx: Ctx) => Effect.Effect<Out, GrpcException.GrpcException>,
   ): Promise<Out>;
 }
+/**
+ * @internal
+ */
 export const ServerExecutor: {
   (runtime: Runtime.Runtime<never>): ServerExecutor<any>;
 } = internal.ServerExecutorLive.make;
 
+/**
+ * @internal
+ */
 export interface ServerExecutorTransformer<Ctx> {
   readonly transformation: (underlying: ServerExecutor<HandlerContext>) => ServerExecutor<Ctx>;
 
@@ -106,6 +107,9 @@ export interface ServerExecutorTransformer<Ctx> {
     f: (handlerCtx: HandlerContext) => Effect.Effect<Ctx1, GrpcException.GrpcException>,
   ): ServerExecutorTransformer<Ctx1>;
 }
+/**
+ * @internal
+ */
 export const ServerExecutorTransformer: {
   (): ServerExecutorTransformer<any>;
 } = internal.ServerExecutorTransformerLive.empty;

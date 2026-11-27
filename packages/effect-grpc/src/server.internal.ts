@@ -211,9 +211,10 @@ const boundAddress = (server: http2.Http2Server): Effect.Effect<T.GrpcServerAddr
  * Listens outside the acquire step of the server's acquireRelease, so interruption can stop a listen
  * that never completes. Closing the server makes Node drop a pending host lookup instead of binding.
  *
- * Once the server listens, `onServerError` takes over its `'error'` event in the same turn. Node
- * turns an `'error'` event that nobody listens to into an uncaught exception, and a listening server
- * emits one when it fails to accept a connection.
+ * The `'error'` listener stays for the life of the server. Node turns an `'error'` event that nobody
+ * listens to into an uncaught exception, and `close()` cannot withdraw a bind failure Node already
+ * queued. Node reports a bind failure while the server is not listening and an accept failure while
+ * it is. `resume` ignores a late bind failure.
  */
 const awaitListening = (
   server: http2.Http2Server,
@@ -222,21 +223,18 @@ const awaitListening = (
 ): Effect.Effect<T.GrpcServerAddress, T.GrpcServerBindError> =>
   Effect.async((resume) => {
     function detach() {
-      server
-        .off("listening", onListening)
-        .off("error", onError)
-        .off("close", onClosedBeforeListening);
+      server.off("listening", onListening).off("close", onClosedBeforeListening);
     }
     function settle(outcome: Effect.Effect<T.GrpcServerAddress, T.GrpcServerBindError>) {
       detach();
       resume(outcome);
     }
     function onListening() {
-      server.on("error", onServerError);
       settle(boundAddress(server));
     }
     function onError(cause: Error) {
-      settle(Effect.fail(bindError(options, cause)));
+      if (server.listening) onServerError(cause);
+      else settle(Effect.fail(bindError(options, cause)));
     }
     function onClosedBeforeListening() {
       settle(Effect.interrupt);
@@ -244,7 +242,7 @@ const awaitListening = (
 
     server
       .once("listening", onListening)
-      .once("error", onError)
+      .on("error", onError)
       .once("close", onClosedBeforeListening);
     try {
       server.listen({ host: options.host, port: options.port });
@@ -363,18 +361,17 @@ export class ConnectEsGprcServerBuilder<Ctx, Services>
   implements T.GrpcServerBuilder<Ctx, Services>
 {
   constructor(
-    public readonly transformCtx: (
+    private readonly transformCtx: (
       handlerCtx: HandlerContext,
     ) => Effect.Effect<Ctx, GrpcException.GrpcException>,
-    public readonly services: Record<string, T.GrpcService<any, any, Ctx>>,
+    private readonly services: Record<string, T.GrpcService<any, any, Ctx>>,
   ) {}
 
   static get empty(): T.GrpcServerBuilder<unknown, never> {
     return new ConnectEsGprcServerBuilder<unknown, never>(() => Effect.succeed(undefined), {});
   }
 
-  withContextTransformer<This extends T.GrpcServerBuilder<Ctx, Services>, Ctx1>(
-    this: This,
+  withContextTransformer<Ctx1>(
     f: (originalCtx: HandlerContext, ctx: Ctx) => Effect.Effect<Ctx1, GrpcException.GrpcException>,
   ): T.GrpcServerBuilder<Ctx1, never> {
     return new ConnectEsGprcServerBuilder<Ctx1, never>(
@@ -393,10 +390,9 @@ export class ConnectEsGprcServerBuilder<Ctx, Services>
     });
   }
 
-  build<This extends T.GrpcServerBuilder<Ctx, Services>>(
-    this: This,
-    { readMaxBytes = grpcDefaultMaxReceiveMessageBytes }: T.GrpcServerOptions = {},
-  ): T.GrpcServer<Services> {
+  build({
+    readMaxBytes = grpcDefaultMaxReceiveMessageBytes,
+  }: T.GrpcServerOptions = {}): T.GrpcServer<Services> {
     if (!Number.isInteger(readMaxBytes) || readMaxBytes < 1 || readMaxBytes > largestReadMaxBytes) {
       throw new Cause.IllegalArgumentException(
         `readMaxBytes must be an integer from 1 to ${largestReadMaxBytes}, got ${readMaxBytes}`,

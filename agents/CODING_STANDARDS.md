@@ -55,7 +55,7 @@ Each package consists of modules, for example: `packages/effect-grpc` contains m
 
 ## Comments and JSDoc
 
-1. Do not remove any comments marked as TODO (`// TODO`) or related to TODO's
+1. Do not remove a comment marked as TODO (`// TODO`) or related to a TODO. The exception is a TODO that a tracked issue replaces. Name the issue in the commit message and the PR description.
 2. For the internal implementation ALWAYS put necessary meaningful comments, avoiding obvious ones  
 
 ### @example - examples in JSDoc

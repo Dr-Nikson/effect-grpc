@@ -1,6 +1,5 @@
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
-import effect from "@effect/eslint-plugin";
 import eslintConfigPrettier from "eslint-config-prettier";
 
 export default tseslint.config(
@@ -8,9 +7,6 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   eslintConfigPrettier,
   {
-    plugins: {
-      "@effect": effect,
-    },
     languageOptions: {
       parser: tseslint.parser,
       parserOptions: {

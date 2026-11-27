@@ -1,10 +1,20 @@
 // packages/effect-grpc/src/server.test.ts
 import { Array as Arr, Context, Effect, Layer, Logger, MutableRef } from "effect";
 
+import type { HandlerContext } from "@connectrpc/connect";
+import { createContextKey } from "@connectrpc/connect";
 import { EffectGrpcServer } from "@dr_nikson/effect-grpc";
 import { describe, expect, it } from "@effect/vitest";
 
-import { TestServer, greet, helloWorld, helloWorldServer } from "./testing/harness.js";
+import * as effectProto from "./generated/com/example/v1/hello_world_api_effect.js";
+import {
+  TestServer,
+  greet,
+  helloWorld,
+  helloWorldClient,
+  helloWorldServer,
+  testServer,
+} from "./testing/harness.js";
 
 class ServerLogs extends Context.Tag("ServerLogs")<
   ServerLogs,
@@ -28,6 +38,38 @@ const capturingLogs = Layer.unwrapEffect(
 );
 
 const loggedLines = Effect.map(ServerLogs, MutableRef.get);
+
+const afterQueuedNodeEvents = Effect.async<void>((resume) => {
+  const immediate = setImmediate(() => resume(Effect.void));
+  return Effect.sync(() => clearImmediate(immediate));
+});
+
+const visits = createContextKey(0, { description: "the calls that saw these context values" });
+
+// The handler reads a key that nothing sets and then sets it, so its reply shows whether the
+// values were empty and whether an earlier call left anything in them.
+const countVisits = (_request: unknown, { values }: HandlerContext) =>
+  Effect.sync(() => {
+    const seen = values.get(visits);
+    values.set(visits, seen + 1);
+    return { greeting: String(seen) };
+  });
+
+const visitCountingServer = testServer(
+  Effect.map(effectProto.HelloWorldAPIServiceTag, (service) =>
+    EffectGrpcServer.GrpcServerBuilder()
+      .withContextTransformer((handlerCtx) => Effect.succeed(handlerCtx))
+      .withService(service)
+      .build(),
+  ),
+).pipe(
+  Layer.provide(
+    effectProto.helloWorldAPIServiceLiveLayer(effectProto.HelloWorldAPIServiceTag, {
+      getGreeting: countVisits,
+      faceTheError: countVisits,
+    }),
+  ),
+);
 
 describe("GrpcServer.listen", () => {
   it.scopedLive(
@@ -127,5 +169,37 @@ describe("GrpcServer.listen", () => {
 
         expect(error).toMatchObject({ reason: { _tag: reason }, host, port, cause: { code } });
       }),
+  );
+
+  it.scopedLive(
+    "keeps the process up when a failing sibling layer interrupts a listen on a taken port",
+    () =>
+      Effect.gen(function* () {
+        const first = yield* TestServer;
+
+        // With an empty host, Node binds inside listen() and reports the failure on its next tick.
+        const error = yield* Effect.flip(
+          Layer.launch(
+            Layer.mergeAll(
+              helloWorldServer({ host: "", port: first.port }),
+              Layer.effectDiscard(Effect.fail("a sibling layer failed")),
+            ),
+          ),
+        );
+        yield* afterQueuedNodeEvents;
+
+        expect(error).toBe("a sibling layer failed");
+      }).pipe(Effect.provide(helloWorldServer({ host: "", port: 0 }))),
+  );
+});
+
+describe("GrpcServer while it serves", () => {
+  it.live("hands each handler its own, empty context values", () =>
+    Effect.gen(function* () {
+      const first = yield* greet("Ada");
+      const second = yield* greet("Ada");
+
+      expect([first.greeting, second.greeting]).toEqual(["0", "0"]);
+    }).pipe(Effect.provide(helloWorldClient.pipe(Layer.provide(visitCountingServer)))),
   );
 });
