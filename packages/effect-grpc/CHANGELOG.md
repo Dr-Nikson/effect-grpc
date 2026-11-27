@@ -1,5 +1,52 @@
 # @dr_nikson/effect-grpc
 
+## 3.0.0-alpha.6
+
+### Major Changes
+
+- [#86](https://github.com/Dr-Nikson/effect-grpc/pull/86) [`43c3964`](https://github.com/Dr-Nikson/effect-grpc/commit/43c39648af9fa6bdd4ef16a0f91053c4d4523079) Thanks [@Dr-Nikson](https://github.com/Dr-Nikson)! - Replace `GrpcServer.run` with `GrpcServer.listen`, which returns the address the server bound, fails when the server cannot listen, and stops when it is interrupted during startup (#57)
+
+  **Breaking.** `run` is gone, so every call to it fails to compile. `run` never returned. It told its caller nothing about the address it bound, and it waited forever when the bind failed, as with a taken port, or when a host lookup hung. That wait could not be interrupted, so Ctrl+C did not stop a process whose server never started listening. `listen` succeeds with a `GrpcServerAddress` (`host`, `port` and `url`) once the server listens, and the server serves until the scope that `listen` runs in closes. A program that only serves keeps the scope open after `listen`:
+
+  ```ts
+  yield* server.listen({ host: "127.0.0.1", port: 8000 });
+  return yield* Effect.never;
+  ```
+
+  A test that forked `run` and slept can call `listen` on port 0 and dial `address.url`.
+
+  **Breaking.** `listen` fails with `GrpcServerBindError` when the server cannot listen. Its `reason._tag` is `"AddressInUse"` (EADDRINUSE), `"PermissionDenied"` (EACCES or EPERM), `"InvalidPort"` (a port that is not a whole number from 0 to 65535) or `"Other"`, and `cause` holds the error Node reported. `reason` is an object with a `_tag`, so Effect 4's `Effect.catchReason` can match it.
+
+  Port 0 works. The OS picks a free port, `listen` returns it, and the ready line names it, as in `gRPC server listening on http://127.0.0.1:41234`. The ready line puts brackets around an IPv6 address, as in `http://[::1]:41234`.
+
+  Interrupting `listen` while the server starts, for example while a host name lookup hangs, ends the attempt, and the port is not bound later.
+
+### Minor Changes
+
+- [#84](https://github.com/Dr-Nikson/effect-grpc/pull/84) [`d0394a3`](https://github.com/Dr-Nikson/effect-grpc/commit/d0394a3c0f3984fb7f435f6b9ff1245f1e1ccc33) Thanks [@Dr-Nikson](https://github.com/Dr-Nikson)! - Keep the server running when a request's authority cannot be parsed, serve Node clients that dial an IPv6 literal, and limit request messages to 4 MiB by default (#61)
+
+  One request could stop the server process. A request whose authority was not a valid URL authority threw inside the server's request listener, and Node's HTTP/2 client sends such an authority (`::1:8000`) when it dials `http://[::1]:8000`, as the generated client does. The server now reads an IPv6 address followed by a port without brackets as that address and port. It answers an authority that it still cannot parse with `INVALID_ARGUMENT`: gRPC clients get the status in an HTTP 200 response, and Connect clients get HTTP 400 with a JSON error body.
+
+  The server now rejects a request message larger than 4 MiB, the default of grpc-go and grpc-js, with `RESOURCE_EXHAUSTED`. The limit applies to each message of every method kind, also when the message is compressed and only its decompressed size is too large. Before, the server accepted messages of up to about 4 GiB. To set another limit, pass `readMaxBytes` in bytes to `build`, as in `.build({ readMaxBytes: 16 * 1024 * 1024 })`. `build` throws `Cause.IllegalArgumentException` for a value that is not a whole number from 1 to 4294967295.
+
+  Once the server has answered a request whose upload is still running, such as a refused message, it resets the rest of that request with `NO_ERROR`. The client stops sending, curl and buf curl finish such a call, and graceful shutdown no longer waits for a client that keeps its connection.
+
+  Known limitation: a Node client without the HTTP/2 fixes from nodejs/node#67113 and nodejs/node#67114 frees the unsent rest of a refused message once the server resets the stream, but keeps counting it against its session memory limit, Node's `maxSessionMemory` (10 MB by default). With connect-node 2.1.0 on Node 24.22.3, the gRPC and gRPC-web transports then fail the second refused 5 MiB message and every later call on that connection with `INTERNAL`, and the Connect transport fails from the eleventh. A new connection, for example through a new transport, is served, and the server's shutdown does not wait for such a client.
+
+### Patch Changes
+
+- [#83](https://github.com/Dr-Nikson/effect-grpc/pull/83) [`d666f1f`](https://github.com/Dr-Nikson/effect-grpc/commit/d666f1fd67ada46f930e0954838a3800e673cef6) Thanks [@Dr-Nikson](https://github.com/Dr-Nikson)! - Make the README server and client snippets connect on IPv4-only hosts (#60)
+
+  The snippets now bind and dial `127.0.0.1` instead of `localhost`. Node can bind `localhost` to `::1`, and a client on a host without a non-loopback IPv6 address dials `127.0.0.1` and gets `ECONNREFUSED`. The Quick Start server also provides `Layer.scope`, which `server.listen` needs. Without it, the program stopped with `Service not found: effect/Scope`.
+
+- [#84](https://github.com/Dr-Nikson/effect-grpc/pull/84) [`d0394a3`](https://github.com/Dr-Nikson/effect-grpc/commit/d0394a3c0f3984fb7f435f6b9ff1245f1e1ccc33) Thanks [@Dr-Nikson](https://github.com/Dr-Nikson)! - Remove the server's debug output, answer HTTP/2 CONNECT requests with 405, and log HTTP/2 server errors through the Effect logger (#63)
+
+  The server no longer prints a line for every request, connection, session and stream. The server's own log lines are the ready line, the two stop lines and the server error line, and they go through the Effect logger.
+
+  An HTTP/2 CONNECT request now gets Node's 405 response. Before, a debug listener marked it as handled, so the request never got an answer and its stream stayed open.
+
+  An error that the HTTP/2 server emits after it starts listening, such as a failed accept of an incoming connection, is logged through the Effect logger as `gRPC server error`, and the process keeps running. A bind failure still fails `listen` with `GrpcServerBindError` and is not logged a second time. Before, the server also printed `Server error` with a stack trace to stderr, even when the caller handled the error.
+
 ## 3.0.0-alpha.5
 
 ### Patch Changes

@@ -6,14 +6,20 @@
     "@dr_nikson/effect-grpc-example": "0.1.0"
   },
   "changesets": [
+    "bound-ports-report",
+    "calm-ports-wake",
     "fix-naming-suffix",
     "layer-scoped-client",
+    "loopback-pairs-connect",
     "opentelemetry-tracing",
     "plain-eagles-pump",
     "public-cows-refuse",
+    "quiet-listeners-leave",
     "sharp-pots-ring",
     "some-crews-allow",
     "spicy-rivers-chew",
+    "steady-servers-answer",
+    "strict-gates-hold",
     "thin-papers-lick",
     "use-effect-submodules"
   ]
