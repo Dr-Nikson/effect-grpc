@@ -68,7 +68,6 @@ Fix duplicate suffix in generated service names when proto service already ends 
 
 **Packages excluded from versioning** (no changesets needed):
 - `@dr_nikson/effect-grpc-example`
-- `@dr_nikson/effect-grpc-e2e-tests`
 
 ## Writing Good Descriptions
 
@@ -104,6 +103,6 @@ Create a changeset when:
 - Changing public API behavior
 
 Skip changesets for:
-- Changes only to example or e2e-tests packages
+- Changes only to the example package or to the library's tests and test setup
 - Internal refactoring with no user-facing impact
 - Documentation-only changes in non-published files

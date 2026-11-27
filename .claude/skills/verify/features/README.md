@@ -15,7 +15,7 @@ This directory is the maintained source for verifying effect-grpc's user-facing 
 - Server journeys use independent clients: `call grpc` (`buf curl`, gRPC protocol) and `call connect` (`curl`, Connect JSON over HTTP/2).
 - Name methods by their proto names on `/com.example.v1.HelloWorldAPI/<Method>`: `GetGreeting` and `FaceTheError`.
 - Dial an IPv6 literal URL (`http://[::1]:<port>`) only against an instance launched with `--host ::1`.
-- Hostile inputs come only from `packages/e2e-tests/src/fixtures/hostile-requests.json`, through the `hostile-authority` and `message-limit` commands. Never put them on a command line. The `connect-method` command sends a plain CONNECT request and uses no fixture case.
+- Hostile inputs come only from `.claude/skills/verify/fixtures/hostile-requests.json`, through the `hostile-authority` and `message-limit` commands. Never put them on a command line. The `connect-method` command sends a plain CONNECT request and uses no fixture case.
 - Run the hostile-authority journey last, on its own instance.
 - Treat every command as literal, and keep JSON payloads quoted as shown.
 
@@ -48,5 +48,5 @@ Keep implementation details out of the map. Name only user paths, stable handles
 
 ## Not mapped yet
 
-- Distributed tracing (W3C `traceparent` to a server span). The example configures no OpenTelemetry exporter, so a user sees nothing to check. Only `packages/e2e-tests/src/tracing.test.ts` covers it.
+- Distributed tracing (W3C `traceparent` to a server span). The example configures no OpenTelemetry exporter, so a user sees nothing to check. Only `packages/effect-grpc/src/tracing.test.ts` covers it.
 - Context transformers (`withContextTransformer`), request headers and metadata transformers, compression, and timeouts. The example does not use them.

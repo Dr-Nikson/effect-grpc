@@ -10,7 +10,7 @@
   "access": "public",
   "baseBranch": "origin/master",
   "updateInternalDependencies": "patch",
-  "ignore": ["@dr_nikson/effect-grpc-example", "@dr_nikson/effect-grpc-e2e-tests"],
+  "ignore": ["@dr_nikson/effect-grpc-example"],
   "snapshot": {
     "useCalculatedVersion": true,
     "prereleaseTemplate": "0.{tag}.{commit}"

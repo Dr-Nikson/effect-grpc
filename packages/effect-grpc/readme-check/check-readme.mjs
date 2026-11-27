@@ -1,4 +1,4 @@
-// packages/e2e-tests/readme/check-readme.mjs
+// packages/effect-grpc/readme-check/check-readme.mjs
 //
 // Type-checks README.md's code as a reader would run it. Writes the README's fenced blocks into a
 // scratch project, runs `buf generate` with the README's own buf.gen.yaml and protos, compiles every
@@ -20,8 +20,8 @@
 // - Other blocks are not read. Packages that README examples import but no workspace installs are
 //   declared in modules.d.ts next to this file.
 //
-// usage: node packages/e2e-tests/readme/check-readme.mjs [README.md] [host package dir] [repository root]
-// The arguments default to the repository's README, packages/e2e-tests and the repository root.
+// usage: node packages/effect-grpc/readme-check/check-readme.mjs [README.md] [host package dir] [repository root]
+// The arguments default to the repository's README, packages/effect-grpc and the repository root.
 // Exit code 0: every block compiles. 1: README problems, printed as README.md:<line>:<col>. 2: setup,
 // or `buf generate` failing on the README's protos.
 import { spawnSync } from "node:child_process";
@@ -44,7 +44,8 @@ const root = resolve(process.argv[4] ?? join(here, "..", "..", ".."));
 const readmePath = resolve(process.argv[2] ?? join(root, "README.md"));
 const host = resolve(process.argv[3] ?? join(here, ".."));
 const readmeName = readmePath.startsWith(root + sep) ? relative(root, readmePath) : readmePath;
-const project = join(host, "readme", "project");
+// The npm package always includes a root entry named readme, despite `files`, hence readme-check.
+const project = join(host, "readme-check", "project");
 const ts = createRequire(join(host, "noop.js"))("typescript");
 
 const fatal = (message) => {
@@ -124,7 +125,8 @@ const write = (path, text) => {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, text);
 };
-write(join(project, "package.json"), JSON.stringify({ private: true, type: "module" }) + "\n");
+// No package.json of its own: the library's package.json then resolves `@dr_nikson/effect-grpc`
+// to the built library, as an install would.
 write(
   join(project, "src", "readme-modules.d.ts"),
   readFileSync(join(here, "modules.d.ts"), "utf8"),
@@ -132,7 +134,12 @@ write(
 for (const [path, fence] of files) write(join(project, path), fence.body.join("\n") + "\n");
 
 if (files.has("buf.gen.yaml")) {
-  const bins = [join(host, "node_modules", ".bin"), join(root, "node_modules", ".bin")];
+  // A package gets no .bin entry for its own bin, so protoc-gen-effect comes from the library's bin.
+  const bins = [
+    join(host, "node_modules", ".bin"),
+    join(root, "packages", "effect-grpc", "bin"),
+    join(root, "node_modules", ".bin"),
+  ];
   const buf = spawnSync("buf", ["generate"], {
     cwd: project,
     encoding: "utf8",
@@ -202,7 +209,7 @@ for (const diagnostic of ts.getPreEmitDiagnostics(program)) {
     );
     const hint =
       diagnostic.code === 2307 && /'[^.'][^']*'/.test(message) ?
-        " Install it in packages/e2e-tests or declare it in readme/modules.d.ts."
+        " Install it in packages/effect-grpc or declare it in readme-check/modules.d.ts."
       : "";
     at(fence, line, character, code, message + hint);
   }

@@ -2,7 +2,6 @@
   "files": [],
   "references": [
     { "path": "packages/effect-grpc" },
-    { "path": "packages/e2e-tests" },
     { "path": "packages/example" }
   ]
 }

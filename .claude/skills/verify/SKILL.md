@@ -49,7 +49,7 @@ A lane whose shell starts outside its worktree writes the worktree's absolute pa
    .claude/skills/verify/scripts/control-example build
    ```
 
-   It runs `pnpm install --frozen-lockfile`, then `pnpm -r run build`, which takes about 5 s warm. The build compiles the library, regenerates both packages' bindings, and compiles the example.
+   It runs `pnpm install --frozen-lockfile`, then `pnpm -r run build`, which takes about 5 s warm. The build compiles the library, regenerates the example's bindings, and compiles the example.
 2. Start the server:
 
    ```sh
@@ -105,8 +105,8 @@ Run doctor first whenever anything looks off. If doctor reports FAIL on a stale 
 | `.claude/skills/verify/scripts/control-example call http1 GetGreeting` | the same curl request without HTTP/2 | rejected: `Received HTTP/0.9 when not allowed` |
 | `.claude/skills/verify/scripts/control-example client` | the README client, `node dist/client.js` | stdout, stderr and exit code |
 | `.claude/skills/verify/scripts/control-example probe getGreeting Ada` | the generated Effect client on its default tag ([effect-client-probe.mjs](scripts/effect-client-probe.mjs)), against the instance's URL | last stdout line: `{"ok":…,"response":…}` or `{"ok":false,"kind":…,"error":…}` |
-| `.claude/skills/verify/scripts/control-example codegen` | `pnpm -r run build`, then lists the generated files and their exports, and uses the generated tags from one Context through [typed-tags-probe.mjs](scripts/typed-tags-probe.mjs) | export names; `verdict=PASS` and `typed_tags_exit_code=0` |
-| `.claude/skills/verify/scripts/control-example hostile-authority` | the authority cases in `packages/e2e-tests/src/fixtures/hostile-requests.json`, over gRPC and Connect, through [hostile-requests.mjs](scripts/hostile-requests.mjs) | `verdict=PASS` when every check passes and the server survives |
+| `.claude/skills/verify/scripts/control-example codegen` | `pnpm -r run build` and `pnpm run generate:proto` in `packages/effect-grpc`, then lists the generated files and their exports, and uses the generated tags from one Context through [typed-tags-probe.mjs](scripts/typed-tags-probe.mjs) | export names; `verdict=PASS` and `typed_tags_exit_code=0` |
+| `.claude/skills/verify/scripts/control-example hostile-authority` | the authority cases in `.claude/skills/verify/fixtures/hostile-requests.json`, over gRPC and Connect, through [hostile-requests.mjs](scripts/hostile-requests.mjs) | `verdict=PASS` when every check passes and the server survives |
 | `.claude/skills/verify/scripts/control-example message-limit` | messages of 4 MiB, 4 MiB + 1 byte and 5 MiB from the same fixture, each oversized message on a connection of its own, two of them from a client that keeps sending | `verdict=PASS` when every check passes and the server survives |
 | `.claude/skills/verify/scripts/control-example connect-method` | an HTTP/2 CONNECT request, then a normal call over each protocol, through [hostile-requests.mjs](scripts/hostile-requests.mjs) | `verdict=PASS` when the reply is 405 with an ended stream and the next calls are served |
 | `.claude/skills/verify/scripts/control-example taken-port` | a second `node dist/server.js` on the instance's host and port, stopped by `timeout` after 10 s | `verdict=PASS` when it exits on its own with a failure code within 5 s, its output names `EADDRINUSE` and `AddressInUse`, and the instance still answers a `GetGreeting` call |
@@ -163,6 +163,6 @@ None. Every journey passed on 2026-11-24 on branch `v4/p06-typed-tags` (PR #89),
 ## Helpers
 
 - `scripts/control-example` runs every command above. Its `help` command prints the usage.
-- `scripts/hostile-requests.mjs` runs through `hostile-authority`, `message-limit` and `connect-method`. Those commands feed the file to `node --input-type=module` from `packages/e2e-tests`, so its imports resolve there. It reads the env vars `HOSTILE_URL`, `HOSTILE_FIXTURES` and `HOSTILE_MODE`, sends the fixture's authority and message-limit cases and a CONNECT request with Node's HTTP/2 client, and prints one JSON line per check and a verdict line last.
+- `scripts/hostile-requests.mjs` runs through `hostile-authority`, `message-limit` and `connect-method`. Those commands feed the file to `node --input-type=module` from `packages/example`, so its imports resolve there. It reads the env vars `HOSTILE_URL`, `HOSTILE_FIXTURES` and `HOSTILE_MODE`, sends the fixture's authority and message-limit cases and a CONNECT request with Node's HTTP/2 client, and prints one JSON line per check and a verdict line last.
 - `scripts/typed-tags-probe.mjs` runs through `codegen`, which feeds it to `node --input-type=module` from `packages/example`. It resolves the default and the `make…Tag` tags of the service and the client from one Context, through the compiled module, and dials nothing. Its optional arguments name another generated module and library entry, so the same file can check another tree. Pass them after a `-`, as in `node --input-type=module - <module> <lib> < <checkout>/.claude/skills/verify/scripts/typed-tags-probe.mjs`, because without the `-` Node stops with `ERR_INPUT_TYPE_NOT_ALLOWED`. The probe still imports `effect` from the directory it runs in, not from the other tree.
 - `scripts/effect-client-probe.mjs` runs through `probe`. `probe` feeds the file to `node --input-type=module` from `packages/example`, so its imports resolve there. It reads the env vars `PROBE_URL`, `PROBE_METHOD` and `PROBE_NAME`, and refuses to run without `PROBE_URL`.

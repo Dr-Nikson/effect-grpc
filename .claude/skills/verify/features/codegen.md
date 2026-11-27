@@ -12,8 +12,8 @@ A user runs `pnpm run generate:proto` (`buf generate`) in a package whose `buf.g
 
 ## How to get to it (user POV)
 
-- Run `pnpm run generate:proto` in `packages/example` or `packages/e2e-tests`.
-- Run `pnpm -r run build`. The `build` script of each of those packages regenerates the bindings before it compiles.
+- Run `pnpm run generate:proto` in `packages/example` or `packages/effect-grpc`.
+- Run `pnpm -r run build`. The `build` script of `packages/example` regenerates its bindings before it compiles. `packages/effect-grpc` generates the bindings that its tests use in `pnpm run test`.
 
 ## Driving it with control-example
 
@@ -22,10 +22,10 @@ Preconditions:
 - `pnpm install` has run. No server is needed.
 - `.claude/skills/verify/scripts/control-example codegen` rebuilds `packages/effect-grpc` first, because the plugin runs the built `dist/protocGenPlugin.js`.
 
-- **Regenerate.** Run `.claude/skills/verify/scripts/control-example codegen`. The evidence file shows `build_exit_code=0` and the generated files: `hello_world_api_pb.ts` and `hello_world_api_effect.ts` under `packages/example/src/generated/com/example/v1/`, plus the same pair and the two `naming_test_service_*` files under `packages/e2e-tests/src/generated/com/example/v1/`.
+- **Regenerate.** Run `.claude/skills/verify/scripts/control-example codegen`. The evidence file shows `build_exit_code=0` and the generated files: `hello_world_api_pb.ts` and `hello_world_api_effect.ts` under `packages/example/src/generated/com/example/v1/`, plus the same pair and the two `naming_test_service_*` files under `packages/effect-grpc/src/generated/com/example/v1/`. `codegen` runs `pnpm run generate:proto` in `packages/effect-grpc` itself, because the library's build leaves that output to its tests.
 - **Names.** Read the `## exports of …hello_world_api_effect.ts` section of the same file. It lists exactly the eleven `gen-names` exports.
 - **No duplicate suffix.** Read the `## exports of …naming_test_service_effect.ts` section. It lists the `gen-suffix` names, and no line contains `ServiceService`.
-- **Compiles.** The build in the same file compiled `packages/example` and `packages/e2e-tests` against the new bindings, so `build_exit_code=0` covers it.
+- **Compiles.** The build in the same file compiled `packages/example` against the new bindings, so `build_exit_code=0` covers it. The library's bindings compile in `pnpm run test`, which type-checks them.
 - **Typed tags work.** Read the `## typed tags in packages/example/dist` section. Pass: four `PASS` lines, `keys: service=com.example.v1.HelloWorldAPI/Service client=com.example.v1.HelloWorldAPI/Client`, `verdict=PASS` and `typed_tags_exit_code=0`. The command exits non-zero when the build or this check fails.
 
 ## Gotchas

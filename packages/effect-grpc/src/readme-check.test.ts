@@ -1,11 +1,11 @@
-// packages/e2e-tests/src/readme-check.test.ts
+// packages/effect-grpc/src/readme-check.test.ts
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "@effect/vitest";
 
-const readmeDir = join(dirname(fileURLToPath(import.meta.url)), "..", "readme");
+const readmeDir = join(dirname(fileURLToPath(import.meta.url)), "..", "readme-check");
 
 const check = (...markdown: ReadonlyArray<string>) => {
   const result = spawnSync(

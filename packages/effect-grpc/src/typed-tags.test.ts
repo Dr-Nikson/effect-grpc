@@ -1,10 +1,11 @@
-// packages/e2e-tests/src/typed-tags.test.ts
+// packages/effect-grpc/src/typed-tags.test.ts
 import { Effect, Layer } from "effect";
 
 import { EffectGrpcClient, EffectGrpcServer } from "@dr_nikson/effect-grpc";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 
-import { clientLayer, effectProto, serverServiceLayer } from "./test-fixtures.js";
+import * as effectProto from "./generated/com/example/v1/hello_world_api_effect.js";
+import { clientConfig, greet, greeter, helloWorld, testServer } from "./testing/harness.js";
 
 interface AuthMeta {
   readonly token: string;
@@ -14,11 +15,10 @@ interface AuthContext {
   readonly authorization: string;
 }
 
-const configLayer = (address: EffectGrpcServer.GrpcServerAddress) =>
-  Layer.succeed(
-    effectProto.HelloWorldAPIConfigTag,
-    EffectGrpcClient.GrpcClientConfig({ baseUrl: new URL(address.url) }),
-  );
+const serviceLayer = effectProto.helloWorldAPIServiceLiveLayer(
+  effectProto.HelloWorldAPIServiceTag,
+  greeter,
+);
 
 describe("generated service and client tags (#55)", () => {
   it("a default tag is a tag, not a factory", () => {
@@ -26,30 +26,23 @@ describe("generated service and client tags (#55)", () => {
     expectTypeOf(effectProto.HelloWorldAPIClientTag).not.toBeFunction();
   });
 
-  it.scopedLive(
+  it.live(
     "one Context holds the default service and the default client, each under its own key",
     () =>
       Effect.gen(function* () {
         const service = yield* effectProto.HelloWorldAPIServiceTag;
-        const address = yield* EffectGrpcServer.GrpcServerBuilder()
-          .withService(service)
-          .build()
-          .listen({ host: "127.0.0.1", port: 0 });
 
         yield* Effect.gen(function* () {
           expect(effectProto.HelloWorldAPIClientTag.key).not.toBe(
             effectProto.HelloWorldAPIServiceTag.key,
           );
           expect(yield* effectProto.HelloWorldAPIServiceTag).toBe(service);
-
-          const client = yield* effectProto.HelloWorldAPIClientTag;
-          const response = yield* client.getGreeting({ name: "Ada" }, {});
-          expect(response.greeting).toBe("Hello, Ada! This is an E2E test.");
-        }).pipe(Effect.provide(clientLayer(address)), Effect.scoped);
-      }).pipe(Effect.provide(serverServiceLayer)),
+          expect((yield* greet("Ada")).greeting).toBe("Hello, Ada!");
+        }).pipe(Effect.provide(helloWorld()));
+      }).pipe(Effect.provide(serviceLayer)),
   );
 
-  it.scopedLive(
+  it.live(
     "factory tags resolve to their own values beside the default tags, and a typed client sends its meta",
     () => {
       const AuthServiceTag = effectProto.makeHelloWorldAPIServiceTag<AuthContext>("AuthContext");
@@ -57,30 +50,37 @@ describe("generated service and client tags (#55)", () => {
       const answer = (request: { readonly name: string }, ctx: AuthContext) =>
         Effect.succeed({ greeting: `${request.name} as ${ctx.authorization}` });
 
+      const authServer = testServer(
+        Effect.map(AuthServiceTag, (authService) =>
+          EffectGrpcServer.GrpcServerBuilder()
+            .withContextTransformer((handlerCtx) =>
+              Effect.succeed<AuthContext>({
+                authorization: handlerCtx.requestHeader.get("authorization") ?? "nobody",
+              }),
+            )
+            .withService(authService)
+            .build(),
+        ),
+      );
+
+      const clients = Layer.mergeAll(
+        effectProto.helloWorldAPIClientLiveLayer(effectProto.HelloWorldAPIClientTag),
+        effectProto.helloWorldAPIClientLiveLayer(
+          (meta: AuthMeta) => ({
+            headers: new Headers({ authorization: `Bearer ${meta.token}` }),
+          }),
+          AuthClientTag,
+        ),
+      ).pipe(
+        Layer.provide([
+          clientConfig(effectProto.HelloWorldAPIConfigTag),
+          EffectGrpcClient.liveGrpcClientRuntimeLayer(),
+        ]),
+        Layer.provide(authServer),
+      );
+
       return Effect.gen(function* () {
         const authService = yield* AuthServiceTag;
-        const address = yield* EffectGrpcServer.GrpcServerBuilder()
-          .withContextTransformer((handlerCtx) =>
-            Effect.succeed<AuthContext>({
-              authorization: handlerCtx.requestHeader.get("authorization") ?? "nobody",
-            }),
-          )
-          .withService(authService)
-          .build()
-          .listen({ host: "127.0.0.1", port: 0 });
-
-        const clients = Layer.mergeAll(
-          effectProto.helloWorldAPIClientLiveLayer(effectProto.HelloWorldAPIClientTag),
-          effectProto.helloWorldAPIClientLiveLayer(
-            (meta: AuthMeta) => ({
-              headers: new Headers({ authorization: `Bearer ${meta.token}` }),
-            }),
-            AuthClientTag,
-          ),
-        ).pipe(
-          Layer.provide(configLayer(address)),
-          Layer.provide(EffectGrpcClient.liveGrpcClientRuntimeLayer()),
-        );
 
         yield* Effect.gen(function* () {
           const keys = [
@@ -103,11 +103,11 @@ describe("generated service and client tags (#55)", () => {
           );
           expect(typed.greeting).toBe("Ada as Bearer t0k");
           expect(plain.greeting).toBe("Ada as nobody");
-        }).pipe(Effect.provide(clients), Effect.scoped);
+        }).pipe(Effect.provide(clients));
       }).pipe(
         Effect.provide(
           Layer.mergeAll(
-            serverServiceLayer,
+            serviceLayer,
             effectProto.helloWorldAPIServiceLiveLayer(AuthServiceTag, {
               getGreeting: answer,
               faceTheError: answer,
