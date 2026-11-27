@@ -18,12 +18,7 @@ export interface Listen {
 
 export const freePort: Listen = { host: "127.0.0.1", port: 0 };
 
-/**
- * Binds the server that `build` makes. Provide the service Layers that `build` needs with
- * `Layer.provide`, never `provideMerge`. The generated service tag and client tag share the
- * Context key `com.example.v1.HelloWorldAPI<any>`, which the types cannot see. `Layer.provide`
- * keeps the service out of the output, so a client in the same Context cannot replace it.
- */
+/** Binds the server that `build` makes. */
 export const testServer = <R>(
   build: Effect.Effect<EffectGrpcServer.GrpcServer<never>, never, R>,
   listen: Listen = freePort,

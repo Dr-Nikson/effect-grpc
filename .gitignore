@@ -147,3 +147,5 @@ vite.config.ts.timestamp-*
 
 # generated protobuf:
 packages/*/src/generated
+# the README check's scratch project:
+packages/effect-grpc/readme-check/project/

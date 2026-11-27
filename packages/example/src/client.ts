@@ -7,7 +7,7 @@ import { NodeRuntime } from "@effect/platform-node";
 import * as address from "./address.js";
 import * as effectProto from "./generated/com/example/v1/hello_world_api_effect.js";
 
-const HelloWorldAPIClientTag = effectProto.HelloWorldAPIClientTag<object>("{}");
+const HelloWorldAPIClientTag = effectProto.makeHelloWorldAPIClientTag<object>("{}");
 type HelloWorldAPIClientTag = typeof HelloWorldAPIClientTag;
 
 const debugApiClientLayer = effectProto.helloWorldAPIClientLiveLayer(HelloWorldAPIClientTag).pipe(
