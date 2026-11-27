@@ -136,17 +136,20 @@ const program = Effect.gen(function* () {
       .withService(helloService)
       .build();
 
-  return yield* server.run({ host: "localhost", port: 8000 });
+  return yield* server.run({ host: "127.0.0.1", port: 8000 });
 });
 
 // Provide dependencies and run
 const layer = Layer.empty.pipe(
   Layer.provideMerge(helloServiceLayer),
+  Layer.provideMerge(Layer.scope),
   Layer.provideMerge(Logger.minimumLogLevel(LogLevel.Info))
 );
 
 NodeRuntime.runMain(Effect.provide(program, layer));
 ```
+
+The server binds `127.0.0.1` instead of `localhost`. Node can bind `localhost` to `::1`, and a client on an IPv4-only host then dials `127.0.0.1` and gets `ECONNREFUSED`.
 
 ### 5. Implement the Client
 
@@ -166,7 +169,7 @@ const helloClientLayer = effectProto.helloServiceClientLiveLayer(
     Layer.succeed(
       effectProto.HelloServiceConfigTag,
       EffectGrpcClient.GrpcClientConfig({
-        baseUrl: new URL("http://localhost:8000")
+        baseUrl: new URL("http://127.0.0.1:8000")
       })
     )
   )
@@ -253,7 +256,7 @@ const server: EffectGrpcServer.GrpcServer<"UserService" | "ProductService"> =
 
 // Run with proper resource management
 const program = Effect.scoped(
-  server.run({ host: "localhost", port: 8000 })
+  server.run({ host: "127.0.0.1", port: 8000 })
 );
 ```
 
@@ -330,7 +333,7 @@ Configuration for connecting to a gRPC service.
 - `Service` - The fully-qualified service name (e.g., "com.example.v1.UserService")
 
 **Properties:**
-- `baseUrl: URL` - Base URL for gRPC requests (e.g., `new URL("http://localhost:8000")`)
+- `baseUrl: URL` - Base URL for gRPC requests (e.g., `new URL("http://127.0.0.1:8000")`)
 - `binaryOptions?: Partial<BinaryReadOptions & BinaryWriteOptions>` - Protocol Buffer binary format options
 - `acceptCompression?: Compression[]` - Accepted response compression algorithms (defaults to ["gzip", "br"])
 - `sendCompression?: Compression` - Compression algorithm for request messages
@@ -407,7 +410,7 @@ Creates a client configuration object.
 **Example:**
 ```typescript
 const config = EffectGrpcClient.GrpcClientConfig({
-  baseUrl: new URL("http://localhost:8000"),
+  baseUrl: new URL("http://127.0.0.1:8000"),
   defaultTimeoutMs: 5000
 });
 ```
@@ -641,7 +644,7 @@ export const UserServiceConfigTag =
 // Use it to provide configuration
 const configLayer = Layer.succeed(
   UserServiceConfigTag,
-  EffectGrpcClient.GrpcClientConfig({ baseUrl: new URL("http://localhost:8000") })
+  EffectGrpcClient.GrpcClientConfig({ baseUrl: new URL("http://127.0.0.1:8000") })
 );
 ```
 
@@ -764,7 +767,7 @@ const program = Effect.gen(function* () {
     .withService(userService)
     .build();
 
-  return yield* server.run({ host: "localhost", port: 8000 });
+  return yield* server.run({ host: "127.0.0.1", port: 8000 });
 }).pipe(
   Effect.provide(appLayer)
 );

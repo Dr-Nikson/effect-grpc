@@ -22,7 +22,7 @@ describe("E2E gRPC Client-Server Tests", () => {
 
       // Create and start server
       const server = yield* createServer();
-      yield* Effect.forkScoped(server.run({ host: "localhost", port }));
+      yield* Effect.forkScoped(server.run({ host: "127.0.0.1", port }));
 
       // Small delay to ensure server is ready
       yield* Effect.sleep("1 second");
@@ -57,7 +57,7 @@ describe("E2E gRPC Client-Server Tests", () => {
 
       // Create and start server
       const server = yield* createServer();
-      yield* Effect.forkScoped(server.run({ host: "localhost", port }));
+      yield* Effect.forkScoped(server.run({ host: "127.0.0.1", port }));
 
       // Small delay to ensure server is ready
       yield* Effect.sleep("1 second");

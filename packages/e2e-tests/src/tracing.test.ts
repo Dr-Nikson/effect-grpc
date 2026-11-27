@@ -50,7 +50,7 @@ describe("OpenTelemetry Tracing E2E", () => {
 
       // Create and start server
       const server = yield* createServer();
-      yield* Effect.forkScoped(server.run({ host: "localhost", port }));
+      yield* Effect.forkScoped(server.run({ host: "127.0.0.1", port }));
 
       // Small delay to ensure server is ready
       yield* Effect.sleep("500 millis");
@@ -96,7 +96,7 @@ describe("OpenTelemetry Tracing E2E", () => {
 
       // Create and start server
       const server = yield* createServer();
-      yield* Effect.forkScoped(server.run({ host: "localhost", port }));
+      yield* Effect.forkScoped(server.run({ host: "127.0.0.1", port }));
 
       // Small delay to ensure server is ready
       yield* Effect.sleep("500 millis");
@@ -147,7 +147,7 @@ describe("OpenTelemetry Tracing E2E", () => {
 
       // Create and start server
       const server = yield* createServer();
-      yield* Effect.forkScoped(server.run({ host: "localhost", port }));
+      yield* Effect.forkScoped(server.run({ host: "127.0.0.1", port }));
 
       // Small delay to ensure server is ready
       yield* Effect.sleep("500 millis");
@@ -204,7 +204,7 @@ describe("OpenTelemetry Tracing E2E", () => {
 
       // Create and start server
       const server = yield* createServer();
-      yield* Effect.forkScoped(server.run({ host: "localhost", port }));
+      yield* Effect.forkScoped(server.run({ host: "127.0.0.1", port }));
 
       // Small delay to ensure server is ready
       yield* Effect.sleep("500 millis");

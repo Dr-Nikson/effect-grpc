@@ -4,24 +4,24 @@ This directory is the maintained source for verifying effect-grpc's user-facing 
 
 ## Baseline preconditions
 
-- Run every command from the repo root, with `C=.claude/skills/verify/scripts/control-example`.
-- `$C build` succeeded on the tree under test.
-- Port 8000 is free. Only one instance can run, because `server.ts` and `client.ts` both hardcode `localhost:8000`.
-- `$C launch` started the instance and `$C doctor` reports no FAIL. Effect-client journeys use `$C launch --ipv4first` instead, as their feature file says.
-- Never drive an instance that this run did not start.
+- Run each command as one call to `.claude/skills/verify/scripts/control-example` in the checkout under test, as [SKILL.md](../SKILL.md) describes. The commands below are written as run from that checkout's root.
+- `.claude/skills/verify/scripts/control-example build` succeeded on the tree under test.
+- The port you launch on is free. Each checkout runs one instance. Another checkout can run its own at the same time on another port.
+- `.claude/skills/verify/scripts/control-example launch` started the instance, and `.claude/skills/verify/scripts/control-example doctor` reports no FAIL.
+- Drive only the instance this checkout's script started. The script refuses a `--port` or `--root` that points anywhere else.
 
 ## Driving conventions
 
-- Server journeys use independent clients: `$C call grpc` (`buf curl`, gRPC protocol) and `$C call connect` (`curl`, Connect JSON over HTTP/2).
+- Server journeys use independent clients: `call grpc` (`buf curl`, gRPC protocol) and `call connect` (`curl`, Connect JSON over HTTP/2).
 - Name methods by their proto names on `/com.example.v1.HelloWorldAPI/<Method>`: `GetGreeting` and `FaceTheError`.
-- Never use an IPv6 literal URL or Host header (`[::1]`, `::1:8000`) outside the hostile-authority journey, because it stops the server.
+- Never use an IPv6 literal URL or Host header (`[::1]`, `::1:<port>`) outside the hostile-authority journey, because it stops the server.
 - Run the hostile-authority journey last, on its own instance.
 - Treat every command as literal, and keep JSON payloads quoted as shown.
 
 ## Proof and skip reporting
 
 - Capture the user action and the state it produced. The helper writes the client's response and the server log lines from the same action into one evidence file. Cite that file.
-- Record the launch mode with every Effect-client proof. A pass under `--ipv4first` proves the client code path, not the README localhost pairing.
+- Record the port with every client proof. Each evidence file's first line carries it.
 - Report an unreachable journey with the command you ran and the precondition that was missing.
 - Do not report a skipped entry point as verified through a different one.
 - A journey that fails on the current base keeps its correct pass condition until the bug is fixed. Report it as failing, with its Gotcha.

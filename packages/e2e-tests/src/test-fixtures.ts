@@ -64,7 +64,7 @@ export const ClientConfigLayer = Layer.service(Port).pipe(
     Layer.succeed(
       effectProto.HelloWorldAPIConfigTag,
       EffectGrpcClient.GrpcClientConfig({
-        baseUrl: new URL(`http://localhost:${Context.get(ctx, Port)}`),
+        baseUrl: new URL(`http://127.0.0.1:${Context.get(ctx, Port)}`),
       }),
     ),
   ),

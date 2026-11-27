@@ -4,7 +4,6 @@
 // generated JSDoc's first example does. Prints one JSON line as its last line of stdout.
 // Run it through `control-example probe`, which feeds this file to `node --input-type=module`
 // from packages/example so `effect`, `@dr_nikson/effect-grpc` and ./dist resolve there.
-// Env: PROBE_URL (default http://localhost:8000), PROBE_METHOD (getGreeting | faceTheError), PROBE_NAME.
 import console from "node:console";
 import process from "node:process";
 import { URL } from "node:url";
@@ -15,7 +14,8 @@ import { EffectGrpcClient } from "@dr_nikson/effect-grpc";
 
 import * as effectProto from "./dist/generated/com/example/v1/hello_world_api_effect.js";
 
-const url = process.env.PROBE_URL ?? "http://localhost:8000";
+const url = process.env.PROBE_URL;
+if (!url) throw new Error("PROBE_URL is not set; run this file through control-example probe");
 const method = process.env.PROBE_METHOD ?? "getGreeting";
 const name = process.env.PROBE_NAME ?? "verify";
 
