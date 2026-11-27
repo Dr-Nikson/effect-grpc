@@ -3,14 +3,14 @@ import { Cause, Effect, ExecutionStrategy, Exit, Layer, Option, Scope } from "ef
 
 import type { HandlerContext } from "@connectrpc/connect";
 import { Code } from "@connectrpc/connect";
-import { EffectGrpcServer } from "@dr_nikson/effect-grpc";
+import { EffectGrpcClient, EffectGrpcServer } from "@dr_nikson/effect-grpc";
 import { describe, expect, it } from "@effect/vitest";
 
 import * as effectProto from "./generated/com/example/v1/hello_world_api_effect.js";
 import * as namingProto from "./generated/com/example/v1/naming_test_service_effect.js";
 import {
   TestServer,
-  clientTo,
+  clientConfig,
   connectErrorOf,
   freePort,
   greet,
@@ -32,7 +32,6 @@ const echo: effectProto.HelloWorldAPIService<HandlerContext> = {
 
 const echoServer = (listen?: Listen, options?: EffectGrpcServer.GrpcServerOptions) =>
   testServer(
-    effectProto.helloWorldAPIServiceLiveLayer(effectProto.HelloWorldAPIServiceTag, echo),
     Effect.map(effectProto.HelloWorldAPIServiceTag, (service) =>
       EffectGrpcServer.GrpcServerBuilder()
         .withContextTransformer((handlerCtx) => Effect.succeed(handlerCtx))
@@ -40,6 +39,10 @@ const echoServer = (listen?: Listen, options?: EffectGrpcServer.GrpcServerOption
         .build(options),
     ),
     listen,
+  ).pipe(
+    Layer.provide(
+      effectProto.helloWorldAPIServiceLiveLayer(effectProto.HelloWorldAPIServiceTag, echo),
+    ),
   );
 
 const echoing = (listen?: Listen, options?: EffectGrpcServer.GrpcServerOptions) =>
@@ -146,24 +149,29 @@ const limitsMessagesTo = (limit: number) =>
     }).toEqual({ atLimit: host, overLimit: Option.some(Code.ResourceExhausted), next: host });
   });
 
-const namingClient = clientTo(
-  namingProto.NamingTestServiceConfigTag,
-  namingProto.namingTestServiceClientLiveLayer(namingProto.NamingTestServiceClientTag),
-);
+const namingClient = namingProto
+  .namingTestServiceClientLiveLayer(namingProto.NamingTestServiceClientTag)
+  .pipe(
+    Layer.provide([
+      clientConfig(namingProto.NamingTestServiceConfigTag),
+      EffectGrpcClient.liveGrpcClientRuntimeLayer(),
+    ]),
+  );
 
 const helloWorldAndNaming = testServer(
-  Layer.mergeAll(
-    effectProto.helloWorldAPIServiceLiveLayer(effectProto.HelloWorldAPIServiceTag, greeter),
-    namingProto.namingTestServiceLiveLayer(namingProto.NamingTestServiceTag, {
-      echo: ({ message }) => Effect.succeed({ message: `echo ${message}` }),
-    }),
-  ),
   Effect.gen(function* () {
     return EffectGrpcServer.GrpcServerBuilder()
       .withService(yield* effectProto.HelloWorldAPIServiceTag)
       .withService(yield* namingProto.NamingTestServiceTag)
       .build();
   }),
+).pipe(
+  Layer.provide([
+    effectProto.helloWorldAPIServiceLiveLayer(effectProto.HelloWorldAPIServiceTag, greeter),
+    namingProto.namingTestServiceLiveLayer(namingProto.NamingTestServiceTag, {
+      echo: ({ message }) => Effect.succeed({ message: `echo ${message}` }),
+    }),
+  ]),
 );
 
 // Vitest cuts a `$name` in a title at 40 characters, which would make two of these rows read alike.

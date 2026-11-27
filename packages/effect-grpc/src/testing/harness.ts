@@ -19,47 +19,30 @@ export interface Listen {
 export const freePort: Listen = { host: "127.0.0.1", port: 0 };
 
 /**
- * Binds the server that `build` makes. `services` is consumed here and goes no further: the
- * generated service tag and client tag share one key, so a Context that held both would hand the
- * client to a server built in it.
+ * Binds the server that `build` makes. Provide the service Layers that `build` needs with
+ * `Layer.provide`, never `provideMerge`. The generated service tag and client tag share the
+ * Context key `com.example.v1.HelloWorldAPI<any>`, which the types cannot see. `Layer.provide`
+ * keeps the service out of the output, so a client in the same Context cannot replace it.
  */
 export const testServer = <R>(
-  services: Layer.Layer<R>,
   build: Effect.Effect<EffectGrpcServer.GrpcServer<never>, never, R>,
   listen: Listen = freePort,
-): Layer.Layer<TestServer, EffectGrpcServer.GrpcServerBindError> =>
+): Layer.Layer<TestServer, EffectGrpcServer.GrpcServerBindError, R> =>
   Layer.scoped(
     TestServer,
     Effect.flatMap(build, (server) => server.listen(listen)),
-  ).pipe(Layer.provide(services));
+  );
 
-/**
- * Builds the client of a service for the server that `TestServer` names. Compose it with
- * `Layer.provideMerge(server)`: the server then starts first, and the client closes first, which
- * matters because a server's stop waits for the sessions that are still open.
- */
-export const clientTo = <Id, Service extends string, E>(
-  config: Context.Tag<
+export const clientConfig = <Service extends string>(
+  tag: Context.Tag<
     EffectGrpcClient.GrpcClientConfig<Service>,
     EffectGrpcClient.GrpcClientConfig<Service>
   >,
-  client: Layer.Layer<
-    Id,
-    E,
-    EffectGrpcClient.GrpcClientConfig<Service> | EffectGrpcClient.GrpcClientRuntime
-  >,
-): Layer.Layer<Id, E, TestServer> =>
-  Layer.unwrapEffect(
+): Layer.Layer<EffectGrpcClient.GrpcClientConfig<Service>, never, TestServer> =>
+  Layer.effect(
+    tag,
     Effect.map(TestServer, ({ url }) =>
-      client.pipe(
-        Layer.provide(
-          Layer.succeed(
-            config,
-            EffectGrpcClient.GrpcClientConfig<Service>({ baseUrl: new URL(url) }),
-          ),
-        ),
-        Layer.provide(EffectGrpcClient.liveGrpcClientRuntimeLayer()),
-      ),
+      EffectGrpcClient.GrpcClientConfig<Service>({ baseUrl: new URL(url) }),
     ),
   );
 
@@ -74,22 +57,32 @@ export const greeter: effectProto.HelloWorldAPIService = {
     ),
 };
 
-export const helloWorldServer = (
-  listen?: Listen,
-): Layer.Layer<TestServer, EffectGrpcServer.GrpcServerBindError> =>
+export const helloWorldServer = (listen?: Listen) =>
   testServer(
-    effectProto.helloWorldAPIServiceLiveLayer(effectProto.HelloWorldAPIServiceTag, greeter),
     Effect.map(effectProto.HelloWorldAPIServiceTag, (service) =>
       EffectGrpcServer.GrpcServerBuilder().withService(service).build(),
     ),
     listen,
+  ).pipe(
+    Layer.provide(
+      effectProto.helloWorldAPIServiceLiveLayer(effectProto.HelloWorldAPIServiceTag, greeter),
+    ),
   );
 
-export const helloWorldClient = clientTo(
-  effectProto.HelloWorldAPIConfigTag,
-  effectProto.helloWorldAPIClientLiveLayer(effectProto.HelloWorldAPIClientTag),
-);
+export const helloWorldClient = effectProto
+  .helloWorldAPIClientLiveLayer(effectProto.HelloWorldAPIClientTag)
+  .pipe(
+    Layer.provide([
+      clientConfig(effectProto.HelloWorldAPIConfigTag),
+      EffectGrpcClient.liveGrpcClientRuntimeLayer(),
+    ]),
+  );
 
+/**
+ * Uses `provideMerge`, not `provide`, because tests read `TestServer`. The order matters. The
+ * server builds first and is released after the client, so the client's abort cuts a call still
+ * open at teardown, and the server's stop does not wait on it.
+ */
 export const helloWorld = (listen?: Listen) =>
   helloWorldClient.pipe(Layer.provideMerge(helloWorldServer(listen)));
 
