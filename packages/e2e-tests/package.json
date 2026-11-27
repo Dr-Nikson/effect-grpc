@@ -17,8 +17,7 @@
     "@connectrpc/connect": "catalog:",
     "@connectrpc/connect-node": "catalog:",
     "@dr_nikson/effect-grpc": "workspace:*",
-    "effect": "catalog:",
-    "get-port-please": "3.1.2"
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@bufbuild/buf": "catalog:",

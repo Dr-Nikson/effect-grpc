@@ -1,22 +1,11 @@
 // packages/e2e-tests/src/test-fixtures.ts
-import { Brand, Context, Effect, Layer } from "effect";
-import { getPort } from "get-port-please";
+import { Context, Effect, Layer } from "effect";
 
 import { Code } from "@connectrpc/connect";
 import { EffectGrpcClient, EffectGrpcServer, GrpcException } from "@dr_nikson/effect-grpc";
 
 import * as effectProto from "./generated/com/example/v1/hello_world_api_effect.js";
 import type * as proto from "./generated/com/example/v1/hello_world_api_pb.js";
-
-// Branded Port type
-export type Port = number & Brand.Brand<"Port">;
-export const Port = Context.GenericTag<Port>("Port");
-
-// Port layer - gets available port dynamically
-export const PortLive = Layer.effect(
-  Port,
-  Effect.promise(() => getPort()).pipe(Effect.map((port) => port as Port)),
-);
 
 // Server service implementation
 export const HelloWorldAPIServiceLive: effectProto.HelloWorldAPIService = {
@@ -58,25 +47,51 @@ export function createServer(): Effect.Effect<
   });
 }
 
-// Client config layer - depends on Port using flatMap
-export const ClientConfigLayer = Layer.service(Port).pipe(
-  Layer.flatMap((ctx) =>
-    Layer.succeed(
-      effectProto.HelloWorldAPIConfigTag,
-      EffectGrpcClient.GrpcClientConfig({
-        baseUrl: new URL(`http://127.0.0.1:${Context.get(ctx, Port)}`),
-      }),
-    ),
-  ),
-);
+export function clientLayer(
+  address: EffectGrpcServer.GrpcServerAddress,
+): Layer.Layer<effectProto.HelloWorldAPIClientTag["Identifier"]> {
+  return effectProto
+    .helloWorldAPIClientLiveLayer(effectProto.HelloWorldAPIClientTag)
+    .pipe(
+      Layer.provide(
+        Layer.succeed(
+          effectProto.HelloWorldAPIConfigTag,
+          EffectGrpcClient.GrpcClientConfig({ baseUrl: new URL(address.url) }),
+        ),
+      ),
+      Layer.provide(EffectGrpcClient.liveGrpcClientRuntimeLayer()),
+    );
+}
 
-// Client layer - depends on ClientConfig and GrpcClientRuntime
-export const clientLayer = effectProto
-  .helloWorldAPIClientLiveLayer(effectProto.HelloWorldAPIClientTag)
-  .pipe(
-    Layer.provide(ClientConfigLayer),
-    Layer.provide(EffectGrpcClient.liveGrpcClientRuntimeLayer()),
+export class TestServer extends Context.Tag("e2e/TestServer")<
+  TestServer,
+  EffectGrpcServer.GrpcServerAddress
+>() {}
+
+export function testServer(listen: {
+  readonly host: string;
+  readonly port: number;
+}): Layer.Layer<
+  TestServer,
+  EffectGrpcServer.GrpcServerBindError,
+  effectProto.HelloWorldAPIServiceTag["Identifier"]
+> {
+  return Layer.scoped(
+    TestServer,
+    Effect.flatMap(createServer(), (server) => server.listen(listen)),
   );
+}
+
+/**
+ * Provide it inside `testServer`. The server's stop waits for open sessions, so the client's
+ * session has to close first. Build no server inside it: the generated client and service tags
+ * share one key, so a server built there would read the client as its service.
+ */
+export const testClient: Layer.Layer<
+  effectProto.HelloWorldAPIClientTag["Identifier"],
+  never,
+  TestServer
+> = Layer.unwrapEffect(Effect.map(TestServer, clientLayer));
 
 // Re-export proto types for convenience
 export { effectProto };

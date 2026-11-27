@@ -1,5 +1,5 @@
 // packages/effect-grpc/src/server.ts
-import { Effect, Scope, Types } from "effect";
+import { Data, Effect, Scope, Types } from "effect";
 
 import type { GenService, GenServiceMethods } from "@bufbuild/protobuf/codegenv2";
 import type { HandlerContext, ServiceImpl } from "@connectrpc/connect";
@@ -19,26 +19,108 @@ import * as internal from "./server.internal.js";
  * import { Effect } from "effect"
  * import { EffectGrpcServer } from "@dr_nikson/effect-grpc"
  *
- * // Create a server with multiple services
- * const server = EffectGrpcServer.GrpcServerBuilder()
- *   .withService(userService)
- *   .withService(productService)
- *   .build()
+ * declare const server: EffectGrpcServer.GrpcServer<"com.example.v1.UserService">
  *
- * // Run the server within an Effect program
  * const program = Effect.gen(function* () {
- *   yield* server.run()
- *   // Server is now running and handling gRPC requests
+ *   const address = yield* server.listen({ host: "127.0.0.1", port: 0 })
+ *   yield* Effect.logInfo(`Clients can dial ${address.url}`)
+ *   // The server handles requests until the scope closes
+ *   return yield* Effect.never
  * })
  *
- * // Execute with proper resource management
  * Effect.runPromise(Effect.scoped(program))
  * ```
  */
 export interface GrpcServer<in Services> {
   readonly _Services: Types.Contravariant<Services>;
 
-  run(options: { host: string; port: number }): Effect.Effect<never, never, Scope.Scope>;
+  /**
+   * Starts listening on `host` and `port`, and succeeds with the address the server bound once it
+   * accepts connections. Port 0 asks the OS for a free port. The server handles requests until the
+   * scope closes, and closing the scope shuts it down. To serve until the process stops, follow
+   * `listen` with `Effect.never`.
+   *
+   * Fails with {@link GrpcServerBindError} when the server cannot listen, for example when the port
+   * is taken. Interrupting `listen` before the server listens stops the attempt, and nothing binds
+   * later.
+   */
+  listen(options: {
+    host: string;
+    port: number;
+  }): Effect.Effect<GrpcServerAddress, GrpcServerBindError, Scope.Scope>;
+}
+
+/**
+ * The address a listening server bound, as the OS reports it.
+ *
+ * @example
+ * ```typescript
+ * import { EffectGrpcClient, EffectGrpcServer } from "@dr_nikson/effect-grpc"
+ *
+ * declare const address: EffectGrpcServer.GrpcServerAddress
+ *
+ * const config = EffectGrpcClient.GrpcClientConfig({ baseUrl: new URL(address.url) })
+ * ```
+ */
+export interface GrpcServerAddress {
+  /** The bound IP address, without brackets, such as `127.0.0.1`, `::1`, `0.0.0.0` or `::`. */
+  readonly host: string;
+
+  /** The port the server bound. When `listen` was given port 0, it is the port the OS picked. */
+  readonly port: number;
+
+  /**
+   * `http://<host>:<port>`, with brackets around an IPv6 host, as the ready line prints it. After a
+   * wildcard bind (`0.0.0.0` or `::`) it names the wildcard, so a client on another machine dials
+   * the server's own host name with `port` instead.
+   */
+  readonly url: string;
+}
+
+/**
+ * `listen` could not start listening. `host` and `port` are the ones `listen` was given, and
+ * `cause` is the error Node reported.
+ *
+ * @example
+ * ```typescript
+ * import { Effect } from "effect"
+ * import { EffectGrpcServer } from "@dr_nikson/effect-grpc"
+ *
+ * declare const server: EffectGrpcServer.GrpcServer<"com.example.v1.UserService">
+ *
+ * // Fall back to a free port when 8000 is taken
+ * const address = server.listen({ host: "127.0.0.1", port: 8000 }).pipe(
+ *   Effect.catchTag("@dr_nikson/effect-grpc/server/GrpcServerBindError", (error) =>
+ *     error.reason._tag === "AddressInUse"
+ *       ? server.listen({ host: "127.0.0.1", port: 0 })
+ *       : Effect.fail(error),
+ *   ),
+ * )
+ * ```
+ */
+export class GrpcServerBindError extends Data.TaggedError(
+  "@dr_nikson/effect-grpc/server/GrpcServerBindError",
+)<{
+  readonly host: string;
+  readonly port: number;
+
+  /**
+   * - `AddressInUse`: another socket holds the port (EADDRINUSE).
+   * - `PermissionDenied`: the process may not bind the port (EACCES or EPERM).
+   * - `InvalidPort`: the port is not a whole number from 0 to 65535.
+   * - `Other`: anything else, such as a host name that does not resolve. See `cause`.
+   */
+  readonly reason:
+    | { readonly _tag: "AddressInUse" }
+    | { readonly _tag: "PermissionDenied" }
+    | { readonly _tag: "InvalidPort" }
+    | { readonly _tag: "Other" };
+
+  readonly cause: unknown;
+}> {
+  get message(): string {
+    return internal.bindErrorMessage(this);
+  }
 }
 
 /**
